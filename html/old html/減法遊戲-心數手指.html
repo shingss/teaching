@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>手指倒數減法遊戲</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #fffbeb; /* 溫暖的淺黃色背景 */
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* 溫暖的背景圖案 */
+        .desk-bg {
+            background-color: #fef3c7;
+            background-image: radial-gradient(#fde68a 2px, transparent 2px);
+            background-size: 30px 30px;
+        }
+
+        /* 數字軌跡泡泡 */
+        .number-bubble {
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0.5); opacity: 0; }
+            80% { transform: scale(1.1); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        /* 手指動畫 */
+        .finger {
+            display: inline-block;
+            transition: all 0.3s ease-in-out;
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1));
+        }
+
+        .finger.folded {
+            transform: translateY(10px) scale(0.9);
+            filter: drop-shadow(0 2px 3px rgba(0,0,0,0.2));
+            opacity: 0.7;
+        }
+
+        /* 自訂滾動條 */
+        ::-webkit-scrollbar {
+            height: 10px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #fef3c7; 
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #fbbf24; 
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #f59e0b; 
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // --- 新增的動態雙手組件 ---
+        const Hand = ({ handType, foldedStates }) => {
+            const isLeft = handType === 'left';
+
+            // 定義手指的高度、寬度、位置與預設旋轉角度 (手指加長、掌心相對縮小)
+            const fingers = isLeft ? [
+                { id: 'pinky', h: 'h-20 md:h-24', w: 'w-6 md:w-7', left: 'left-[8%]', rot: -15, baseBottom: 'bottom-[3.5rem] md:bottom-[4rem]' },
+                { id: 'ring', h: 'h-24 md:h-32', w: 'w-7 md:w-8', left: 'left-[26%]', rot: -6, baseBottom: 'bottom-[4rem] md:bottom-[4.5rem]' },
+                { id: 'middle', h: 'h-28 md:h-36', w: 'w-7 md:w-8', left: 'left-[46%]', rot: 0, baseBottom: 'bottom-[4.2rem] md:bottom-[4.8rem]' },
+                { id: 'index', h: 'h-24 md:h-32', w: 'w-7 md:w-8', left: 'left-[66%]', rot: 6, baseBottom: 'bottom-[4rem] md:bottom-[4.5rem]' },
+                { id: 'thumb', h: 'h-16 md:h-20', w: 'w-7 md:w-8', left: 'left-[85%]', rot: 45, baseBottom: 'bottom-[1.5rem] md:bottom-[2rem]', origin: 'bottom left' },
+            ] : [
+                { id: 'thumb', h: 'h-16 md:h-20', w: 'w-7 md:w-8', left: 'right-[85%]', rot: -45, baseBottom: 'bottom-[1.5rem] md:bottom-[2rem]', origin: 'bottom right' },
+                { id: 'index', h: 'h-24 md:h-32', w: 'w-7 md:w-8', left: 'right-[66%]', rot: -6, baseBottom: 'bottom-[4rem] md:bottom-[4.5rem]' },
+                { id: 'middle', h: 'h-28 md:h-36', w: 'w-7 md:w-8', left: 'right-[46%]', rot: 0, baseBottom: 'bottom-[4.2rem] md:bottom-[4.8rem]' },
+                { id: 'ring', h: 'h-24 md:h-32', w: 'w-7 md:w-8', left: 'right-[26%]', rot: 6, baseBottom: 'bottom-[4rem] md:bottom-[4.5rem]' },
+                { id: 'pinky', h: 'h-20 md:h-24', w: 'w-6 md:w-7', left: 'right-[8%]', rot: 15, baseBottom: 'bottom-[3.5rem] md:bottom-[4rem]' },
+            ];
+
+            return (
+                <div className="relative w-32 h-48 md:w-40 md:h-56 flex-shrink-0 transition-transform" style={{ perspective: '800px' }}>
+                    {/* 手掌 (Palm) - 掌心縮小 */}
+                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-24 h-16 md:w-28 md:h-20 bg-[#fcd34d] rounded-b-[3rem] rounded-t-[1.5rem] border-2 border-amber-600 shadow-[0_4px_10px_rgba(0,0,0,0.1)] z-10 overflow-hidden">
+                       <div className="absolute top-2 left-4 w-12 h-12 md:w-16 md:h-16 border-b-4 border-l-4 border-amber-600/10 rounded-full transform -rotate-12"></div>
+                    </div>
+
+                    {/* 手指 (Fingers) */}
+                    {fingers.map((f, i) => {
+                        const isFolded = foldedStates[i];
+                        return (
+                            <div
+                                key={f.id}
+                                className={`absolute ${f.left} ${f.baseBottom} ${f.w} ${f.h} rounded-t-full border-2 border-amber-600 border-b-0 transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]`}
+                                style={{
+                                    transform: `rotate(${f.rot}deg) ${isFolded ? 'rotateX(180deg)' : 'rotateX(0deg)'}`,
+                                    transformOrigin: f.origin || 'bottom center',
+                                    zIndex: isFolded ? 20 : 0, // 折下時覆蓋在手掌上方
+                                    backgroundColor: isFolded ? '#f59e0b' : '#fcd34d', // 折下時顏色變深
+                                    boxShadow: isFolded ? 'inset 0 4px 6px rgba(0,0,0,0.3)' : 'none',
+                                }}
+                            >
+                                {/* 指甲點綴 */}
+                                {!isFolded && <div className="absolute top-2 left-1/2 -translate-x-1/2 w-2.5 h-3.5 bg-white/40 rounded-full"></div>}
+                            </div>
+                        )
+                    })}
+                </div>
+            );
+        }
+
+        function App() {
+            // 音效上下文
+            const audioCtxRef = useRef(null);
+
+            // 遊戲設定 (預設被減數最大18，減數最大10)
+            const [config, setConfig] = useState({
+                maxNum1: 18,
+                maxNum2: 10
+            });
+
+            // 遊戲狀態：'start' (開始畫面), 'counting' (倒數中), 'answering' (回答中), 'result' (結果)
+            const [phase, setPhase] = useState('start');
+            const [score, setScore] = useState(0);
+            
+            // 算式變數：num1 - num2 = ?
+            const [num1, setNum1] = useState(0);
+            const [num2, setNum2] = useState(0);
+            
+            // 遊戲進行中的狀態
+            const [countDownSteps, setCountDownSteps] = useState(0); // 已經倒數的次數
+            const [history, setHistory] = useState([]); // 記錄數過的數字軌跡
+            const [choices, setChoices] = useState([]);
+            const [message, setMessage] = useState('');
+            const [isAnimating, setIsAnimating] = useState(false);
+
+            const historyRef = useRef(null);
+
+            // 初始化與播放音效
+            const playSound = (type) => {
+                if (!audioCtxRef.current) {
+                    audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                const ctx = audioCtxRef.current;
+                if (ctx.state === 'suspended') ctx.resume();
+
+                const osc = ctx.createOscillator();
+                const gainNode = ctx.createGain();
+                osc.connect(gainNode);
+                gainNode.connect(ctx.destination);
+
+                if (type === 'fold') {
+                    // 折手指的「啵」聲
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(400, ctx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.1);
+                    gainNode.gain.setValueAtTime(0.5, ctx.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+                    osc.start();
+                    osc.stop(ctx.currentTime + 0.1);
+                } else if (type === 'correct') {
+                    // 答對的歡樂音效
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(440, ctx.currentTime);
+                    osc.frequency.setValueAtTime(554.37, ctx.currentTime + 0.1);
+                    osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.2);
+                    osc.frequency.setValueAtTime(880, ctx.currentTime + 0.3);
+                    gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+                    gainNode.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.6);
+                    osc.start();
+                    osc.stop(ctx.currentTime + 0.6);
+                } else if (type === 'wrong') {
+                    // 答錯的提示音
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(150, ctx.currentTime);
+                    osc.frequency.linearRampToValueAtTime(100, ctx.currentTime + 0.3);
+                    gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+                    gainNode.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.3);
+                    osc.start();
+                    osc.stop(ctx.currentTime + 0.3);
+                }
+            };
+
+            // 語音播放功能 (廣東話)
+            const speak = (text) => {
+                if ('speechSynthesis' in window) {
+                    window.speechSynthesis.cancel(); // 停止上一句，避免重疊
+                    const utterance = new SpeechSynthesisUtterance(text);
+                    utterance.lang = 'zh-HK'; // 設定為廣東話
+                    utterance.rate = 0.9;
+                    window.speechSynthesis.speak(utterance);
+                }
+            };
+
+            // 處理設定變更
+            const handleConfigChange = (e) => {
+                const { name, value } = e.target;
+                let val = parseInt(value) || 1;
+                
+                if (name === 'maxNum1') {
+                    if (val > 50) val = 50;
+                    if (val < 1) val = 1;
+                } else if (name === 'maxNum2') {
+                    if (val > 10) val = 10; // 雙手最多只有10根手指，強制防呆
+                    if (val < 1) val = 1;
+                }
+                
+                setConfig(prev => ({
+                    ...prev,
+                    [name]: val
+                }));
+            };
+
+            // 產生新題目
+            const generateProblem = () => {
+                // 確保減數不會大於被減數的最大設定值
+                const safeMaxNum2 = Math.min(config.maxNum2, config.maxNum1);
+                
+                const n2 = Math.floor(Math.random() * safeMaxNum2) + 1; // 1 到 maxNum2
+                // 確保被減數 (n1) 一定大於或等於減數 (n2)，避免負數
+                const minN1 = n2; 
+                const n1 = Math.floor(Math.random() * (config.maxNum1 - minN1 + 1)) + minN1; 
+                
+                setNum1(n1);
+                setNum2(n2);
+                setCountDownSteps(0);
+                setHistory([n1]); // 初始軌跡放入被減數
+                setMessage('');
+                
+                // 準備隨時作答的選項
+                const correctAnswer = n1 - n2;
+                let options = new Set();
+                options.add(correctAnswer);
+                while(options.size < 3) {
+                    let randomWrong = correctAnswer + (Math.floor(Math.random() * 5) - 2);
+                    if (randomWrong >= 0 && randomWrong !== correctAnswer) {
+                        options.add(randomWrong);
+                    }
+                }
+                setChoices(Array.from(options).sort(() => Math.random() - 0.5));
+                
+                setPhase('playing'); // 統一狀態，讓作答區立刻出現
+
+                // 題目出現時自動用語音朗讀口訣 (廣東話)
+                setTimeout(() => {
+                    speak(`將原有嘅數目 ${n1} 放喺心，舉起 ${n2} 隻手指，再逐一減`);
+                }, 300);
+            };
+
+            // 處理「倒數」動作
+            const handleCountDown = () => {
+                if (isAnimating || phase !== 'playing' || countDownSteps >= num2) return;
+                
+                setIsAnimating(true);
+                const nextStep = countDownSteps + 1;
+                const currentSpokenNumber = num1 - nextStep;
+                
+                // 播放折手指音效
+                playSound('fold');
+
+                // 語音讀出倒數的數字
+                speak(currentSpokenNumber.toString());
+                
+                setCountDownSteps(nextStep);
+                setHistory(prev => [...prev, currentSpokenNumber]);
+
+                // 自動捲動軌跡到最右邊
+                setTimeout(() => {
+                    if (historyRef.current) {
+                        historyRef.current.scrollLeft = historyRef.current.scrollWidth;
+                    }
+                }, 50);
+
+                setTimeout(() => {
+                    setIsAnimating(false);
+                    // 已經可以隨時作答，不需要在此切換 phase
+                }, 600); // 縮短一點間隔，讓點擊更流暢
+            };
+
+            // 處理玩家選擇答案
+            const handleAnswer = (choice) => {
+                const correctAnswer = num1 - num2;
+                if (choice === correctAnswer) {
+                    playSound('correct');
+                    speak('太叻啦！答啱啦！');
+                    setMessage('🌟 太叻啦！答啱啦！ 🌟');
+                    setScore(s => s + 1);
+                    setPhase('result');
+                } else {
+                    playSound('wrong');
+                    speak('哎呀，睇真啲最後嗰個數字！');
+                    setMessage('❌ 哎呀，睇真啲最後嗰個數字！');
+                }
+            };
+
+            // 開始遊戲
+            const startGame = () => {
+                // 初始化音效 (需要使用者互動)
+                if (!audioCtxRef.current) {
+                    audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (audioCtxRef.current.state === 'suspended') {
+                    audioCtxRef.current.resume();
+                }
+
+                // 防呆檢查
+                if (config.maxNum1 < config.maxNum2) {
+                    alert("設定錯誤：被減數的最大值必須大於或等於減數！");
+                    return;
+                }
+                setScore(0);
+                generateProblem();
+            };
+
+            // 重設遊戲返回首頁
+            const resetGame = () => {
+                if ('speechSynthesis' in window) {
+                    window.speechSynthesis.cancel(); // 停止所有語音
+                }
+                setPhase('start');
+                setScore(0);
+                setMessage('');
+                setCountDownSteps(0);
+            };
+
+            return (
+                <div className="min-h-screen w-full flex items-center justify-center p-2 md:p-6 bg-gray-900">
+                    {/* 強制 16:9 的外框 (aspect-video) */}
+                    <div className="w-full max-w-6xl aspect-video max-h-[96vh] bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+                        
+                        {/* 遊戲標題列 */}
+                        <div className="bg-amber-500 text-white p-3 md:p-4 flex justify-between items-center shadow-md z-20">
+                            <h1 className="text-xl md:text-2xl font-bold flex items-center gap-2">
+                                🖐️ 手指倒數減法
+                            </h1>
+                            <div className="flex items-center gap-2 md:gap-4">
+                                {phase !== 'start' && (
+                                    <button 
+                                        onClick={resetGame}
+                                        className="bg-red-500 hover:bg-red-400 px-3 py-1 md:px-4 md:py-2 rounded-full font-bold shadow-[0_3px_0_#991b1b] hover:translate-y-[1px] hover:shadow-[0_2px_0_#991b1b] text-sm md:text-base flex items-center gap-1 transition-all"
+                                    >
+                                        🔄 重設
+                                    </button>
+                                )}
+                                <div className="text-lg md:text-xl font-bold bg-amber-600 px-4 py-1 md:py-2 rounded-full shadow-inner">
+                                    分數: {score}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 開始畫面 */}
+                        {phase === 'start' && (
+                            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-6 desk-bg">
+                                <div className="text-7xl md:text-8xl animate-bounce">🖐️</div>
+                                <h2 className="text-3xl md:text-4xl font-extrabold text-amber-900 drop-shadow-md">用手指來學減法！</h2>
+                                
+                                {/* 設定區塊 */}
+                                <div className="bg-white/80 p-6 rounded-2xl shadow-sm border-2 border-amber-200 max-w-md w-full text-left space-y-4">
+                                    <h3 className="text-xl font-bold text-amber-800 border-b-2 border-amber-200 pb-2 flex items-center gap-2">
+                                        ⚙️ 數字範圍設定
+                                    </h3>
+                                    
+                                    <div className="flex flex-col gap-2">
+                                        <label className="text-gray-700 font-bold flex justify-between items-center">
+                                            <span>最大的被減數 (從多少開始減)：</span>
+                                            <input 
+                                                type="number" 
+                                                name="maxNum1"
+                                                value={config.maxNum1}
+                                                onChange={handleConfigChange}
+                                                className="w-20 p-2 border-2 border-amber-300 rounded-lg text-center font-bold text-lg"
+                                            />
+                                        </label>
+                                        <label className="text-gray-700 font-bold flex justify-between items-center">
+                                            <span>最大的減數 (雙手最多10根)：</span>
+                                            <input 
+                                                type="number" 
+                                                name="maxNum2"
+                                                max="10"
+                                                value={config.maxNum2}
+                                                onChange={handleConfigChange}
+                                                className="w-20 p-2 border-2 border-amber-300 rounded-lg text-center font-bold text-lg"
+                                            />
+                                        </label>
+                                    </div>
+                                    <p className="text-sm text-gray-500 italic mt-2">
+                                        * 預設為 1~18 減去 1~10 的範圍。
+                                    </p>
+                                </div>
+
+                                <button 
+                                    onClick={startGame}
+                                    className="px-10 py-4 bg-amber-500 hover:bg-amber-400 text-white text-2xl md:text-3xl font-bold rounded-full shadow-[0_6px_0_#b45309] hover:shadow-[0_4px_0_#b45309] hover:translate-y-[2px] transition-all"
+                                >
+                                    開始遊戲
+                                </button>
+                            </div>
+                        )}
+
+                        {/* 遊戲主要畫面 (16:9 佈局 - 左右分區) */}
+                        {phase !== 'start' && (
+                            <div className="flex-1 flex flex-row relative bg-gray-50 overflow-hidden">
+                                
+                                {/* 左側：主要畫面區 (軌跡、雙手、算式) */}
+                                <div className="flex-[7] flex flex-col desk-bg relative shadow-inner overflow-hidden border-r-4 border-amber-200/50 z-10">
+                                    
+                                    {/* 算式與口訣 */}
+                                    <div className="p-4 bg-white/90 shadow-sm flex flex-col items-center justify-center shrink-0 z-10 border-b border-amber-200">
+                                        <div className="text-3xl md:text-5xl font-extrabold text-gray-800 tracking-widest font-mono flex items-center gap-4">
+                                            <span>{num1}</span>
+                                            <span className="text-red-500">-</span>
+                                            <span className="text-amber-500 border-b-4 border-amber-500 pb-1">{num2}</span>
+                                            <span>=</span>
+                                            <span className="text-green-600 border-b-4 border-dashed border-gray-300 min-w-[60px] text-center">
+                                                {phase === 'result' ? (num1 - num2) : '?'}
+                                            </span>
+                                        </div>
+                                        <div className="mt-2 text-base md:text-lg font-bold text-amber-800 flex items-center gap-2 flex-wrap justify-center bg-amber-100/50 px-4 py-2 rounded-xl">
+                                            <span>口號：將原有嘅數目</span>
+                                            <span className="text-xl text-red-500 font-black drop-shadow-md">❤️ {num1}</span>
+                                            <span>放喺心，舉起要減嘅手指數目</span>
+                                            <span className="text-xl text-red-500 font-black drop-shadow-md">🖐️ {num2}</span>
+                                            <span>，再逐一減</span>
+                                        </div>
+                                    </div>
+
+                                    {/* 倒數軌跡 */}
+                                    <div className="w-full overflow-x-auto py-3 px-4 flex items-center gap-3 shrink-0 min-h-[100px]" ref={historyRef}>
+                                        {history.map((num, idx) => (
+                                            <div key={idx} className="flex items-center gap-2 md:gap-3 flex-shrink-0 number-bubble">
+                                                {idx === 0 ? (
+                                                    <div className="relative flex items-center justify-center w-12 h-12 md:w-16 md:h-16 transform scale-110">
+                                                        <span className="absolute text-[3.5rem] md:text-[4.5rem]">❤️</span>
+                                                        <span className="relative z-10 text-white font-extrabold text-xl md:text-2xl drop-shadow-md">{num}</span>
+                                                    </div>
+                                                ) : (
+                                                    <div className={`w-12 h-12 md:w-16 md:h-16 rounded-full flex items-center justify-center text-xl md:text-2xl font-bold shadow-md border-4 ${idx === history.length - 1 ? 'bg-amber-100 border-amber-500 text-amber-700 transform scale-110' : 'bg-white border-amber-200 text-amber-600'}`}>
+                                                        {num}
+                                                    </div>
+                                                )}
+                                                {/* 箭頭 */}
+                                                {idx < history.length - 1 && (
+                                                    <div className="text-amber-400 text-lg md:text-xl font-bold">➔</div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* 雙手展示區 - 增加了 gap-20 md:gap-36 讓兩隻手分開一點 */}
+                                    <div className="flex-1 flex justify-center items-end pb-8 gap-20 md:gap-36">
+                                        <Hand handType="left" foldedStates={Array.from({length: 5}, (_, i) => i < countDownSteps || i >= num2)} />
+                                        <Hand handType="right" foldedStates={Array.from({length: 5}, (_, i) => (i + 5) < countDownSteps || (i + 5) >= num2)} />
+                                    </div>
+
+                                </div>
+
+                                {/* 右側：控制面板 (隨時作答區與減號按鈕) */}
+                                <div className="flex-[3] bg-white z-20 flex flex-col items-center justify-start p-4 md:p-6 gap-6 overflow-y-auto">
+                                    
+                                    {/* 倒數階段的操作 */}
+                                    {phase === 'playing' && (
+                                        <div className="w-full flex flex-col items-center gap-6 mt-4">
+                                            {/* 減 1 按鈕 */}
+                                            <div className="flex flex-col items-center gap-2 w-full border-b-2 border-gray-100 pb-6">
+                                                <button 
+                                                    onClick={handleCountDown}
+                                                    disabled={isAnimating || countDownSteps >= num2}
+                                                    className={`w-full py-4 bg-amber-500 hover:bg-amber-400 text-white text-xl md:text-2xl font-bold rounded-2xl shadow-[0_6px_0_#b45309] hover:translate-y-[2px] hover:shadow-[0_4px_0_#b45309] transition-all flex flex-col items-center gap-1 ${isAnimating || countDownSteps >= num2 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                                >
+                                                    <span>收起手指減 1</span>
+                                                    <span className="text-2xl">👇</span>
+                                                </button>
+                                                <div className="text-sm md:text-base font-bold text-gray-500 text-center mt-2">
+                                                    已收起 <span className="text-amber-600 text-lg">{countDownSteps}</span>，剩 <span className="text-red-500 text-lg">{num2 - countDownSteps}</span>
+                                                </div>
+                                            </div>
+
+                                            {/* 隨時作答區 */}
+                                            <div className="w-full flex flex-col items-center gap-4">
+                                                <p className="text-lg md:text-xl font-bold text-amber-700 text-center">
+                                                    🤔 知道答案了嗎？<br/>隨時可以點擊作答！
+                                                </p>
+                                                <div className="grid grid-cols-1 gap-4 w-full px-2">
+                                                    {choices.map(choice => (
+                                                        <button 
+                                                            key={choice}
+                                                            onClick={() => handleAnswer(choice)}
+                                                            className="w-full py-4 bg-teal-400 hover:bg-teal-300 text-teal-900 text-3xl font-extrabold rounded-2xl shadow-[0_6px_0_#0f766e] hover:shadow-[0_4px_0_#0f766e] hover:translate-y-[2px] transition-all"
+                                                        >
+                                                            {choice}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* 答錯提示 */}
+                                    {phase === 'playing' && message && (
+                                        <p className="mt-2 text-lg md:text-xl font-bold text-red-500 animate-pulse text-center">
+                                            {message}
+                                        </p>
+                                    )}
+
+                                    {/* 結果階段 */}
+                                    {phase === 'result' && (
+                                        <div className="flex flex-col items-center justify-center w-full h-full gap-8">
+                                            <div className="text-6xl animate-bounce">🎉</div>
+                                            <p className="text-2xl md:text-3xl font-extrabold text-green-500 text-center">
+                                                {message}
+                                            </p>
+                                            <button 
+                                                onClick={generateProblem}
+                                                className="w-full py-5 bg-green-500 hover:bg-green-400 text-white text-xl md:text-2xl font-bold rounded-2xl shadow-[0_6px_0_#16a34a] hover:shadow-[0_4px_0_#16a34a] hover:translate-y-[2px] transition-all"
+                                            >
+                                                挑戰下一題！ ➔
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

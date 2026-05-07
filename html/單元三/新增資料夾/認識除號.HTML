@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>認識除號與算式</title>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Canvas Confetti for Rewards -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <!-- Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        /* Custom Font for readability */
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+HK:wght@400;700;900&display=swap');
+
+        body {
+            font-family: 'Noto Sans HK', sans-serif;
+            background-color: #eff6ff; 
+            margin: 0;
+            overflow: hidden;
+            touch-action: manipulation; 
+            user-select: none; 
+            -webkit-user-select: none;
+        }
+
+        .game-container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle, #eff6ff 0%, #bfdbfe 100%);
+        }
+
+        .game-screen {
+            width: 100%;
+            max-width: 1024px;
+            aspect-ratio: 4/3;
+            background: white;
+            border-radius: 2rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        @media (max-aspect-ratio: 4/3) {
+            .game-screen {
+                width: 100vw;
+                height: 75vw;
+                border-radius: 0;
+            }
+        }
+
+        /* Animations */
+        @keyframes bounce-gentle {
+            0%, 100% { transform: translateY(0) scale(1); }
+            50% { transform: translateY(-10px) scale(1.05); }
+        }
+        .animate-bounce-gentle { animation: bounce-gentle 2s infinite ease-in-out; }
+
+        @keyframes pop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+        .animate-pop { animation: pop 0.3s ease-out forwards; }
+
+        @keyframes pulse-border {
+            0%, 100% { border-color: #93c5fd; background-color: #eff6ff; transform: scale(1); }
+            50% { border-color: #3b82f6; background-color: #dbeafe; transform: scale(1.05); }
+        }
+        .animate-pulse-border { animation: pulse-border 1.5s infinite ease-in-out; }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            75% { transform: translateX(10px); }
+        }
+        .animate-shake { animation: shake 0.4s ease-in-out; }
+
+        @keyframes float-up {
+            0% { transform: translateY(100vh) scale(0.8); opacity: 1; }
+            100% { transform: translateY(-20vh) scale(1.2); opacity: 0; }
+        }
+        .balloon { animation: float-up 6s linear infinite; }
+
+        /* 3D Button styles */
+        .btn-3d {
+            transition: all 0.1s;
+            border-bottom-width: 8px;
+        }
+        .btn-3d:active {
+            border-bottom-width: 0px;
+            transform: translateY(8px);
+        }
+        .btn-3d:disabled {
+            border-bottom-width: 0px;
+            transform: translateY(8px);
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // --- Utility: Cantonese Speech Synthesis ---
+        const speak = (text, onEnd = null) => {
+            if (!window.speechSynthesis) return;
+            window.speechSynthesis.cancel(); 
+            
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = 0.85; 
+            utterance.pitch = 1.1; 
+            
+            const voices = window.speechSynthesis.getVoices();
+            const hkVoice = voices.find(v => v.lang === 'zh-HK' || v.name.includes('Hong Kong') || v.name.includes('Cantonese'));
+            const twVoice = voices.find(v => v.lang === 'zh-TW'); 
+            
+            if (hkVoice) utterance.voice = hkVoice;
+            else if (twVoice) utterance.voice = twVoice;
+            else utterance.lang = 'zh-HK'; 
+
+            if (onEnd) utterance.onend = onEnd;
+            window.speechSynthesis.speak(utterance);
+        };
+
+        // --- Screens ---
+
+        const StartScreen = ({ onStart }) => {
+            return (
+                <div className="flex-1 flex flex-col items-center justify-center bg-blue-50">
+                    <h1 className="text-6xl md:text-8xl font-black text-blue-600 mb-8 text-center drop-shadow-md tracking-wider">
+                        認識除號
+                    </h1>
+                    <p className="text-3xl text-blue-800 font-bold mb-12">算式排排坐</p>
+                    
+                    <div className="flex gap-8 mb-12 items-center justify-center">
+                        <div className="w-32 h-32 bg-white rounded-3xl shadow-xl flex items-center justify-center border-4 border-amber-200 animate-bounce-gentle">
+                            <span className="text-8xl font-black text-amber-500">÷</span>
+                        </div>
+                        <div className="w-32 h-32 bg-white rounded-3xl shadow-xl flex items-center justify-center border-4 border-blue-200 animate-bounce-gentle" style={{animationDelay: '0.2s'}}>
+                            <span className="text-8xl font-black text-blue-500">=</span>
+                        </div>
+                    </div>
+
+                    <button 
+                        onClick={() => {
+                            speak("歡迎！我哋一齊嚟認識除號，同埋佢喺算式入面嘅位置啦！", () => onStart('warmup'));
+                        }}
+                        className="btn-3d bg-amber-400 hover:bg-amber-300 border-amber-600 text-amber-900 text-5xl md:text-7xl font-bold py-6 px-16 rounded-full flex items-center gap-6"
+                    >
+                        <i data-lucide="play" className="w-16 h-16"></i>
+                        開始玩
+                    </button>
+                </div>
+            );
+        };
+
+        const WarmupLevel = ({ onComplete }) => {
+            const [clicks, setClicks] = useState(0);
+
+            useEffect(() => {
+                setTimeout(() => speak("呢個符號叫做「除號」。試下撳下佢啦！"), 500);
+            }, []);
+
+            const handleClick = () => {
+                const newClicks = clicks + 1;
+                setClicks(newClicks);
+
+                if (newClicks === 1) {
+                    speak("除號！");
+                } else if (newClicks === 2) {
+                    speak("除號！");
+                } else if (newClicks >= 3) {
+                    speak("好叻仔！呢個就係除號啦！", () => {
+                        setTimeout(onComplete, 2000);
+                    });
+                    confetti({ particleCount: 50, spread: 60, origin: { y: 0.8 } });
+                }
+            };
+
+            return (
+                <div className="flex-1 flex flex-col items-center justify-center relative">
+                    <h2 className="text-5xl font-bold text-slate-700 mb-16 text-center px-4">
+                        點擊認識「除號」
+                    </h2>
+                    
+                    <div 
+                        onClick={handleClick}
+                        className={`cursor-pointer transition-all duration-300 transform ${clicks >= 3 ? 'scale-125' : 'hover:scale-110 active:scale-90'}`}
+                    >
+                        <div className={`w-64 h-64 md:w-80 md:h-80 bg-white border-8 border-amber-300 rounded-[3rem] shadow-2xl flex items-center justify-center ${clicks > 0 ? 'animate-pop' : 'animate-bounce-gentle'}`}>
+                            <div className="text-[10rem] md:text-[14rem] font-black text-amber-500 drop-shadow-md">
+                                ÷
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex gap-4 mt-16">
+                        {[1, 2, 3].map(i => (
+                            <div key={i} className={`w-8 h-8 rounded-full ${clicks >= i ? 'bg-amber-500' : 'bg-slate-200'}`}></div>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
+        const FindSymbolLevel = ({ onComplete }) => {
+            const [wrongAttempt, setWrongAttempt] = useState(false);
+            const symbols = ['+', '÷', '-'];
+
+            useEffect(() => {
+                speak("邊個係除號呀？撳出嚟睇下！");
+            }, []);
+
+            const handleAnswer = (sym) => {
+                if (sym === '÷') {
+                    speak("答啱啦！呢個就係除號！", () => setTimeout(onComplete, 2000));
+                    confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
+                } else {
+                    setWrongAttempt(sym);
+                    speak("唔係呢個喎，除號係有一條橫線，上下各有一點。再試下！");
+                    setTimeout(() => setWrongAttempt(false), 2000);
+                }
+            };
+
+            return (
+                <div className="flex-1 flex flex-col items-center justify-center">
+                    <h2 className="text-5xl font-bold text-slate-700 mb-20">搵出「除號」</h2>
+                    
+                    <div className="flex gap-8 md:gap-16">
+                        {symbols.map((sym, index) => (
+                            <button
+                                key={index}
+                                onClick={() => handleAnswer(sym)}
+                                className={`
+                                    btn-3d w-32 h-32 md:w-48 md:h-48 rounded-[2rem] text-7xl md:text-9xl font-black
+                                    bg-white border-slate-300 text-slate-700 hover:bg-slate-50
+                                    ${wrongAttempt === sym ? 'opacity-50 animate-shake border-red-300 text-red-500' : ''}
+                                `}
+                            >
+                                {sym}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
+        const PlaceDivisionLevel = ({ onComplete }) => {
+            const [isCorrect, setIsCorrect] = useState(false);
+            const [wrongAttempt, setWrongAttempt] = useState(false);
+
+            useEffect(() => {
+                speak("除號應該放喺邊度呢？撳下面嘅除號，放入空格入面啦。");
+            }, []);
+
+            const handleAnswer = (sym) => {
+                if (isCorrect) return;
+                
+                if (sym === '÷') {
+                    setIsCorrect(true);
+                    speak("放啱啦！除號放喺兩個數字中間。6 除以 2 等於 3。", () => setTimeout(onComplete, 3000));
+                    confetti({ particleCount: 80, origin: { y: 0.7 } });
+                } else {
+                    setWrongAttempt(sym);
+                    speak("唔係呢個符號，請找出除號放入去。");
+                    setTimeout(() => setWrongAttempt(false), 1500);
+                }
+            };
+
+            return (
+                <div className="flex-1 flex flex-col items-center justify-center px-4">
+                    <h2 className="text-4xl md:text-5xl font-bold text-slate-700 mb-16">除號放喺邊度？</h2>
+                    
+                    {/* Equation Area */}
+                    <div className="flex items-center gap-4 md:gap-8 mb-20 bg-white p-8 md:p-12 rounded-[3rem] shadow-xl">
+                        <span className="text-7xl md:text-[8rem] font-black text-slate-700">6</span>
+                        
+                        {/* Target Box */}
+                        <div className={`
+                            w-24 h-24 md:w-32 md:h-32 rounded-3xl flex items-center justify-center
+                            ${isCorrect ? 'bg-amber-100 border-none' : 'border-4 border-dashed animate-pulse-border'}
+                        `}>
+                            {isCorrect ? (
+                                <span className="text-7xl md:text-8xl font-black text-amber-500 animate-pop">÷</span>
+                            ) : (
+                                <span className="text-4xl md:text-5xl text-blue-300 font-bold">?</span>
+                            )}
+                        </div>
+                        
+                        <span className="text-7xl md:text-[8rem] font-black text-slate-700">2</span>
+                        <span className="text-7xl md:text-[8rem] font-black text-slate-400">=</span>
+                        <span className="text-7xl md:text-[8rem] font-black text-blue-600">3</span>
+                    </div>
+
+                    {/* Options */}
+                    <div className="flex gap-6 md:gap-12">
+                        {['+', '-', '÷', '='].map((sym, idx) => (
+                            <button
+                                key={idx}
+                                onClick={() => handleAnswer(sym)}
+                                disabled={isCorrect}
+                                className={`
+                                    btn-3d w-20 h-20 md:w-32 md:h-32 rounded-2xl text-5xl md:text-7xl font-black
+                                    bg-white border-slate-300 hover:bg-slate-50
+                                    ${sym === '÷' ? 'text-amber-500' : 'text-slate-600'}
+                                    ${sym === '=' ? 'text-blue-500' : ''}
+                                    ${wrongAttempt === sym ? 'opacity-40 animate-shake' : ''}
+                                `}
+                            >
+                                {sym}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
+        const PlaceEqualsLevel = ({ onComplete }) => {
+            const [isCorrect, setIsCorrect] = useState(false);
+            const [wrongAttempt, setWrongAttempt] = useState(false);
+
+            useEffect(() => {
+                speak("等號應該放喺邊度呢？撳下面嘅等號，放入空格入面啦。");
+            }, []);
+
+            const handleAnswer = (sym) => {
+                if (isCorrect) return;
+                
+                if (sym === '=') {
+                    setIsCorrect(true);
+                    speak("放啱啦！等號放喺答案前面。6 除以 2 等於 3。", () => setTimeout(onComplete, 3000));
+                    confetti({ particleCount: 80, origin: { y: 0.7 } });
+                } else {
+                    setWrongAttempt(sym);
+                    speak("唔係呢個符號，請找出等號放入去。");
+                    setTimeout(() => setWrongAttempt(false), 1500);
+                }
+            };
+
+            return (
+                <div className="flex-1 flex flex-col items-center justify-center px-4">
+                    <h2 className="text-4xl md:text-5xl font-bold text-slate-700 mb-16">等號放喺邊度？</h2>
+                    
+                    <div className="flex items-center gap-4 md:gap-8 mb-20 bg-white p-8 md:p-12 rounded-[3rem] shadow-xl">
+                        <span className="text-7xl md:text-[8rem] font-black text-slate-700">6</span>
+                        <span className="text-7xl md:text-[8rem] font-black text-amber-500">÷</span>
+                        <span className="text-7xl md:text-[8rem] font-black text-slate-700">2</span>
+                        
+                        {/* Target Box */}
+                        <div className={`
+                            w-24 h-24 md:w-32 md:h-32 rounded-3xl flex items-center justify-center
+                            ${isCorrect ? 'bg-blue-100 border-none' : 'border-4 border-dashed animate-pulse-border'}
+                        `}>
+                            {isCorrect ? (
+                                <span className="text-7xl md:text-8xl font-black text-blue-500 animate-pop">=</span>
+                            ) : (
+                                <span className="text-4xl md:text-5xl text-blue-300 font-bold">?</span>
+                            )}
+                        </div>
+                        
+                        <span className="text-7xl md:text-[8rem] font-black text-blue-600">3</span>
+                    </div>
+
+                    <div className="flex gap-6 md:gap-12">
+                        {['+', '-', '÷', '='].map((sym, idx) => (
+                            <button
+                                key={idx}
+                                onClick={() => handleAnswer(sym)}
+                                disabled={isCorrect}
+                                className={`
+                                    btn-3d w-20 h-20 md:w-32 md:h-32 rounded-2xl text-5xl md:text-7xl font-black
+                                    bg-white border-slate-300 hover:bg-slate-50
+                                    ${sym === '÷' ? 'text-amber-500' : 'text-slate-600'}
+                                    ${sym === '=' ? 'text-blue-500' : ''}
+                                    ${wrongAttempt === sym ? 'opacity-40 animate-shake' : ''}
+                                `}
+                            >
+                                {sym}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
+        const BuildEquationLevel = ({ onComplete }) => {
+            const [step, setStep] = useState(1); // 1: needs division, 2: needs equals, 3: done
+            const [wrongAttempt, setWrongAttempt] = useState(false);
+
+            useEffect(() => {
+                if (step === 1) {
+                    speak("最後，我哋一齊砌完整條算式！首先，除號放邊度？");
+                } else if (step === 2) {
+                    speak("叻仔！咁等號放邊度呢？");
+                }
+            }, [step]);
+
+            const handleAnswer = (sym) => {
+                if (step === 1) {
+                    if (sym === '÷') {
+                        setStep(2);
+                    } else {
+                        setWrongAttempt(sym);
+                        speak("首先放入除號。再試下！");
+                        setTimeout(() => setWrongAttempt(false), 1500);
+                    }
+                } else if (step === 2) {
+                    if (sym === '=') {
+                        setStep(3);
+                        speak("好叻呀！你成功排好成條算式啦！8 除以 2 等於 4。", () => setTimeout(onComplete, 3500));
+                        confetti({ particleCount: 150, spread: 100, origin: { y: 0.5 } });
+                    } else {
+                        setWrongAttempt(sym);
+                        speak("跟住放入等號。再試下！");
+                        setTimeout(() => setWrongAttempt(false), 1500);
+                    }
+                }
+            };
+
+            return (
+                <div className="flex-1 flex flex-col items-center justify-center px-4">
+                    <h2 className="text-4xl md:text-5xl font-bold text-slate-700 mb-16">砌好完整算式</h2>
+                    
+                    <div className="flex items-center gap-3 md:gap-6 mb-20 bg-white p-6 md:p-10 rounded-[3rem] shadow-xl">
+                        <span className="text-7xl md:text-[7rem] font-black text-slate-700">8</span>
+                        
+                        {/* Box 1 (Division) */}
+                        <div className={`
+                            w-20 h-20 md:w-28 md:h-28 rounded-2xl flex items-center justify-center transition-all
+                            ${step > 1 ? 'bg-amber-100 border-none' : (step === 1 ? 'border-4 border-dashed animate-pulse-border' : 'border-4 border-dashed border-gray-300')}
+                        `}>
+                            {step > 1 && <span className="text-6xl md:text-7xl font-black text-amber-500 animate-pop">÷</span>}
+                        </div>
+                        
+                        <span className="text-7xl md:text-[7rem] font-black text-slate-700">2</span>
+                        
+                        {/* Box 2 (Equals) */}
+                        <div className={`
+                            w-20 h-20 md:w-28 md:h-28 rounded-2xl flex items-center justify-center transition-all
+                            ${step > 2 ? 'bg-blue-100 border-none' : (step === 2 ? 'border-4 border-dashed animate-pulse-border' : 'border-4 border-dashed border-gray-300')}
+                        `}>
+                            {step > 2 && <span className="text-6xl md:text-7xl font-black text-blue-500 animate-pop">=</span>}
+                        </div>
+
+                        <span className="text-7xl md:text-[7rem] font-black text-blue-600">4</span>
+                    </div>
+
+                    <div className="flex gap-6 md:gap-12 transition-opacity" style={{opacity: step === 3 ? 0 : 1, pointerEvents: step === 3 ? 'none' : 'auto'}}>
+                        {['+', '-', '÷', '='].map((sym, idx) => (
+                            <button
+                                key={idx}
+                                onClick={() => handleAnswer(sym)}
+                                className={`
+                                    btn-3d w-20 h-20 md:w-32 md:h-32 rounded-2xl text-5xl md:text-7xl font-black
+                                    bg-white border-slate-300 hover:bg-slate-50
+                                    ${sym === '÷' ? 'text-amber-500' : 'text-slate-600'}
+                                    ${sym === '=' ? 'text-blue-500' : ''}
+                                    ${wrongAttempt === sym ? 'opacity-40 animate-shake' : ''}
+                                `}
+                            >
+                                {sym}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
+        const RewardScreen = ({ onRestart }) => {
+            const [balloons, setBalloons] = useState(Array.from({length: 15}, (_, i) => ({
+                id: i,
+                left: Math.random() * 80 + 10, 
+                delay: Math.random() * 5,
+                color: ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#a855f7'][Math.floor(Math.random() * 5)],
+                popped: false
+            })));
+
+            useEffect(() => {
+                speak("嘩！你好叻呀！完成晒所有挑戰！你已經完全認得除號啦！快啲撳爆啲氣球慶祝下啦！");
+                const interval = setInterval(() => {
+                    confetti({ particleCount: 30, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#f59e0b', '#3b82f6', '#10b981'] });
+                    confetti({ particleCount: 30, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#f59e0b', '#3b82f6', '#10b981'] });
+                }, 3000);
+                return () => clearInterval(interval);
+            }, []);
+
+            const popBalloon = (id) => {
+                setBalloons(prev => prev.map(b => b.id === id ? { ...b, popped: true } : b));
+                confetti({
+                    particleCount: 20,
+                    spread: 40,
+                    origin: { y: 0.5, x: balloons.find(b=>b.id===id).left / 100 }
+                });
+            };
+
+            return (
+                <div className="flex-1 flex flex-col items-center justify-center relative overflow-hidden bg-blue-50">
+                    <div className="z-10 text-center bg-white/80 p-10 rounded-3xl shadow-xl backdrop-blur-sm">
+                        <h1 className="text-6xl md:text-8xl font-black text-amber-500 mb-6 drop-shadow-lg">
+                            太棒啦！
+                        </h1>
+                        <p className="text-3xl text-slate-600 mb-10 font-bold">你已經識得幫除號排位啦！</p>
+                        
+                        <button 
+                            onClick={() => {
+                                speak("再玩一次！", () => onRestart());
+                            }}
+                            className="btn-3d bg-blue-500 hover:bg-blue-400 border-blue-700 text-white text-4xl font-bold py-6 px-12 rounded-full inline-flex items-center gap-4"
+                        >
+                            <i data-lucide="rotate-ccw" className="w-10 h-10"></i>
+                            再玩一次
+                        </button>
+                    </div>
+
+                    {/* Floating Balloons */}
+                    {balloons.map(b => !b.popped && (
+                        <div 
+                            key={b.id}
+                            className="absolute bottom-0 balloon cursor-pointer hover:scale-110 active:scale-90 transition-transform"
+                            style={{ left: `${b.left}%`, animationDelay: `${b.delay}s`, zIndex: 5 }}
+                            onClick={() => popBalloon(b.id)}
+                            onTouchStart={(e) => { e.preventDefault(); popBalloon(b.id); }}
+                        >
+                            <svg width="80" height="120" viewBox="0 0 100 150">
+                                <ellipse cx="50" cy="60" rx="40" ry="50" fill={b.color} />
+                                <path d="M50 110 L45 120 L55 120 Z" fill={b.color} />
+                                <path d="M50 120 Q50 140 60 150" fill="none" stroke="#666" strokeWidth="2" />
+                                <ellipse cx="35" cy="40" rx="10" ry="20" fill="rgba(255,255,255,0.3)" transform="rotate(-30 35 40)" />
+                            </svg>
+                        </div>
+                    ))}
+                </div>
+            );
+        };
+
+        // --- Main App Container ---
+        const App = () => {
+            const [level, setLevel] = useState('menu'); 
+            // sequence: menu -> warmup -> find -> place_div -> place_eq -> build -> reward
+
+            useEffect(() => {
+                lucide.createIcons();
+            }, [level]);
+
+            return (
+                <div className="game-container">
+                    <div className="game-screen">
+                        {/* Navigation Header */}
+                        {level !== 'menu' && (
+                            <div className="absolute top-0 left-0 w-full p-4 flex justify-between items-center z-50 pointer-events-none">
+                                <button 
+                                    onClick={() => setLevel('menu')}
+                                    className="pointer-events-auto bg-white/90 p-3 rounded-full shadow-md text-slate-500 hover:text-blue-500 transition-colors"
+                                >
+                                    <i data-lucide="home" className="w-8 h-8"></i>
+                                </button>
+                                
+                                <div className="bg-white/90 px-6 py-2 rounded-full shadow-md font-bold text-xl text-slate-600 flex items-center gap-2">
+                                    <i data-lucide="volume-2" className="w-6 h-6 text-blue-500"></i>
+                                    廣東話
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Route logic */}
+                        {level === 'menu' && <StartScreen onStart={setLevel} />}
+                        {level === 'warmup' && <WarmupLevel onComplete={() => setLevel('find')} />}
+                        {level === 'find' && <FindSymbolLevel onComplete={() => setLevel('place_div')} />}
+                        {level === 'place_div' && <PlaceDivisionLevel onComplete={() => setLevel('place_eq')} />}
+                        {level === 'place_eq' && <PlaceEqualsLevel onComplete={() => setLevel('build')} />}
+                        {level === 'build' && <BuildEquationLevel onComplete={() => setLevel('reward')} />}
+                        {level === 'reward' && <RewardScreen onRestart={() => setLevel('menu')} />}
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

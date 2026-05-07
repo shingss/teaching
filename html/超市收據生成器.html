@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>超市收據教學工具</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Lucide 圖標庫 -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* 隱藏於列印時的元素 */
+        @media print {
+            .print\:hidden {
+                display: none !important;
+            }
+            .print\:shadow-none {
+                box-shadow: none !important;
+            }
+            body {
+                background-color: white;
+            }
+        }
+        /* 鋸齒邊緣效果 */
+        .jagged-edge {
+            background-image: radial-gradient(circle at 50% 100%, transparent 4px, white 4px);
+            background-size: 10px 10px;
+            transform: translateY(100%);
+        }
+    </style>
+</head>
+<body class="bg-gray-100 p-4 md:p-8 font-sans min-h-screen">
+
+    <!-- 頂部控制列 -->
+    <div class="max-w-6xl mx-auto mb-6 flex justify-between items-center print:hidden bg-white p-4 rounded-xl shadow-sm">
+        <h1 class="text-2xl font-bold text-gray-800 flex items-center gap-2">
+            <i data-lucide="dollar-sign" class="text-green-600"></i>
+            <span id="app-title">超市收據教學工具</span>
+        </h1>
+        <div class="flex gap-4">
+            <button id="lang-btn" class="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-700 transition-colors">
+                <i data-lucide="languages" class="w-[18px] h-[18px]"></i>
+                <span id="lang-text">English</span>
+            </button>
+            <button id="print-btn" class="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors shadow-sm">
+                <i data-lucide="printer" class="w-[18px] h-[18px]"></i>
+                <span id="print-text">列印收據</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-8">
+        
+        <!-- 左側：教師控制台 -->
+        <div class="space-y-6 print:hidden">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                <h2 class="text-xl font-bold mb-4 flex items-center gap-2 border-b pb-2">
+                    <i data-lucide="edit-3" class="w-5 h-5 text-indigo-500"></i>
+                    <span id="teacher-panel-title">教師控制台</span>
+                </h2>
+                
+                <!-- 商店設定 -->
+                <div class="mb-6 grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1" id="label-store-zh">商店名稱 (中)</label>
+                        <input type="text" id="store-name-zh" value="開心超級市場" class="w-full p-2 border rounded-md focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1" id="label-store-en">商店名稱 (英)</label>
+                        <input type="text" id="store-name-en" value="Happy Supermarket" class="w-full p-2 border rounded-md focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                </div>
+
+                <!-- 新增項目表單 -->
+                <form id="add-item-form" class="bg-gray-50 p-4 rounded-lg mb-6 border border-gray-200">
+                    <h3 class="font-semibold mb-3 text-gray-700" id="add-item-title">新增貨品</h3>
+                    
+                    <!-- 快速選擇下拉選單 -->
+                    <div class="mb-3">
+                        <select id="quick-select" class="w-full p-2 border border-indigo-300 rounded text-sm text-gray-700 bg-white focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+                            <option value="" disabled selected id="quick-select-default">--- ⚡ 快速選擇預設貨品 ---</option>
+                            <!-- 選項將由 JS 動態產生 -->
+                        </select>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3 mb-3">
+                        <input required type="text" id="new-item-zh" placeholder="中文名稱" class="p-2 border rounded text-sm">
+                        <input type="text" id="new-item-en" placeholder="英文名稱" class="p-2 border rounded text-sm">
+                        <input required type="number" id="new-item-price" step="0.1" min="0" placeholder="單價 ($)" class="p-2 border rounded text-sm">
+                        <input required type="number" id="new-item-qty" min="1" value="1" placeholder="數量" class="p-2 border rounded text-sm">
+                    </div>
+                    <button type="submit" class="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded transition-colors font-medium">
+                        <i data-lucide="plus" class="w-[18px] h-[18px]"></i>
+                        <span id="btn-add-item">加入收據</span>
+                    </button>
+                </form>
+
+                <!-- 項目列表 -->
+                <div class="max-h-48 overflow-y-auto mb-6 border border-gray-200 rounded-lg">
+                    <table class="w-full text-sm">
+                        <thead class="bg-gray-50 sticky top-0">
+                            <tr>
+                                <th class="p-2 text-left">Item</th>
+                                <th class="p-2 text-right">Price</th>
+                                <th class="p-2 text-center">Qty</th>
+                                <th class="p-2 text-center">Act</th>
+                            </tr>
+                        </thead>
+                        <tbody id="item-list-body">
+                            <!-- 項目將由 JS 動態產生 -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 付款設定 -->
+                <div class="bg-green-50 p-4 rounded-lg border border-green-200">
+                    <label class="block font-bold text-green-900 mb-2" id="label-payment">付款金額 ($)</label>
+                    <input type="number" id="cash-tendered" step="0.1" min="0" value="100" class="w-full p-3 border border-green-300 rounded-md text-lg font-bold focus:ring-2 focus:ring-green-500">
+                    <p id="insufficient-funds-msg" class="text-red-500 text-sm mt-2 font-medium flex items-center gap-1 hidden">
+                        <i data-lucide="info" class="w-3.5 h-3.5"></i> 現金不足！付款金額小於總額。
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右側：收據預覽區域 -->
+        <div class="flex flex-col items-center">
+            <div class="w-full max-w-[400px]">
+                <h2 class="text-xl font-bold mb-4 text-center text-gray-700 print:hidden" id="receipt-preview-title">收據預覽</h2>
+                
+                <!-- 收據本體 -->
+                <div class="bg-white p-6 shadow-xl print:shadow-none font-mono text-sm border-t-4 border-gray-800 text-gray-800 relative mx-auto">
+                    <div class="absolute bottom-0 left-0 right-0 h-2 print:hidden jagged-edge"></div>
+
+                    <!-- 商店名稱 -->
+                    <div class="text-center mb-6 cursor-help hover:bg-yellow-200 transition-colors p-2 rounded -mx-2" data-exp="expStore">
+                        <h2 class="text-xl font-bold" id="receipt-store-name"></h2>
+                        <h3 class="text-md" id="receipt-store-name-sub"></h3>
+                    </div>
+
+                    <!-- 元數據 -->
+                    <div class="mb-4 border-b border-dashed border-gray-400 pb-4 cursor-help hover:bg-yellow-200 transition-colors p-2 rounded -mx-2" data-exp="expMeta">
+                        <div class="flex justify-between">
+                            <span id="label-receipt-no">收據號碼:</span>
+                            <span id="receipt-no"></span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span id="label-date">日期:</span>
+                            <span id="receipt-date"></span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span id="label-time">時間:</span>
+                            <span id="receipt-time"></span>
+                        </div>
+                    </div>
+
+                    <!-- 欄位標題 -->
+                    <div class="grid grid-cols-12 gap-1 font-bold mb-2 cursor-help hover:bg-yellow-200 transition-colors p-2 rounded -mx-2" data-exp="expHeaders">
+                        <div class="col-span-5" id="col-item">項目</div>
+                        <div class="col-span-2 text-center" id="col-qty">數量</div>
+                        <div class="col-span-2 text-right" id="col-price">單價</div>
+                        <div class="col-span-3 text-right" id="col-total">總計</div>
+                    </div>
+
+                    <!-- 項目列表 -->
+                    <div id="receipt-items-container" class="mb-4 space-y-2 border-b border-dashed border-gray-400 pb-4">
+                        <!-- 項目將由 JS 動態產生 -->
+                    </div>
+
+                    <!-- 總計區塊 -->
+                    <div class="space-y-1 mb-4 border-b border-dashed border-gray-400 pb-4">
+                        <div class="flex justify-between text-lg font-bold cursor-help hover:bg-yellow-200 transition-colors p-2 rounded -mx-2" data-exp="expTotal">
+                            <span id="label-grand-total">總額:</span>
+                            <span id="receipt-total-amount"></span>
+                        </div>
+                    </div>
+
+                    <!-- 付款區塊 -->
+                    <div class="space-y-1">
+                        <div class="flex justify-between cursor-help hover:bg-yellow-200 transition-colors p-2 rounded -mx-2" data-exp="expCash">
+                            <span id="label-cash">現金:</span>
+                            <span id="receipt-cash"></span>
+                        </div>
+                        <div class="flex justify-between font-bold cursor-help hover:bg-yellow-200 transition-colors p-2 rounded -mx-2" data-exp="expChange">
+                            <span id="label-change">找續:</span>
+                            <span id="receipt-change"></span>
+                        </div>
+                    </div>
+
+                    <!-- 頁尾 -->
+                    <div class="text-center mt-8 text-xs text-gray-500">
+                        <p id="receipt-footer">*** 多謝惠顧，歡迎再次光臨！ ***</p>
+                    </div>
+
+                </div>
+            </div>
+            
+            <!-- 解說面板 -->
+            <div class="w-full max-w-[400px] print:hidden" id="explanation-panel">
+                <!-- 解說內容將由 JS 動態更新 -->
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // --- 狀態管理 ---
+        let currentLang = 'zh';
+        let cashTendered = 100;
+        let activeExplanation = null;
+        let items = [
+            { id: 1, nameZh: '蘋果', nameEn: 'Apple', price: 5.5, qty: 3 },
+            { id: 2, nameZh: '鮮牛奶', nameEn: 'Fresh Milk', price: 24.0, qty: 1 },
+            { id: 3, nameZh: '全麥麵包', nameEn: 'Whole Wheat Bread', price: 15.0, qty: 2 },
+        ];
+
+        const PREDEFINED_PRODUCTS = [
+            { nameZh: '蘋果', nameEn: 'Apple', price: 5.5 },
+            { nameZh: '香蕉', nameEn: 'Banana', price: 4.0 },
+            { nameZh: '橙', nameEn: 'Orange', price: 6.0 },
+            { nameZh: '鮮牛奶', nameEn: 'Fresh Milk', price: 24.0 },
+            { nameZh: '全麥麵包', nameEn: 'Whole Wheat Bread', price: 15.0 },
+            { nameZh: '白飯 (1公斤)', nameEn: 'White Rice (1kg)', price: 18.0 },
+            { nameZh: '雞蛋 (10隻)', nameEn: 'Eggs (10pcs)', price: 22.0 },
+            { nameZh: '粟米片', nameEn: 'Corn Flakes', price: 35.0 },
+            { nameZh: '橙汁', nameEn: 'Orange Juice', price: 18.5 },
+            { nameZh: '薯片', nameEn: 'Potato Chips', price: 12.0 },
+            { nameZh: '朱古力', nameEn: 'Chocolate', price: 14.5 },
+            { nameZh: '餅乾', nameEn: 'Biscuits', price: 20.0 },
+            { nameZh: '意粉', nameEn: 'Spaghetti', price: 16.0 },
+            { nameZh: '罐頭湯', nameEn: 'Canned Soup', price: 14.0 },
+            { nameZh: '廁紙 (10卷)', nameEn: 'Toilet Paper (10 rolls)', price: 32.0 },
+            { nameZh: '牙膏', nameEn: 'Toothpaste', price: 19.9 },
+            { nameZh: '沐浴露', nameEn: 'Body Wash', price: 45.0 },
+            { nameZh: '洗頭水', nameEn: 'Shampoo', price: 48.0 },
+            { nameZh: '洗潔精', nameEn: 'Dishwashing Liquid', price: 25.0 },
+            { nameZh: '垃圾膠袋', nameEn: 'Garbage Bags', price: 15.0 },
+        ];
+
+        // --- 翻譯字典 ---
+        const t = {
+            zh: {
+                title: '超市收據教學工具',
+                teacherPanel: '教師控制台',
+                storeName: '商店名稱 (中/英)',
+                quickSelect: '--- ⚡ 快速選擇預設貨品 ---',
+                addItem: '新增貨品',
+                itemNameZh: '中文名稱',
+                itemNameEn: '英文名稱',
+                price: '單價 ($)',
+                qty: '數量',
+                addBtn: '加入收據',
+                payment: '付款金額 ($)',
+                receipt: '收據預覽',
+                print: '列印收據',
+                hoverTip: '💡 提示：將滑鼠移到收據上的不同部分，查看詳細解釋！',
+                receiptNo: '收據號碼',
+                date: '日期',
+                time: '時間',
+                itemCol: '項目',
+                qtyCol: '數量',
+                priceCol: '單價',
+                totalCol: '總計',
+                total: '總額',
+                cash: '現金',
+                change: '找續',
+                thankYou: '*** 多謝惠顧，歡迎再次光臨！ ***',
+                expStore: '商店名稱：這張單據是由哪一間商店發出的。',
+                expMeta: '收據號碼與時間：這張單據的唯一編號，以及交易發生的準確日期和時間。如果需要退換貨品，這些資料非常重要。',
+                expHeaders: '欄位名稱：分別代表貨品的名稱(Item)、購買的數量(Qty)、每一件的價錢(Price)，以及該項目的總費用(Total)。',
+                expItem: '購買項目：列出你買了什麼。總費用 = 單價 × 數量。',
+                expTotal: '總額：你需要支付給商店的全部金額。',
+                expCash: '現金/付款：你交給收銀員的實際金額。',
+                expChange: '找續：收銀員退回給你的多餘金額。計算方法是：付款金額 - 總額。',
+            },
+            en: {
+                title: 'Supermarket Receipt Teaching Tool',
+                teacherPanel: 'Teacher Control Panel',
+                storeName: 'Store Name (ZH/EN)',
+                quickSelect: '--- ⚡ Quick Select Product ---',
+                addItem: 'Add Item',
+                itemNameZh: 'Name (ZH)',
+                itemNameEn: 'Name (EN)',
+                price: 'Unit Price ($)',
+                qty: 'Quantity',
+                addBtn: 'Add to Receipt',
+                payment: 'Cash Tendered ($)',
+                receipt: 'Receipt Preview',
+                print: 'Print Receipt',
+                hoverTip: '💡 Tip: Hover over different parts of the receipt to see explanations!',
+                receiptNo: 'Receipt No.',
+                date: 'Date',
+                time: 'Time',
+                itemCol: 'Item',
+                qtyCol: 'Qty',
+                priceCol: 'Price',
+                totalCol: 'Total',
+                total: 'Grand Total',
+                cash: 'Cash',
+                change: 'Change',
+                thankYou: '*** Thank you, please come again! ***',
+                expStore: 'Store Name: The name of the shop that issued this receipt.',
+                expMeta: 'Receipt No. & Time: A unique tracking number and the exact date/time of purchase. Important for returns.',
+                expHeaders: 'Column Headers: Shows the Item name, Quantity bought, Unit Price of one item, and Total cost for that row.',
+                expItem: 'Line Item: What you bought. Row Total = Unit Price × Quantity.',
+                expTotal: 'Grand Total: The final amount of money you need to pay the shop.',
+                expCash: 'Cash Tendered: The actual amount of money you gave to the cashier.',
+                expChange: 'Change: The money returned to you. Calculated as: Cash Tendered - Grand Total.',
+            }
+        };
+
+        // --- 初始化 ---
+        function init() {
+            lucide.createIcons();
+            
+            // 產生隨機單號和時間
+            const now = new Date();
+            document.getElementById('receipt-no').textContent = Math.floor(100000 + Math.random() * 900000);
+            document.getElementById('receipt-date').textContent = now.toLocaleDateString('zh-HK');
+            document.getElementById('receipt-time').textContent = now.toLocaleTimeString('zh-HK', { hour: '2-digit', minute: '2-digit' });
+
+            // 填充下拉選單
+            const select = document.getElementById('quick-select');
+            PREDEFINED_PRODUCTS.forEach((p, idx) => {
+                const opt = document.createElement('option');
+                opt.value = idx;
+                opt.textContent = `${p.nameZh} / ${p.nameEn} ($${p.price.toFixed(1)})`;
+                select.appendChild(opt);
+            });
+
+            // 綁定事件
+            document.getElementById('lang-btn').addEventListener('click', toggleLanguage);
+            document.getElementById('print-btn').addEventListener('click', () => window.print());
+            document.getElementById('add-item-form').addEventListener('submit', handleAddItem);
+            document.getElementById('quick-select').addEventListener('change', handleQuickSelect);
+            
+            const cashInput = document.getElementById('cash-tendered');
+            cashInput.addEventListener('input', (e) => {
+                cashTendered = parseFloat(e.target.value) || 0;
+                updateReceipt();
+            });
+
+            // 商店名稱同步
+            document.getElementById('store-name-zh').addEventListener('input', updateReceipt);
+            document.getElementById('store-name-en').addEventListener('input', updateReceipt);
+
+            // 綁定 Hover 事件
+            document.querySelectorAll('[data-exp]').forEach(el => {
+                el.addEventListener('mouseenter', (e) => setActiveExplanation(e.currentTarget.dataset.exp));
+                el.addEventListener('mouseleave', () => setActiveExplanation(null));
+            });
+
+            updateUI();
+        }
+
+        // --- 更新介面語言 ---
+        function updateUI() {
+            const lang = t[currentLang];
+            
+            document.getElementById('app-title').textContent = lang.title;
+            document.getElementById('lang-text').textContent = currentLang === 'zh' ? 'English' : '中文';
+            document.getElementById('print-text').textContent = lang.print;
+            document.getElementById('teacher-panel-title').textContent = lang.teacherPanel;
+            document.getElementById('label-store-zh').textContent = lang.storeName;
+            document.getElementById('label-store-en').textContent = lang.storeName;
+            document.getElementById('quick-select-default').textContent = lang.quickSelect;
+            document.getElementById('add-item-title').textContent = lang.addItem;
+            document.getElementById('new-item-zh').placeholder = lang.itemNameZh;
+            document.getElementById('new-item-en').placeholder = lang.itemNameEn;
+            document.getElementById('new-item-price').placeholder = lang.price;
+            document.getElementById('btn-add-item').textContent = lang.addBtn;
+            document.getElementById('label-payment').textContent = lang.payment;
+            document.getElementById('receipt-preview-title').textContent = lang.receipt;
+            
+            // 收據欄位
+            document.getElementById('label-receipt-no').textContent = lang.receiptNo + ':';
+            document.getElementById('label-date').textContent = lang.date + ':';
+            document.getElementById('label-time').textContent = lang.time + ':';
+            document.getElementById('col-item').textContent = lang.itemCol;
+            document.getElementById('col-qty').textContent = lang.qtyCol;
+            document.getElementById('col-price').textContent = lang.priceCol;
+            document.getElementById('col-total').textContent = lang.totalCol;
+            document.getElementById('label-grand-total').textContent = lang.total + ':';
+            document.getElementById('label-cash').textContent = lang.cash + ':';
+            document.getElementById('label-change').textContent = lang.change + ':';
+            document.getElementById('receipt-footer').textContent = lang.thankYou;
+
+            updateReceipt();
+            updateExplanation();
+        }
+
+        function toggleLanguage() {
+            currentLang = currentLang === 'zh' ? 'en' : 'zh';
+            updateUI();
+        }
+
+        // --- 處理表單 ---
+        function handleQuickSelect(e) {
+            const idx = e.target.value;
+            if (idx === "") return;
+            const product = PREDEFINED_PRODUCTS[idx];
+            document.getElementById('new-item-zh').value = product.nameZh;
+            document.getElementById('new-item-en').value = product.nameEn;
+            document.getElementById('new-item-price').value = product.price;
+            e.target.value = ""; // 重置
+        }
+
+        function handleAddItem(e) {
+            e.preventDefault();
+            const nameZh = document.getElementById('new-item-zh').value;
+            const nameEn = document.getElementById('new-item-en').value;
+            const price = parseFloat(document.getElementById('new-item-price').value);
+            const qty = parseInt(document.getElementById('new-item-qty').value);
+
+            if (!nameZh || isNaN(price)) return;
+
+            items.push({
+                id: Date.now(),
+                nameZh: nameZh,
+                nameEn: nameEn || nameZh,
+                price: price,
+                qty: qty
+            });
+
+            // 清空表單
+            document.getElementById('new-item-zh').value = '';
+            document.getElementById('new-item-en').value = '';
+            document.getElementById('new-item-price').value = '';
+            document.getElementById('new-item-qty').value = 1;
+
+            updateReceipt();
+        }
+
+        window.removeItem = function(id) {
+            items = items.filter(item => item.id !== id);
+            updateReceipt();
+        };
+
+        // --- 更新收據內容 ---
+        function updateReceipt() {
+            // 商店名稱
+            const storeZh = document.getElementById('store-name-zh').value;
+            const storeEn = document.getElementById('store-name-en').value;
+            document.getElementById('receipt-store-name').textContent = currentLang === 'zh' ? storeZh : storeEn;
+            document.getElementById('receipt-store-name-sub').textContent = currentLang === 'zh' ? storeEn : '';
+
+            // 更新左側表格
+            const tbody = document.getElementById('item-list-body');
+            tbody.innerHTML = '';
+            
+            // 更新右側收據項目
+            const receiptContainer = document.getElementById('receipt-items-container');
+            receiptContainer.innerHTML = '';
+
+            let totalAmount = 0;
+
+            items.forEach(item => {
+                totalAmount += item.price * item.qty;
+                const itemName = currentLang === 'zh' ? item.nameZh : item.nameEn;
+
+                // 左側表格列
+                tbody.innerHTML += `
+                    <tr class="border-t">
+                        <td class="p-2">${item.nameZh}</td>
+                        <td class="p-2 text-right">$${item.price.toFixed(1)}</td>
+                        <td class="p-2 text-center">${item.qty}</td>
+                        <td class="p-2 text-center">
+                            <button onclick="removeItem(${item.id})" class="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+
+                // 右側收據列
+                const receiptItem = document.createElement('div');
+                receiptItem.className = "grid grid-cols-12 gap-1 cursor-help hover:bg-yellow-200 transition-colors p-1 rounded -mx-1";
+                receiptItem.dataset.exp = "expItem";
+                receiptItem.addEventListener('mouseenter', () => setActiveExplanation('expItem'));
+                receiptItem.addEventListener('mouseleave', () => setActiveExplanation(null));
+                
+                receiptItem.innerHTML = `
+                    <div class="col-span-5 truncate pr-1" title="${itemName}">${itemName}</div>
+                    <div class="col-span-2 text-center">${item.qty}</div>
+                    <div class="col-span-2 text-right">$${item.price.toFixed(1)}</div>
+                    <div class="col-span-3 text-right">$${(item.price * item.qty).toFixed(1)}</div>
+                `;
+                receiptContainer.appendChild(receiptItem);
+            });
+
+            lucide.createIcons(); // 重新渲染剛加入的垃圾桶圖標
+
+            // 計算金額
+            const changeAmount = cashTendered - totalAmount;
+            
+            document.getElementById('receipt-total-amount').textContent = `$${totalAmount.toFixed(1)}`;
+            document.getElementById('receipt-cash').textContent = `$${cashTendered.toFixed(1)}`;
+            
+            const changeEl = document.getElementById('receipt-change');
+            changeEl.textContent = `$${changeAmount.toFixed(1)}`;
+            changeEl.className = changeAmount < 0 ? "text-red-600" : "";
+
+            // 錯誤提示
+            const errorMsg = document.getElementById('insufficient-funds-msg');
+            if (changeAmount < 0) {
+                errorMsg.classList.remove('hidden');
+            } else {
+                errorMsg.classList.add('hidden');
+            }
+        }
+
+        // --- 處理解說面板 ---
+        function setActiveExplanation(expKey) {
+            activeExplanation = expKey;
+            updateExplanation();
+        }
+
+        function updateExplanation() {
+            const panel = document.getElementById('explanation-panel');
+            
+            if (!activeExplanation) {
+                panel.innerHTML = `
+                    <div class="mt-6 p-4 bg-blue-50 text-blue-800 rounded-lg border border-blue-200 flex items-start gap-3">
+                        <i data-lucide="info" class="w-6 h-6 shrink-0 mt-0.5"></i>
+                        <p class="font-medium">${t[currentLang].hoverTip}</p>
+                    </div>
+                `;
+            } else {
+                panel.innerHTML = `
+                    <div class="mt-6 p-4 bg-yellow-50 text-yellow-900 rounded-lg border border-yellow-300 shadow-sm flex items-start gap-3">
+                        <i data-lucide="info" class="w-6 h-6 shrink-0 mt-0.5 text-yellow-600"></i>
+                        <div>
+                            <p class="font-bold mb-1 border-b border-yellow-200 pb-1">${t.zh[activeExplanation]}</p>
+                            <p class="text-sm text-yellow-800">${t.en[activeExplanation]}</p>
+                        </div>
+                    </div>
+                `;
+            }
+            lucide.createIcons(); // 重新渲染圖標
+        }
+
+        // 啟動應用
+        window.onload = init;
+    </script>
+</body>
+</html>

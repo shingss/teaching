@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>除法概念動畫 (Sharing Model)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 自定義動畫類別 */
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        .slide-in {
+            animation: slideIn 0.5s ease-out;
+        }
+        .zoom-in {
+            animation: zoomIn 0.3s ease-out;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes slideIn {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes zoomIn {
+            from { transform: scale(0); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        /* 蘋果樣式 */
+        .apple-icon {
+            width: 32px;
+            height: 32px;
+            position: relative;
+            display: inline-block;
+            transition: transform 0.2s;
+        }
+        .apple-icon:hover {
+            transform: scale(1.1);
+        }
+        .apple-body {
+            position: absolute;
+            inset: 0;
+            background-color: #ef4444; /* red-500 */
+            border-radius: 50%;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+        .apple-shine {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 30%;
+            height: 30%;
+            background-color: rgba(255,255,255,0.3);
+            border-radius: 50%;
+        }
+        .apple-leaf {
+            position: absolute;
+            top: -4px;
+            left: 50%;
+            width: 30%;
+            height: 30%;
+            background-color: #22c55e; /* green-500 */
+            border-top-left-radius: 100%;
+            border-bottom-right-radius: 100%;
+            transform: translate(-50%, 0) rotate(-45deg);
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-amber-50 font-sans text-slate-800 flex flex-col items-center p-4 md:p-8">
+
+    <!-- 標題區 -->
+    <header class="mb-8 text-center">
+        <h1 class="text-3xl font-bold text-amber-800 flex items-center justify-center gap-3">
+            <!-- 蘋果圖示 -->
+            <div class="apple-icon" style="width: 28px; height: 28px;">
+                <div class="apple-body"></div>
+                <div class="apple-shine"></div>
+                <div class="apple-leaf"></div>
+            </div>
+            除法概念動畫
+        </h1>
+        <p class="text-amber-700/70 mt-2">將蘋果平均分配到盤子裡 (Sharing Model)</p>
+    </header>
+
+    <!-- 控制面板 -->
+    <div class="bg-white p-6 rounded-2xl shadow-xl w-full max-w-2xl border-2 border-amber-100 mb-8">
+        <div class="flex flex-col md:flex-row gap-6 justify-between items-center">
+            
+            <!-- 輸入區 -->
+            <div class="flex items-center gap-4 bg-amber-50 p-3 rounded-lg">
+                <div class="flex flex-col items-center">
+                    <label class="text-xs font-bold text-amber-800 uppercase tracking-wide">被除數 (蘋果)</label>
+                    <input type="number" id="inputDividend" value="12" min="1" max="30"
+                        class="w-24 text-2xl font-bold bg-transparent border-b-2 border-amber-300 focus:outline-none focus:border-amber-600 text-center text-amber-900 transition-colors">
+                </div>
+                <span class="text-2xl text-amber-400 font-bold">÷</span>
+                <div class="flex flex-col items-center">
+                    <label class="text-xs font-bold text-amber-800 uppercase tracking-wide">除數 (盤子)</label>
+                    <input type="number" id="inputDivisor" value="3" min="1" max="6"
+                        class="w-24 text-2xl font-bold bg-transparent border-b-2 border-amber-300 focus:outline-none focus:border-amber-600 text-center text-amber-900 transition-colors">
+                </div>
+            </div>
+
+            <!-- 按鈕區 -->
+            <div class="flex gap-2">
+                <button id="btnAction" class="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-white shadow-lg transition-transform active:scale-95 bg-green-500 hover:bg-green-600">
+                    <svg id="iconPlay" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                    <svg id="iconPause" class="hidden" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                    <svg id="iconReset" class="hidden" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 12"></path><path d="M3 5v7h7"></path></svg>
+                    <span id="btnText">開始分配</span>
+                </button>
+                
+                <button id="btnReset" class="p-3 text-amber-600 hover:bg-amber-100 rounded-xl transition-colors" title="重置">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 12"></path><path d="M3 5v7h7"></path></svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- 數學算式顯示 -->
+        <div class="mt-6 text-center bg-slate-50 p-3 rounded-lg border border-slate-200">
+            <div class="text-2xl font-mono text-slate-700 flex justify-center items-center gap-4">
+                <span id="dispDividend">12</span>
+                <span>÷</span>
+                <span id="dispDivisor">3</span>
+                <span>=</span>
+                <span id="dispQuotient" class="font-bold text-slate-400">?</span>
+                <span id="dispRemainder" class="text-sm text-slate-400 ml-2"></span>
+            </div>
+            <div id="statusMessage" class="text-sm text-blue-600 font-medium mt-2 transition-all duration-300 min-h-[1.5em]">
+                請設定數字並按下開始
+            </div>
+        </div>
+    </div>
+
+    <!-- 視覺化區域 -->
+    <div class="w-full max-w-4xl flex flex-col gap-8 relative">
+        
+        <!-- 1. 來源區 (蘋果堆) -->
+        <div class="bg-white p-6 rounded-3xl shadow-sm border-2 border-red-100 min-h-[160px] relative transition-all">
+            <div class="absolute -top-3 left-6 bg-red-100 text-red-800 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
+                待分配 (<span id="sourceCount">12</span>)
+            </div>
+            
+            <div id="sourceContainer" class="flex flex-wrap gap-2 justify-center content-start h-full pt-4">
+                <!-- 蘋果將由 JS 動態生成 -->
+            </div>
+            
+            <div id="sourceEmptyMsg" class="hidden absolute inset-0 flex items-center justify-center text-gray-300 font-medium italic">
+                蘋果都分完了！
+            </div>
+        </div>
+
+        <!-- 動畫路徑指示 (裝飾用) -->
+        <div id="animArrow" class="hidden absolute top-[150px] left-1/2 -translate-x-1/2 text-amber-300 text-4xl animate-bounce z-10 font-bold">
+            ⬇
+        </div>
+
+        <!-- 2. 目的地區 (盤子) -->
+        <div id="platesGrid" class="grid gap-4 w-full grid-cols-3">
+            <!-- 盤子將由 JS 動態生成 -->
+        </div>
+
+    </div>
+
+    <!-- 餘數特別說明 -->
+    <div id="remainderInfo" class="hidden mt-8 bg-red-50 border border-red-200 p-4 rounded-xl flex items-center gap-3 max-w-md animate-in fade-in slide-in-from-bottom-4">
+        <svg class="text-red-500 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+        <p class="text-red-800 text-sm" id="remainderText">
+            <!-- JS 填充 -->
+        </p>
+    </div>
+
+    <script>
+        // --- 狀態變數 ---
+        let state = {
+            dividend: 12,
+            divisor: 3,
+            sourceApples: 12,
+            plateCounts: [0, 0, 0], // 每個盤子的蘋果數
+            quotient: 0,
+            isAnimating: false,
+            isFinished: false,
+            timer: null
+        };
+
+        const ANIMATION_SPEED = 800;
+
+        // --- DOM 元素 ---
+        const els = {
+            inputDividend: document.getElementById('inputDividend'),
+            inputDivisor: document.getElementById('inputDivisor'),
+            btnAction: document.getElementById('btnAction'),
+            btnReset: document.getElementById('btnReset'),
+            btnText: document.getElementById('btnText'),
+            iconPlay: document.getElementById('iconPlay'),
+            iconPause: document.getElementById('iconPause'),
+            iconReset: document.getElementById('iconReset'),
+            dispDividend: document.getElementById('dispDividend'),
+            dispDivisor: document.getElementById('dispDivisor'),
+            dispQuotient: document.getElementById('dispQuotient'),
+            dispRemainder: document.getElementById('dispRemainder'),
+            statusMessage: document.getElementById('statusMessage'),
+            sourceCount: document.getElementById('sourceCount'),
+            sourceContainer: document.getElementById('sourceContainer'),
+            sourceEmptyMsg: document.getElementById('sourceEmptyMsg'),
+            platesGrid: document.getElementById('platesGrid'),
+            animArrow: document.getElementById('animArrow'),
+            remainderInfo: document.getElementById('remainderInfo'),
+            remainderText: document.getElementById('remainderText')
+        };
+
+        // --- 輔助函數 ---
+        // 生成蘋果 HTML
+        function getAppleHtml() {
+            return `
+            <div class="apple-icon zoom-in">
+                <div class="apple-body"></div>
+                <div class="apple-shine"></div>
+                <div class="apple-leaf"></div>
+            </div>`;
+        }
+
+        // --- 初始化與渲染 ---
+
+        function init() {
+            bindEvents();
+            resetGame();
+        }
+
+        function bindEvents() {
+            els.inputDividend.addEventListener('change', (e) => {
+                let val = parseInt(e.target.value) || 0;
+                if (val > 30) val = 30; if (val < 1) val = 1;
+                state.dividend = val;
+                resetGame();
+            });
+
+            els.inputDivisor.addEventListener('change', (e) => {
+                let val = parseInt(e.target.value) || 1;
+                if (val > 6) val = 6; if (val < 1) val = 1;
+                state.divisor = val;
+                resetGame();
+            });
+
+            els.btnAction.addEventListener('click', toggleAction);
+            els.btnReset.addEventListener('click', resetGame);
+        }
+
+        function resetGame() {
+            // 停止任何動畫
+            if (state.timer) clearTimeout(state.timer);
+            
+            // 重置狀態
+            state.dividend = parseInt(els.inputDividend.value);
+            state.divisor = parseInt(els.inputDivisor.value);
+            state.sourceApples = state.dividend;
+            state.plateCounts = Array(state.divisor).fill(0);
+            state.quotient = 0;
+            state.isAnimating = false;
+            state.isFinished = false;
+
+            // 更新 UI
+            updateInputsDisabled(false);
+            renderEquation();
+            renderSourceApples();
+            renderPlates();
+            updateMessage(`準備將 ${state.dividend} 顆蘋果平均分給 ${state.divisor} 個盤子`);
+            updateActionButton();
+            
+            // 隱藏其他元素
+            els.remainderInfo.classList.add('hidden');
+            els.animArrow.classList.add('hidden');
+            els.dispRemainder.textContent = '';
+            els.dispQuotient.textContent = '?';
+            els.dispQuotient.className = 'font-bold text-slate-400';
+        }
+
+        function toggleAction() {
+            if (state.isFinished) {
+                resetGame();
+                // 稍微延遲一下再開始，讓重置動畫跑完
+                setTimeout(() => {
+                    startAnimation();
+                }, 200);
+                return;
+            }
+
+            if (state.isAnimating) {
+                pauseAnimation();
+            } else {
+                startAnimation();
+            }
+        }
+
+        function startAnimation() {
+            state.isAnimating = true;
+            updateInputsDisabled(true);
+            updateActionButton();
+            els.animArrow.classList.remove('hidden');
+            
+            // 進入迴圈
+            animationLoop();
+        }
+
+        function pauseAnimation() {
+            state.isAnimating = false;
+            if (state.timer) clearTimeout(state.timer);
+            updateActionButton();
+            els.animArrow.classList.add('hidden');
+            updateMessage("已暫停");
+        }
+
+        function animationLoop() {
+            if (!state.isAnimating) return;
+
+            // 檢查是否可以進行下一輪
+            if (state.sourceApples >= state.divisor) {
+                state.timer = setTimeout(() => {
+                    distributeRound();
+                    animationLoop(); // 遞迴調用
+                }, ANIMATION_SPEED);
+            } else {
+                finishGame();
+            }
+        }
+
+        function distributeRound() {
+            updateMessage(`每個盤子分 1 顆... (還剩 ${state.sourceApples - state.divisor} 顆)`);
+            
+            // 邏輯更新
+            state.sourceApples -= state.divisor;
+            state.plateCounts = state.plateCounts.map(c => c + 1);
+            state.quotient += 1;
+
+            // 視覺更新
+            renderSourceApples();
+            renderPlates(); // 盤子增加蘋果
+            
+            // 更新商數顯示
+            els.dispQuotient.textContent = state.quotient;
+            els.dispQuotient.className = 'font-bold text-green-600 transition-all scale-110';
+            setTimeout(() => els.dispQuotient.classList.remove('scale-110'), 200);
+        }
+
+        function finishGame() {
+            state.isAnimating = false;
+            state.isFinished = true;
+            els.animArrow.classList.add('hidden');
+            updateActionButton();
+
+            const remainder = state.sourceApples;
+            
+            if (remainder === 0) {
+                updateMessage(`分完了！ ${state.dividend} ÷ ${state.divisor} = ${state.quotient}，整除。`);
+            } else {
+                updateMessage(`分完了！剩下的 ${remainder} 顆不夠分了。結果：${state.quotient} 餘 ${remainder}`);
+                els.dispRemainder.textContent = `... 餘 ${remainder}`;
+                
+                // 顯示餘數說明
+                els.remainderText.innerHTML = `還剩下 <strong>${remainder}</strong> 顆蘋果，因為少於盤子數量 (${state.divisor})，所以不夠每盤再分 1 顆，這些就是<strong>餘數</strong>。`;
+                els.remainderInfo.classList.remove('hidden');
+            }
+        }
+
+        // --- 渲染 UI 細節 ---
+
+        function renderEquation() {
+            els.dispDividend.textContent = state.dividend;
+            els.dispDivisor.textContent = state.divisor;
+        }
+
+        function renderSourceApples() {
+            els.sourceCount.textContent = state.sourceApples;
+            
+            // 清空容器
+            els.sourceContainer.innerHTML = '';
+            
+            if (state.sourceApples === 0) {
+                els.sourceEmptyMsg.classList.remove('hidden');
+            } else {
+                els.sourceEmptyMsg.classList.add('hidden');
+                // 重繪蘋果
+                for (let i = 0; i < state.sourceApples; i++) {
+                    els.sourceContainer.innerHTML += getAppleHtml();
+                }
+            }
+        }
+
+        function renderPlates() {
+            // 設定 grid column 數
+            els.platesGrid.style.gridTemplateColumns = `repeat(${Math.min(state.divisor, 6)}, minmax(0, 1fr))`;
+            els.platesGrid.innerHTML = '';
+
+            state.plateCounts.forEach((count, index) => {
+                const plateEl = document.createElement('div');
+                plateEl.className = "bg-white rounded-2xl border-4 border-slate-200 min-h-[200px] flex flex-col items-center relative overflow-hidden transition-all duration-300";
+                
+                // 盤子裡的蘋果
+                let applesHtml = '';
+                for(let i=0; i<count; i++) {
+                    // 添加一個 slide-in 動畫到最新的蘋果
+                    const animClass = (i === count - 1 && state.isAnimating) ? 'slide-in' : '';
+                    applesHtml += `<div class="apple-icon ${animClass}" style="margin-bottom: 4px;">
+                        <div class="apple-body"></div>
+                        <div class="apple-shine"></div>
+                        <div class="apple-leaf"></div>
+                    </div>`;
+                }
+
+                plateEl.innerHTML = `
+                    <div class="absolute top-0 left-0 w-full bg-slate-100 text-slate-500 text-xs py-1 text-center font-bold">
+                        盤子 ${index + 1}
+                    </div>
+                    <div class="flex flex-col-reverse gap-1 p-4 pb-12 w-full items-center flex-grow justify-start mt-6">
+                        ${applesHtml}
+                    </div>
+                    <div class="absolute bottom-0 w-full bg-slate-50 py-2 text-center border-t border-slate-100">
+                        <span class="text-xl font-bold text-slate-700">${count}</span>
+                    </div>
+                `;
+                els.platesGrid.appendChild(plateEl);
+            });
+        }
+
+        function updateMessage(msg) {
+            els.statusMessage.textContent = msg;
+        }
+
+        function updateInputsDisabled(disabled) {
+            els.inputDividend.disabled = disabled;
+            els.inputDivisor.disabled = disabled;
+        }
+
+        function updateActionButton() {
+            const btn = els.btnAction;
+            const text = els.btnText;
+            
+            // Reset icons
+            els.iconPlay.classList.add('hidden');
+            els.iconPause.classList.add('hidden');
+            els.iconReset.classList.add('hidden');
+            
+            // Remove specific colors
+            btn.classList.remove('bg-green-500', 'hover:bg-green-600', 'bg-amber-400', 'hover:bg-amber-500', 'bg-blue-500', 'hover:bg-blue-600');
+
+            if (state.isFinished) {
+                // 狀態：已結束，顯示重來
+                els.iconReset.classList.remove('hidden');
+                text.textContent = "重新開始";
+                btn.classList.add('bg-blue-500', 'hover:bg-blue-600');
+            } else if (state.isAnimating) {
+                // 狀態：動畫中，顯示暫停
+                els.iconPause.classList.remove('hidden');
+                text.textContent = "暫停";
+                btn.classList.add('bg-amber-400', 'hover:bg-amber-500');
+            } else {
+                // 狀態：準備開始或暫停中
+                els.iconPlay.classList.remove('hidden');
+                text.textContent = (state.sourceApples < state.dividend) ? "繼續" : "開始分配";
+                btn.classList.add('bg-green-500', 'hover:bg-green-600');
+            }
+        }
+
+        // 啟動
+        init();
+
+    </script>
+</body>
+</html>

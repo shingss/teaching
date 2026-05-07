@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>計算機教學模擬器</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- React & ReactDOM -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  
+  <!-- Babel -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    /* 自訂字體，提升計算機螢幕質感 */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // 自訂 Icon 元件，使用 Lucide-React 的替代方案，因為 CDN 環境沒有現成的 Lucide-React 元件
+    const IconCalculator = ({ size = 24, className = '' }) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <rect width="16" height="20" x="4" y="2" rx="2" />
+        <line x1="8" x2="16" y1="6" y2="6" />
+        <line x1="16" x2="16" y1="14" y2="18" />
+        <path d="M16 10h.01" />
+        <path d="M12 10h.01" />
+        <path d="M8 10h.01" />
+        <path d="M12 14h.01" />
+        <path d="M8 14h.01" />
+        <path d="M12 18h.01" />
+        <path d="M8 18h.01" />
+      </svg>
+    );
+
+    const IconPlay = ({ size = 24, className = '' }) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <polygon points="6 3 20 12 6 21 6 3" />
+      </svg>
+    );
+
+    const IconRotateCcw = ({ size = 24, className = '' }) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+        <path d="M3 3v5h5" />
+      </svg>
+    );
+
+    const IconChevronRight = ({ size = 24, className = '' }) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <path d="m9 18 6-6-6-6" />
+      </svg>
+    );
+
+    const IconHash = ({ size = 24, className = '' }) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <line x1="4" x2="20" y1="9" y2="9" />
+        <line x1="4" x2="20" y1="15" y2="15" />
+        <line x1="10" x2="8" y1="3" y2="21" />
+        <line x1="16" x2="14" y1="3" y2="21" />
+      </svg>
+    );
+
+    const CalculatorTutor = () => {
+      const [expression, setExpression] = useState('10+5=');
+      const [activeKey, setActiveKey] = useState(null);
+      const [activeIndex, setActiveIndex] = useState(-1);
+      const [displayValue, setDisplayValue] = useState('0');
+      const [isPlaying, setIsPlaying] = useState(false);
+      const playTimeoutRef = useRef(null);
+
+      // 定義計算機按鈕樣式與屬性
+      const buttons = [
+        { label: 'AC', bg: 'bg-[#a5a5a5]', text: 'text-black' },
+        { label: '+/-', bg: 'bg-[#a5a5a5]', text: 'text-black' },
+        { label: '%', bg: 'bg-[#a5a5a5]', text: 'text-black' },
+        { label: '÷', bg: 'bg-[#f09a36]', text: 'text-white' },
+        
+        { label: '7', bg: 'bg-[#333333]', text: 'text-white' },
+        { label: '8', bg: 'bg-[#333333]', text: 'text-white' },
+        { label: '9', bg: 'bg-[#333333]', text: 'text-white' },
+        { label: '×', bg: 'bg-[#f09a36]', text: 'text-white' },
+        
+        { label: '4', bg: 'bg-[#333333]', text: 'text-white' },
+        { label: '5', bg: 'bg-[#333333]', text: 'text-white' },
+        { label: '6', bg: 'bg-[#333333]', text: 'text-white' },
+        { label: '-', bg: 'bg-[#f09a36]', text: 'text-white' },
+        
+        { label: '1', bg: 'bg-[#333333]', text: 'text-white' },
+        { label: '2', bg: 'bg-[#333333]', text: 'text-white' },
+        { label: '3', bg: 'bg-[#333333]', text: 'text-white' },
+        { label: '+', bg: 'bg-[#f09a36]', text: 'text-white' },
+        
+        { label: 'icon', bg: 'bg-[#333333]', text: 'text-white' },
+        { label: '0', bg: 'bg-[#333333]', text: 'text-white' },
+        { label: '.', bg: 'bg-[#333333]', text: 'text-white' },
+        { label: '=', bg: 'bg-[#f09a36]', text: 'text-white' },
+      ];
+
+      // 字元對應
+      const mapCharToButton = (char) => {
+        if (char === '*' || char.toLowerCase() === 'x') return '×';
+        if (char === '/') return '÷';
+        if (char.toLowerCase() === 'c') return 'AC';
+        return char;
+      };
+
+      // 取得當前輸入對應的步驟列表，並確保第一個是 AC
+      const getSteps = () => {
+        if (!expression) return [];
+        
+        let parsedSteps = expression.split('').map(mapCharToButton).filter(char => 
+          buttons.some(b => b.label === char)
+        );
+        
+        // 確保第一個步驟是 AC
+        if (parsedSteps.length > 0 && parsedSteps[0] !== 'AC') {
+            parsedSteps = ['AC', ...parsedSteps];
+        } else if (parsedSteps.length === 0 && expression) {
+            // 如果輸入了不支援的字元，仍顯示 AC 為初始狀態
+             parsedSteps = ['AC'];
+        }
+
+        return parsedSteps;
+      };
+
+      const steps = getSteps();
+
+      // 播放動畫
+      const playSequence = async () => {
+        if (steps.length === 0 || isPlaying) return;
+        
+        setIsPlaying(true);
+        setDisplayValue(''); // 開始前清空顯示，讓 AC 步驟執行時有重置感
+        
+        const executeStep = async (index) => {
+          if (index >= steps.length) {
+            setIsPlaying(false);
+            setActiveKey(null);
+            setActiveIndex(-1);
+            return;
+          }
+
+          const char = steps[index];
+          setActiveKey(char);
+          setActiveIndex(index);
+          
+          // 更新螢幕顯示
+          if (char === 'AC') {
+             setDisplayValue('0');
+          } else if (['+', '-', '×', '÷', '='].includes(char)) {
+             // 遇到運算子時可以選擇不更新顯示，或有其他處理。這裡維持原顯示。
+          } else {
+             setDisplayValue(prev => (prev === '0' || prev === '' ? char : prev + char));
+          }
+
+          await new Promise(r => setTimeout(r, 700)); // 按下時間
+          setActiveKey(null);
+          await new Promise(r => setTimeout(r, 300)); // 間隔時間
+
+          executeStep(index + 1);
+        };
+
+        executeStep(0);
+      };
+
+      const handleReset = () => {
+        setIsPlaying(false);
+        setActiveKey(null);
+        setActiveIndex(-1);
+        setDisplayValue('0');
+        let id = window.setTimeout(() => {}, 0);
+        while (id--) window.clearTimeout(id);
+      };
+
+      return (
+        <div className="min-h-screen bg-slate-50 flex flex-col items-center p-4 md:p-8 font-sans">
+          
+          {/* 控制面板 */}
+          <div className="max-w-4xl w-full bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden mb-8">
+            <div className="p-6 bg-gradient-to-r from-blue-600 to-indigo-700 text-white">
+              <h1 className="text-2xl font-bold flex items-center gap-3">
+                <IconCalculator size={32} />
+                計算機步驟工作紙生成器
+              </h1>
+              <p className="opacity-90 mt-1">輸入算式，系統將自動生成按鍵序列與示範動畫（強制第一步為 AC）。</p>
+            </div>
+
+            <div className="p-6">
+              <div className="flex flex-col md:flex-row gap-4 items-end">
+                <div className="flex-1 w-full">
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">請輸入算式 (例如: 25+13=)：</label>
+                  <input
+                    type="text"
+                    value={expression}
+                    onChange={(e) => setExpression(e.target.value)}
+                    disabled={isPlaying}
+                    className="w-full text-2xl p-4 bg-slate-50 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:ring-0 transition-all outline-none"
+                  />
+                </div>
+                <div className="flex gap-2 w-full md:w-auto">
+                  <button
+                    onClick={playSequence}
+                    disabled={isPlaying || !steps.length}
+                    className="flex-1 md:flex-none flex items-center justify-center gap-2 py-4 px-8 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white rounded-xl font-bold transition-all shadow-lg shadow-blue-200"
+                  >
+                    {isPlaying ? <span className="animate-pulse">示範中...</span> : <><IconPlay size={20} />開始演示</>}
+                  </button>
+                  <button
+                    onClick={handleReset}
+                    className="flex items-center justify-center p-4 bg-white border-2 border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl transition-all"
+                  >
+                    <IconRotateCcw size={24} />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* 工作紙提示區 (步驟顯示) */}
+            <div className="p-6 border-t border-slate-100 bg-slate-50/50">
+              <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <IconHash size={16} /> 工作紙按鍵提示序列
+              </h2>
+              <div className="flex flex-wrap gap-4">
+                {steps.length > 0 ? (
+                  steps.map((char, idx) => {
+                    const btnStyle = buttons.find(b => b.label === char) || buttons[0];
+                    return (
+                      <div key={idx} className="flex items-center gap-2 group">
+                        <div className="flex flex-col items-center">
+                          <span className="text-[10px] font-bold text-slate-400 mb-1">步驟 {idx + 1}</span>
+                          <div className={`
+                            w-14 h-14 rounded-xl flex items-center justify-center text-xl font-bold shadow-md transition-all
+                            ${btnStyle.bg} ${btnStyle.text}
+                            ${activeIndex === idx ? 'ring-4 ring-blue-400 scale-110 shadow-blue-200' : 'opacity-80'}
+                          `}>
+                            {char}
+                          </div>
+                        </div>
+                        {idx < steps.length - 1 && (
+                          <IconChevronRight className="text-slate-300 mt-5" size={20} />
+                        )}
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="text-slate-400 italic">請在上方輸入算式以產生步驟...</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* 互動計算機實體 */}
+          <div className="relative">
+            <div className="bg-[#1c1c1c] rounded-[3.5rem] p-8 w-[340px] shadow-2xl border-[8px] border-[#313131]">
+              {/* 螢幕 */}
+              <div className="h-32 flex items-end justify-end pb-4 px-2 mb-4">
+                <div className="text-white text-7xl font-light tracking-tighter truncate w-full text-right">
+                  {displayValue || '0'}
+                </div>
+              </div>
+
+              {/* 按鈕網格 */}
+              <div className="grid grid-cols-4 gap-3">
+                {buttons.map((btn, index) => {
+                  const isActive = activeKey === btn.label;
+                  return (
+                    <div 
+                      key={index}
+                      className={`
+                        relative aspect-square rounded-full flex items-center justify-center text-3xl font-medium
+                        transition-all duration-150
+                        ${btn.bg} ${btn.text}
+                        ${isActive ? 'scale-90 brightness-150 ring-4 ring-white/50 z-10' : 'brightness-100'}
+                      `}
+                    >
+                      {btn.label === 'icon' ? <IconCalculator size={32} /> : btn.label}
+                      {isActive && (
+                        <div className="absolute inset-0 rounded-full animate-ping bg-white opacity-30"></div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            
+            {/* 教學氣泡提示 */}
+            {isPlaying && activeKey && (
+              <div className="absolute -right-40 top-1/2 bg-blue-600 text-white p-4 rounded-2xl shadow-xl animate-bounce hidden lg:block">
+                <p className="font-bold">現在請按下：{activeKey}</p>
+                <div className="absolute left-0 top-1/2 -translate-x-full -translate-y-1/2 w-0 h-0 border-t-[10px] border-t-transparent border-b-[10px] border-b-transparent border-r-[15px] border-r-blue-600"></div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<CalculatorTutor />);
+  </script>
+</body>
+</html>

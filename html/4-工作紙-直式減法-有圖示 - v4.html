@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Math Master - 數學直式與積木教學系統</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Noto+Sans+TC:wght@500;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root { 
+            --ones: #facc15; 
+            --tens: #22c55e; 
+            --huns: #3b82f6; 
+            --s: 1; /* 積木縮放比例變數 */
+        }
+        body { background: #f8fafc; font-family: 'Noto Sans TC', sans-serif; min-height: 100vh; padding: 15px; display: flex; flex-direction: column; align-items: center; }
+        
+        /* 數字字體：圓潤正體 (1為直線，4為開口，完美符合附件) */
+        .math-font { font-family: 'Poppins', 'Century Gothic', sans-serif; font-style: normal; font-weight: 500; }
+        
+        /* 淺灰提示與隱藏樣式 */
+        .text-lightgray { color: #cbd5e0 !important; }
+        .text-hidden { color: transparent !important; user-select: none; }
+
+        /* 欄位底色提示 */
+        .highlight-o { background-color: rgba(250, 204, 21, 0.15) !important; border-radius: 8px; }
+        .highlight-t { background-color: rgba(34, 197, 94, 0.15) !important; border-radius: 8px; }
+
+        /* 直式表格對齊與樣式 */
+        .vertical-math-box { background: white; border: 2px solid #e2e8f0; padding: 15px 30px 25px 30px; border-radius: 1.5rem; position: relative; display: inline-block; }
+        .v-table { border-collapse: separate; border-spacing: 0; font-size: 4rem; text-align: center; margin: 0 auto; }
+        .v-table th { font-size: 0.9rem; color: #64748b; font-weight: 900; padding-bottom: 2px; }
+        .v-table td { width: 75px; height: 75px; position: relative; transition: background-color 0.3s; }
+        .op-col { width: 40px !important; text-align: right; padding-right: 10px; font-size: 3.5rem; color: #ef4444; font-weight: 600;}
+        .v-line td { border-bottom: 4px solid #334155; }
+        .answer-input { width: 65px; height: 75px; border-bottom: 3px dashed #cbd5e0; text-align: center; color: #2563eb; outline: none; background: transparent; font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 3.5rem; margin-top: 5px;}
+        
+        /* ⭐ 退位提示 (Borrow Hint) 樣式 ⭐ */
+        .hint-row td { height: 35px; vertical-align: bottom; padding-bottom: 2px; }
+        .hint-num { 
+            font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 2.2rem; 
+            opacity: 0; transform: translateY(8px); transition: all 0.4s ease-out; 
+        }
+        .hint-num.show-hint { opacity: 1; transform: translateY(0); }
+        .tracing-hint { color: #cbd5e0 !important; -webkit-text-stroke: 0 !important; text-shadow: none !important; }
+        
+        /* 劃掉數字的橘色斜線 */
+        .crossed-cell { position: relative; }
+        .crossed-cell::before {
+            content: ''; position: absolute; width: 110%; height: 4px; background-color: #ea580c; 
+            top: 45%; left: -5%; transform: rotate(-35deg) scaleX(0); transform-origin: center; 
+            z-index: 15; border-radius: 2px; transition: transform 0.4s ease-out; pointer-events: none;
+        }
+        .crossed-cell.show-cross::before { transform: rotate(-35deg) scaleX(1); }
+
+        /* 虛線提示模式的斜線 (淺灰色虛線) */
+        .crossed-cell.tracing-cross::before {
+            background-color: transparent !important;
+            border-top: 4px dashed #cbd5e0 !important;
+            height: 0 !important;
+        }
+
+        /* 繪圖畫布 */
+        #sketch-canvas { position: absolute; top: 0; left: 0; z-index: 10; cursor: crosshair; touch-action: none; }
+
+        /* 積木樣式 (加入CSS縮放變數支援) */
+        .vis-area { overflow: visible !important; }
+        #vis-h, #vis-t { gap: calc(8px * var(--s)); }
+        #vis-o { gap: calc(8px * var(--s)); }
+        
+        .block-hun { width: calc(65px * var(--s)); height: calc(65px * var(--s)); background: var(--huns); border: 2px solid #1e3a8a; border-radius: 4px; display: grid; grid-template: repeat(10, 1fr) / repeat(10, 1fr); position: relative; transition: all 0.5s;}
+        .block-ten { width: calc(16px * var(--s)); height: calc(65px * var(--s)); background: var(--tens); border: 1.5px solid #166534; border-radius: 3px; display: flex; flex-direction: column; position: relative; transition: all 0.5s;}
+        .block-ten-seg { flex: 1; border-bottom: 0.5px solid #166534; }
+        .block-ten-seg:last-child { border: none; }
+        .block-one { width: calc(15px * var(--s)); height: calc(15px * var(--s)); background: var(--ones); border: 1.5px solid #a16207; border-radius: 3px; position: relative; transition: all 0.3s;}
+        
+        /* 積木數字標籤 */
+        .show-nums .block-hun::before { content: '100'; position: absolute; inset: 0; display: flex; justify-content: center; align-items: center; color: rgba(255,255,255,0.95); font-weight: 900; font-size: calc(22px * var(--s)); z-index: 2; text-shadow: 1px 1px 3px rgba(0,0,0,0.5); pointer-events: none;}
+        .show-nums .block-ten::before { content: '10'; position: absolute; inset: 0; display: flex; justify-content: center; align-items: center; color: rgba(255,255,255,0.95); font-weight: 900; font-size: calc(10px * var(--s)); z-index: 2; text-shadow: 1px 1px 3px rgba(0,0,0,0.5); pointer-events: none;}
+        .show-nums .block-one::before { content: '1'; position: absolute; inset: 0; display: flex; justify-content: center; align-items: center; color: #854d0e; font-weight: 900; font-size: calc(10px * var(--s)); z-index: 2; pointer-events: none;}
+        .show-nums .block-one.borrowed-t::before { color: rgba(255,255,255,0.95); text-shadow: 1px 1px 3px rgba(0,0,0,0.5); }
+
+        /* 借位顏色辨識 */
+        .borrowed-h { background: var(--huns) !important; border-color: #1e3a8a !important; }
+        .borrowed-t { background: var(--tens) !important; border-color: #166534 !important; }
+        
+        /* 移除動畫 (正中間紅色大 X) */
+        .removed { opacity: 0.3 !important; filter: grayscale(0.5); }
+        .removed::after { 
+            content: '✕'; position: absolute; inset: 0; color: #ef4444; font-weight: 900; 
+            display: flex; justify-content: center; align-items: center; z-index: 20; text-shadow: 0 0 4px white, 0 0 8px white;
+        }
+        .block-one.removed::after { font-size: calc(20px * var(--s)); }
+        .block-ten.removed::after { font-size: calc(45px * var(--s)); }
+        .block-hun.removed::after { font-size: calc(55px * var(--s)); }
+
+        /* 動態紅框與箭頭 */
+        .block-ringed { border: 3px solid #ef4444 !important; box-shadow: 0 0 20px #ef4444 !important; z-index: 50; animation: pulse-ring 1s infinite; }
+        @keyframes pulse-ring { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+        .borrow-arrow { font-size: 3.5rem; color: #ef4444; font-weight: 900; z-index: 60; pointer-events: none; animation: arrow-bounce 0.5s alternate infinite ease-in-out; text-shadow: 0 0 8px white, 2px 2px 4px rgba(0,0,0,0.3); }
+        @keyframes arrow-bounce { from { transform: translateX(0); } to { transform: translateX(20px); } }
+
+        /* 隱藏原生數字箭頭 */
+        input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    </style>
+</head>
+<body class="text-slate-800 show-nums">
+
+<div class="max-w-6xl w-full space-y-4">
+    
+    <!-- 頂部控制面板 -->
+    <div class="bg-white p-5 rounded-3xl shadow-xl border border-slate-200">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-end">
+            
+            <!-- 1. 模式切換與位數 -->
+            <div class="lg:col-span-3 space-y-3">
+                <div class="flex gap-2 bg-slate-100 p-1 rounded-xl">
+                    <button onclick="setDigits(2)" id="btn-d2" class="flex-1 py-1.5 rounded-lg font-bold bg-white shadow text-blue-600 transition" data-zh="2 位數" data-en="2 Digits">2 位數</button>
+                    <button onclick="setDigits(3)" id="btn-d3" class="flex-1 py-1.5 rounded-lg font-bold text-slate-500 transition" data-zh="3 位數" data-en="3 Digits">3 位數</button>
+                </div>
+                <div class="flex gap-2 bg-slate-100 p-1 rounded-xl">
+                    <button onclick="setMode('random')" id="btn-random" class="flex-1 py-1.5 rounded-lg font-bold bg-white shadow text-blue-600 transition" data-zh="🎲 隨機" data-en="🎲 Random">🎲 隨機</button>
+                    <button onclick="setMode('manual')" id="btn-manual" class="flex-1 py-1.5 rounded-lg font-bold text-slate-500 transition" data-zh="✍️ 自訂" data-en="✍️ Manual">✍️ 自訂</button>
+                </div>
+            </div>
+
+            <!-- 2. 參數設定 -->
+            <div class="lg:col-span-4 space-y-3">
+                <div id="panel-random" class="flex flex-col gap-2">
+                    <div class="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border">
+                        <span class="text-sm font-bold text-slate-600" data-zh="範圍:" data-en="Range:">範圍:</span>
+                        <input type="number" id="min-val" class="w-16 p-1 border rounded text-center font-bold text-blue-600" value="20">
+                        <span class="text-slate-400">~</span>
+                        <input type="number" id="max-val" class="w-16 p-1 border rounded text-center font-bold text-blue-600" value="99">
+                    </div>
+                    <select id="borrow-mode" class="p-2 border rounded-xl font-bold bg-slate-50 text-slate-700 outline-none">
+                        <option value="any" data-zh="🎲 隨機混合 (退位/不退位)" data-en="🎲 Random (Any)">🎲 隨機混合 (退位/不退位)</option>
+                        <option value="must" data-zh="⚠ 強制出「退位題」" data-en="⚠ Must Borrow">⚠ 強制出「退位題」</option>
+                        <option value="none" data-zh="✅ 強制出「不需退位題」" data-en="✅ No Borrow">✅ 強制出「不需退位題」</option>
+                    </select>
+                </div>
+                
+                <div id="panel-manual" class="hidden flex flex-col gap-2 h-full justify-end">
+                    <div class="flex gap-2">
+                        <input type="number" id="man-n1" class="w-1/2 p-3 border-2 border-blue-200 rounded-xl text-center font-black text-xl text-blue-600" placeholder="被減數 (N1)">
+                        <input type="number" id="man-n2" class="w-1/2 p-3 border-2 border-red-200 rounded-xl text-center font-black text-xl text-red-500" placeholder="減數 (N2)">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. 外觀與控制 -->
+            <div class="lg:col-span-3 flex flex-col justify-between space-y-2 bg-slate-50 p-3 rounded-2xl border">
+                <div class="flex flex-col gap-1 text-xs font-bold text-slate-600">
+                    <div class="flex items-center gap-1">
+                        <span class="whitespace-nowrap" data-zh="主數字:" data-en="Numbers:">主數字:</span>
+                        <select id="text-display" onchange="updateUI()" class="flex-1 p-1 border rounded bg-white text-slate-700 outline-none cursor-pointer">
+                            <option value="normal" data-zh="實心顯示" data-en="Solid">實心顯示</option>
+                            <option value="lightgray" data-zh="虛線描寫" data-en="Tracing">虛線描寫</option>
+                            <option value="hidden" data-zh="隱藏數字" data-en="Hidden">隱藏數字</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <span class="whitespace-nowrap" data-zh="退位提示:" data-en="Hints:">退位提示:</span>
+                        <select id="hint-display" onchange="updateUI()" class="flex-1 p-1 border rounded bg-white text-slate-700 outline-none cursor-pointer">
+                            <option value="none" data-zh="👁️‍🗨️ 不顯示" data-en="👁️‍🗨️ None">👁️‍🗨️ 不顯示</option>
+                            <option value="solid" selected data-zh="📝 實心數字" data-en="📝 Solid">📝 實心數字</option>
+                            <option value="tracing" data-zh="🖍️ 虛線描寫" data-en="🖍️ Tracing">🖍️ 虛線描寫</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="flex items-center justify-between gap-1 border-t pt-2 border-slate-200 text-xs font-bold text-slate-600">
+                    <label class="flex items-center gap-1 cursor-pointer"><input type="checkbox" id="check-bg-o" onchange="updateUI()" class="w-3 h-3" checked> <span data-zh="個位色" data-en="Ones BG">個位色</span></label>
+                    <label class="flex items-center gap-1 cursor-pointer"><input type="checkbox" id="check-bg-t" onchange="updateUI()" class="w-3 h-3"> <span data-zh="十位色" data-en="Tens BG">十位色</span></label>
+                    <label class="flex items-center gap-1 cursor-pointer"><input type="checkbox" id="check-nums" onchange="updateUI()" class="w-3 h-3" checked> <span data-zh="積木數字" data-en="Blocks #">積木數字</span></label>
+                </div>
+                
+                <div class="flex items-center gap-2 border-t pt-1 border-slate-200 text-xs font-bold text-slate-600">
+                    <span data-zh="積木大小" data-en="Block Size">積木大小</span>
+                    <input type="range" id="scale-slider" min="0.6" max="1.5" step="0.1" value="1" class="w-full" oninput="updateScale()">
+                </div>
+            </div>
+
+            <!-- 4. 執行與語言 -->
+            <div class="lg:col-span-2 flex flex-col gap-2 h-full justify-between">
+                <div class="flex justify-end gap-1">
+                    <button onclick="setLang('zh')" id="lang-zh" class="flex-1 px-2 py-1 text-xs font-bold bg-blue-500 text-white rounded shadow">中</button>
+                    <button onclick="setLang('en')" id="lang-en" class="flex-1 px-2 py-1 text-xs font-bold bg-white text-slate-500 border rounded">EN</button>
+                </div>
+                <button onclick="handleStart()" class="bg-blue-600 text-white py-4 rounded-xl font-black text-lg hover:bg-blue-700 active:scale-95 shadow-lg transition-all" data-zh="開始出題" data-en="START">開始出題</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主演示區 -->
+    <div class="flex flex-col lg:flex-row gap-6 items-stretch">
+        
+        <!-- 左側：直式練習板 -->
+        <div class="bg-white p-8 rounded-3xl shadow-lg border border-slate-200 w-full lg:w-[420px] text-center flex-shrink-0 flex flex-col">
+            <div id="problem-display" class="text-4xl math-font font-black text-slate-800 mb-6 tracking-wider"></div>
+            
+            <div class="flex-grow flex items-center justify-center">
+                <div id="math-container" class="vertical-math-box">
+                    <canvas id="sketch-canvas"></canvas>
+                    <table class="v-table math-font">
+                        <thead>
+                            <tr>
+                                <th class="op-col"></th>
+                                <th class="col-h text-blue-600" data-zh="百" data-en="Hundreds">百</th>
+                                <th class="col-t text-green-600" data-zh="十" data-en="Tens">十</th>
+                                <th class="col-o text-yellow-600" data-zh="個" data-en="Ones">個</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- 退位提示列 (Hint Row) -->
+                            <tr id="hint-row" class="hint-row">
+                                <td></td>
+                                <td class="col-h"><div id="hint-h" class="hint-num text-blue-600"></div></td>
+                                <td class="col-t"><div id="hint-t" class="hint-num text-green-600"></div></td>
+                                <td class="col-o"><div id="hint-o" class="hint-num text-orange-500"></div></td>
+                            </tr>
+                            <!-- 題目列 -->
+                            <tr>
+                                <td class="op-col"></td>
+                                <td class="col-h crossed-cell" id="v1-h"></td>
+                                <td class="col-t crossed-cell" id="v1-t"></td>
+                                <td class="col-o crossed-cell" id="v1-o"></td>
+                            </tr>
+                            <tr class="v-line">
+                                <td class="op-col">－</td>
+                                <td class="col-h" id="v2-h"></td>
+                                <td class="col-t" id="v2-t"></td>
+                                <td class="col-o" id="v2-o"></td>
+                            </tr>
+                            <!-- 答案列 -->
+                            <tr>
+                                <td class="op-col"></td>
+                                <td class="col-h"><input type="number" class="answer-input" id="ans-h"></td>
+                                <td class="col-t"><input type="number" class="answer-input" id="ans-t"></td>
+                                <td class="col-o"><input type="number" class="answer-input" id="ans-o"></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="mt-8 flex justify-between items-center gap-4">
+                <button onclick="clearCanvas()" class="px-4 py-2 text-slate-400 font-bold hover:bg-slate-100 rounded-lg transition" data-zh="🧹 清除筆跡" data-en="🧹 Clear">🧹 清除筆跡</button>
+                <button onclick="checkAnswer()" class="flex-grow bg-emerald-500 text-white py-3 rounded-xl font-black text-xl hover:bg-emerald-600 active:scale-95 shadow-md transition" data-zh="檢查答案" data-en="VERIFY">檢查答案</button>
+            </div>
+            <div id="feedback" class="mt-4 font-black text-2xl h-8"></div>
+        </div>
+
+        <!-- 右側：積木動畫面板 -->
+        <div class="bg-white p-6 rounded-3xl shadow-lg border border-slate-200 flex-grow flex flex-col vis-area">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="font-black text-xl text-slate-700" data-zh="🧩 積木退位演示" data-en="🧩 Visual Aid">🧩 積木退位演示</h3>
+                <div class="flex gap-2">
+                    <button onclick="replayAnimation()" class="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg font-bold hover:bg-slate-200 transition" data-zh="🔄 重播" data-en="🔄 Replay">🔄 重播</button>
+                    <button onclick="togglePause()" id="pause-btn" class="px-4 py-2 bg-amber-100 text-amber-700 rounded-lg font-bold hover:bg-amber-200 transition w-24">⏸ 暫停</button>
+                </div>
+            </div>
+            
+            <div class="flex gap-4 flex-grow vis-area">
+                <div class="col-h flex-1 bg-blue-50/50 rounded-2xl p-4 border border-blue-100 flex flex-col items-center vis-area">
+                    <span class="text-blue-800 font-black mb-4" data-zh="百位區" data-en="Hundreds">百位區</span>
+                    <div id="vis-h" class="flex flex-col items-center relative w-full h-full vis-area content-start"></div>
+                </div>
+                <div class="flex-1 bg-green-50/50 rounded-2xl p-4 border border-green-100 flex flex-col items-center vis-area">
+                    <span class="text-green-800 font-black mb-4" data-zh="十位區" data-en="Tens">十位區</span>
+                    <div id="vis-t" class="flex flex-wrap justify-center relative w-full h-full vis-area content-start"></div>
+                </div>
+                <div class="flex-1 bg-yellow-50/50 rounded-2xl p-4 border border-yellow-100 flex flex-col items-center vis-area">
+                    <span class="text-yellow-800 font-black mb-4" data-zh="個位區" data-en="Ones">個位區</span>
+                    <div id="vis-o" class="grid grid-cols-4 gap-2 justify-items-center w-full h-full vis-area content-start"></div>
+                </div>
+            </div>
+            
+            <div id="step-msg" class="mt-6 p-4 bg-slate-800 text-white rounded-xl font-bold text-lg text-center shadow-inner min-h-[60px] flex items-center justify-center tracking-wide" data-zh="請點擊「開始出題」" data-en="Click START to begin">
+                請點擊「開始出題」
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    let n1 = 0, n2 = 0, isPaused = false, animationTimeouts = [], currentStep = 0;
+    let digitMode = 2, currentMode = 'random', currentLang = 'zh';
+
+    const langLib = {
+        zh: {
+            init: (h, t, o) => `原本有 ${digitMode===3?h+'個百，':''}${t}個十，${o}個一。`,
+            check_bt: () => `十位不夠減，準備向百位借 1 個大方塊！`,
+            ring_h: () => `框住百位方塊 ➔ 準備移到十位...`,
+            trans_h: () => `換成 10 根「藍色」十位棒！`,
+            check_bo: (o1, o2) => `個位只有 ${o1} 不夠減 ${o2}，向十位借！`,
+            ring_t: () => `框住十位棒 ➔ 準備移到個位...`,
+            trans_t: () => `換成 10 個「綠色」小積木！`,
+            sub_o: (c, s) => `個位相減：${c} － ${s}`,
+            sub_t: (c, s) => `十位相減：${c} － ${s}`,
+            sub_h: (c, s) => `百位相減：${c} － ${s}`,
+            done: `✅ 演示完成！請填入正確答案。`,
+            correct: "🎉 答對了！非常棒！",
+            wrong: "❌ 不太對喔，再檢查一下。",
+            resume: "▶ 繼續", pause: "⏸ 暫停"
+        },
+        en: {
+            init: (h, t, o) => `Start with ${digitMode===3?h+' Hundreds, ':''}${t} Tens, ${o} Ones.`,
+            check_bt: () => `Not enough Tens, borrow 1 Hundred!`,
+            ring_h: () => `Targeting 1 Hundred block ➔ Move to Tens...`,
+            trans_h: () => `Swap for 10 Blue Ten-Rods!`,
+            check_bo: (o1, o2) => `Ones: ${o1} < ${o2}, borrow 1 Ten!`,
+            ring_t: () => `Targeting 1 Ten-Rod ➔ Move to Ones...`,
+            trans_t: () => `Swap for 10 Green One-Blocks!`,
+            sub_o: (c, s) => `Subtract Ones: ${c} - ${s}`,
+            sub_t: (c, s) => `Subtract Tens: ${c} - ${s}`,
+            sub_h: (c, s) => `Subtract Hundreds: ${c} - ${s}`,
+            done: `✅ Demo finished! Enter your answer.`,
+            correct: "🎉 Correct! Awesome!",
+            wrong: "❌ Not quite, try again.",
+            resume: "▶ Resume", pause: "⏸ Pause"
+        }
+    };
+
+    function updateScale() {
+        const scale = document.getElementById('scale-slider').value;
+        document.documentElement.style.setProperty('--s', scale);
+    }
+
+    function setLang(l) {
+        currentLang = l;
+        document.querySelectorAll('[data-zh]').forEach(el => {
+            if (el.tagName === 'OPTION') el.innerText = el.getAttribute(`data-${l}`);
+            else el.innerText = el.getAttribute(`data-${l}`);
+        });
+        document.getElementById('lang-zh').className = l === 'zh' ? 'flex-1 px-2 py-1 text-xs font-bold bg-blue-500 text-white rounded shadow' : 'flex-1 px-2 py-1 text-xs font-bold bg-white text-slate-500 border rounded';
+        document.getElementById('lang-en').className = l === 'en' ? 'flex-1 px-2 py-1 text-xs font-bold bg-blue-500 text-white rounded shadow' : 'flex-1 px-2 py-1 text-xs font-bold bg-white text-slate-500 border rounded';
+        if(n1) document.getElementById('problem-display').innerText = `${n1} － ${n2} = ?`;
+        document.getElementById('pause-btn').innerText = isPaused ? langLib[currentLang].resume : langLib[currentLang].pause;
+    }
+
+    function setDigits(d) {
+        digitMode = d;
+        document.getElementById('btn-d2').className = d === 2 ? 'flex-1 py-1.5 rounded-lg font-bold bg-white shadow text-blue-600 transition' : 'flex-1 py-1.5 rounded-lg font-bold text-slate-500 transition hover:bg-slate-200';
+        document.getElementById('btn-d3').className = d === 3 ? 'flex-1 py-1.5 rounded-lg font-bold bg-white shadow text-blue-600 transition' : 'flex-1 py-1.5 rounded-lg font-bold text-slate-500 transition hover:bg-slate-200';
+        
+        document.querySelectorAll('.col-h').forEach(el => el.style.display = d === 3 ? 'table-cell' : 'none');
+        document.querySelectorAll('div.col-h').forEach(el => el.style.display = d === 3 ? 'flex' : 'none');
+        
+        if (d === 2) { document.getElementById('min-val').value = 20; document.getElementById('max-val').value = 99; }
+        else { document.getElementById('min-val').value = 100; document.getElementById('max-val').value = 999; }
+        
+        setTimeout(resizeCanvas, 50);
+    }
+
+    function setMode(m) {
+        currentMode = m;
+        document.getElementById('btn-random').className = m === 'random' ? 'flex-1 py-1.5 rounded-lg font-bold bg-white shadow text-blue-600 transition' : 'flex-1 py-1.5 rounded-lg font-bold text-slate-500 transition hover:bg-slate-200';
+        document.getElementById('btn-manual').className = m === 'manual' ? 'flex-1 py-1.5 rounded-lg font-bold bg-white shadow text-blue-600 transition' : 'flex-1 py-1.5 rounded-lg font-bold text-slate-500 transition hover:bg-slate-200';
+        document.getElementById('panel-random').style.display = m === 'random' ? 'flex' : 'none';
+        document.getElementById('panel-manual').style.display = m === 'manual' ? 'flex' : 'none';
+    }
+
+    function handleStart() {
+        if (currentMode === 'random') {
+            const min = parseInt(document.getElementById('min-val').value) || (digitMode===2?20:100);
+            const max = parseInt(document.getElementById('max-val').value) || (digitMode===2?99:999);
+            const bMode = document.getElementById('borrow-mode').value;
+            let t1, t2, bO, bT;
+            
+            let attempts = 0;
+            do {
+                t1 = Math.floor(Math.random() * (max - min + 1)) + min;
+                t2 = Math.floor(Math.random() * (t1 - (digitMode===3?50:5))) + 1;
+                bO = (t1 % 10) < (t2 % 10);
+                bT = digitMode === 3 ? ((Math.floor(t1/10)%10) < (Math.floor(t2/10)%10 + (bO?1:0))) : false;
+                attempts++;
+                if(attempts > 1000) break; 
+            } while ((bMode === 'must' && !bO && !bT) || (bMode === 'none' && (bO || bT)));
+
+            n1 = t1; n2 = t2;
+        } else {
+            n1 = parseInt(document.getElementById('man-n1').value);
+            n2 = parseInt(document.getElementById('man-n2').value);
+            if (!n1 || !n2 || n1 <= n2) return alert(currentLang === 'zh' ? "被減數必須大於減數！" : "N1 must be greater than N2!");
+            if(n1 > 99 && digitMode === 2) setDigits(3);
+        }
+
+        isPaused = false;
+        updateUI();
+        replayAnimation();
+    }
+
+    // 全局變數供動畫期間更新提示字
+    window.animCurH = 0; window.animCurT = 0; window.animCurO = 0;
+
+    function updateUI() {
+        if(!n1) return;
+        document.getElementById('problem-display').innerText = `${n1} － ${n2} = ?`;
+        
+        const textMode = document.getElementById('text-display').value;
+        const hintMode = document.getElementById('hint-display').value;
+        const bgO = document.getElementById('check-bg-o').checked;
+        const bgT = document.getElementById('check-bg-t').checked;
+        const showNums = document.getElementById('check-nums').checked;
+
+        document.body.classList.toggle('show-nums', showNums);
+
+        const s1 = n1.toString().padStart(digitMode, '0'), s2 = n2.toString().padStart(digitMode, '0');
+        const pMap = digitMode === 3 ? ['h', 't', 'o'] : ['t', 'o'];
+        
+        // 1. 重置與設定主數字
+        ['h', 't', 'o'].forEach(p => {
+            const c1 = document.getElementById(`v1-${p}`), c2 = document.getElementById(`v2-${p}`);
+            const hintEl = document.getElementById(`hint-${p}`);
+            
+            // 清理狀態
+            c1.classList.remove('show-cross', 'tracing-cross');
+            hintEl.classList.remove('show-hint', 'tracing-hint');
+            hintEl.innerText = "";
+
+            if (digitMode === 2 && p === 'h') return; 
+
+            const idx = pMap.indexOf(p);
+            let val1 = s1[idx], val2 = s2[idx];
+            if(idx === 0 && val1 === '0') val1 = '';
+            if(idx === 0 && val2 === '0') val2 = '';
+
+            c1.innerText = val1; c2.innerText = val2;
+            c1.className = `col-${p} crossed-cell`; c2.className = `col-${p}`;
+
+            // 字體樣式
+            if (textMode === 'lightgray') { c1.classList.add('text-lightgray', 'tracing'); c2.classList.add('text-lightgray', 'tracing'); } 
+            else if (textMode === 'hidden') { c1.classList.add('text-hidden'); c2.classList.add('text-hidden'); }
+
+            // 底色提示
+            if(p === 'o') document.querySelectorAll('.col-o').forEach(el => { if(el.tagName === 'TD' || el.tagName === 'TH') el.classList.toggle('highlight-o', bgO); });
+            if(p === 't') document.querySelectorAll('.col-t').forEach(el => { if(el.tagName === 'TD' || el.tagName === 'TH') el.classList.toggle('highlight-t', bgT); });
+        });
+
+        // 2. 預先計算並顯示靜態提示 (如果不跑動畫直接看的話)
+        if (hintMode !== 'none') {
+            const h1 = Math.floor(n1/100), t1 = Math.floor(n1/10)%10, o1 = n1%10;
+            const h2 = Math.floor(n2/100), t2 = Math.floor(n2/10)%10, o2 = n2%10;
+            let bO = o1 < o2;
+            let bT = digitMode === 3 && ((bO ? t1-1 : t1) < t2);
+
+            let curH = h1, curT = t1, curO = o1;
+            if (bT) { curH -= 1; curT += 10; }
+            if (bO) { curT -= 1; curO += 10; }
+
+            if (bT) { document.getElementById('hint-h').innerText = curH; document.getElementById('v1-h').classList.add('show-cross'); document.getElementById('hint-h').classList.add('show-hint'); }
+            if (bT || bO) { document.getElementById('hint-t').innerText = curT; document.getElementById('v1-t').classList.add('show-cross'); document.getElementById('hint-t').classList.add('show-hint'); }
+            if (bO) { document.getElementById('hint-o').innerText = curO; document.getElementById('v1-o').classList.add('show-cross'); document.getElementById('hint-o').classList.add('show-hint'); }
+
+            if (hintMode === 'tracing') { 
+                ['h', 't', 'o'].forEach(p => {
+                    document.getElementById(`hint-${p}`).classList.add('tracing-hint');
+                    document.getElementById(`v1-${p}`).classList.add('tracing-cross');
+                }); 
+            }
+        }
+
+        document.getElementById('feedback').innerText = "";
+        ['ans-h', 'ans-t', 'ans-o'].forEach(id => document.getElementById(id).value = "");
+        clearCanvas();
+        setTimeout(resizeCanvas, 50);
+    }
+
+    function togglePause() {
+        isPaused = !isPaused;
+        const btn = document.getElementById('pause-btn');
+        btn.innerText = isPaused ? langLib[currentLang].resume : langLib[currentLang].pause;
+        btn.className = isPaused ? "px-4 py-2 bg-blue-100 text-blue-700 rounded-lg font-bold hover:bg-blue-200 transition w-24" : "px-4 py-2 bg-amber-100 text-amber-700 rounded-lg font-bold hover:bg-amber-200 transition w-24";
+        if (!isPaused) runNextStep();
+    }
+
+    function replayAnimation() {
+        if(!n1) return;
+        animationTimeouts.forEach(clearTimeout);
+        animationTimeouts = []; isPaused = false; currentStep = 0;
+        document.getElementById('pause-btn').innerText = langLib[currentLang].pause;
+        document.getElementById('pause-btn').className = "px-4 py-2 bg-amber-100 text-amber-700 rounded-lg font-bold hover:bg-amber-200 transition w-24";
+        
+        document.getElementById('vis-h').innerHTML = '';
+        document.getElementById('vis-t').innerHTML = '';
+        document.getElementById('vis-o').innerHTML = '';
+        if(flyingBlock) { flyingBlock.remove(); flyingBlock = null; }
+        document.querySelectorAll('.borrow-arrow').forEach(a => a.remove());
+        
+        // 隱藏所有提示與斜線，準備隨動畫顯示
+        ['h', 't', 'o'].forEach(p => {
+            document.getElementById(`v1-${p}`).classList.remove('show-cross', 'tracing-cross');
+            document.getElementById(`hint-${p}`).classList.remove('show-hint', 'tracing-hint');
+        });
+        
+        window.animCurH = Math.floor(n1/100);
+        window.animCurT = Math.floor(n1/10)%10;
+        window.animCurO = n1%10;
+
+        runNextStep();
+    }
+
+    /* ---------------- 動畫核心 ---------------- */
+    let flyingBlock = null;
+
+    function runNextStep() {
+        if (isPaused) return;
+        
+        const h2 = Math.floor(n2/100), t2 = Math.floor(n2/10)%10, o2 = n2%10;
+        const bO = (n1%10) < o2; 
+        const bT = digitMode === 3 ? (((bO ? Math.floor(n1/10)%10 - 1 : Math.floor(n1/10)%10) < t2)) : false; 
+
+        const seq = [
+            { d: 1000, fn: () => initBlocks(window.animCurH, window.animCurT, window.animCurO), msg: () => langLib[currentLang].init(window.animCurH, window.animCurT, window.animCurO) }
+        ];
+
+        // 1. 百借十
+        if (bT) {
+            seq.push({ d: 1500, fn: () => {}, msg: () => langLib[currentLang].check_bt() });
+            seq.push({ d: 2400, fn: () => ringAndArrow('h', 'block-hun'), msg: () => langLib[currentLang].ring_h() });
+            seq.push({ d: 1500, fn: () => transformHtoT(), msg: () => langLib[currentLang].trans_h() });
+        }
+
+        // 2. 十借個
+        if (bO) {
+            seq.push({ d: 1500, fn: () => {}, msg: () => langLib[currentLang].check_bo(window.animCurO, o2) });
+            seq.push({ d: 2400, fn: () => ringAndArrow('t', 'block-ten'), msg: () => langLib[currentLang].ring_t() });
+            seq.push({ d: 1500, fn: () => transformTtoO(), msg: () => langLib[currentLang].trans_t() });
+        }
+
+        // 3. 減法
+        seq.push({ d: 2000, fn: () => doSubtract('o', o2), msg: () => langLib[currentLang].sub_o(window.animCurO, o2) });
+        seq.push({ d: 2000, fn: () => doSubtract('t', t2), msg: () => langLib[currentLang].sub_t(window.animCurT, t2) });
+        if (digitMode === 3) {
+            seq.push({ d: 2000, fn: () => doSubtract('h', h2), msg: () => langLib[currentLang].sub_h(window.animCurH, h2) });
+        }
+
+        seq.push({ d: 0, fn: () => {}, msg: () => langLib[currentLang].done });
+
+        if (currentStep >= seq.length) return;
+        const step = seq[currentStep];
+        document.getElementById('step-msg').innerText = step.msg();
+        step.fn();
+        currentStep++;
+        
+        if (step.d > 0) animationTimeouts.push(setTimeout(runNextStep, step.d));
+    }
+
+    function initBlocks(h, t, o) {
+        const vh = document.getElementById('vis-h'), vt = document.getElementById('vis-t'), vo = document.getElementById('vis-o');
+        if (digitMode === 3) {
+            for(let i=0; i<h; i++){ const b=document.createElement('div'); b.className='block-hun'; vh.appendChild(b); }
+        }
+        for(let i=0; i<t; i++){ 
+            const b=document.createElement('div'); b.className='block-ten'; 
+            for(let j=0; j<10; j++) b.appendChild(document.createElement('div')).className='block-ten-seg';
+            vt.appendChild(b); 
+        }
+        for(let i=0; i<o; i++){ const b=document.createElement('div'); b.className='block-one'; vo.appendChild(b); }
+    }
+
+    function ringAndArrow(fromCol, blockClass) {
+        const container = document.getElementById(`vis-${fromCol}`);
+        const blocks = Array.from(container.querySelectorAll(`.${blockClass}`)).filter(b => b.style.opacity !== '0');
+        const target = blocks[blocks.length - 1]; 
+        if (!target) return;
+
+        target.classList.add('block-ringed');
+        flyingBlock = target; 
+
+        setTimeout(() => {
+            const arrow = document.createElement('div');
+            arrow.className = 'borrow-arrow';
+            arrow.innerText = '➔';
+            document.body.appendChild(arrow);
+            
+            const fromRect = target.getBoundingClientRect();
+            arrow.style.position = 'fixed';
+            arrow.style.left = `${fromRect.right + 10}px`;
+            arrow.style.top = `${fromRect.top + fromRect.height/2 - 28}px`;
+
+            setTimeout(() => {
+                if(arrow) arrow.remove();
+                target.style.transition = 'all 0.5s ease';
+                target.style.opacity = '0';
+                target.style.transform = 'scale(0.8)';
+            }, 800);
+        }, 600);
+    }
+
+    function transformHtoT() {
+        if(flyingBlock) { flyingBlock.remove(); flyingBlock = null; }
+        const vt = document.getElementById('vis-t');
+        for(let i=0; i<10; i++){
+            const b = document.createElement('div'); b.className='block-ten borrowed-h';
+            for(let j=0; j<10; j++) b.appendChild(document.createElement('div')).className='block-ten-seg';
+            vt.prepend(b);
+        }
+        
+        // 更新退位提示 DOM
+        const hintMode = document.getElementById('hint-display').value;
+        if (hintMode !== 'none') {
+            window.animCurH -= 1; window.animCurT += 10;
+            document.getElementById('hint-h').innerText = window.animCurH;
+            document.getElementById('hint-t').innerText = window.animCurT;
+            document.getElementById('v1-h').classList.add('show-cross');
+            document.getElementById('hint-h').classList.add('show-hint');
+            document.getElementById('v1-t').classList.add('show-cross');
+            document.getElementById('hint-t').classList.add('show-hint');
+            
+            if (hintMode === 'tracing') {
+                document.getElementById('hint-h').classList.add('tracing-hint');
+                document.getElementById('hint-t').classList.add('tracing-hint');
+                document.getElementById('v1-h').classList.add('tracing-cross');
+                document.getElementById('v1-t').classList.add('tracing-cross');
+            }
+        }
+    }
+
+    function transformTtoO() {
+        if(flyingBlock) { flyingBlock.remove(); flyingBlock = null; }
+        const vo = document.getElementById('vis-o');
+        for(let i=0; i<10; i++){
+            const b = document.createElement('div'); b.className='block-one borrowed-t';
+            vo.prepend(b);
+        }
+
+        // 更新退位提示 DOM
+        const hintMode = document.getElementById('hint-display').value;
+        if (hintMode !== 'none') {
+            window.animCurT -= 1; window.animCurO += 10;
+            document.getElementById('hint-t').innerText = window.animCurT;
+            document.getElementById('hint-o').innerText = window.animCurO;
+            document.getElementById('v1-t').classList.add('show-cross');
+            document.getElementById('hint-t').classList.add('show-hint');
+            document.getElementById('v1-o').classList.add('show-cross');
+            document.getElementById('hint-o').classList.add('show-hint');
+            
+            if (hintMode === 'tracing') {
+                document.getElementById('hint-t').classList.add('tracing-hint');
+                document.getElementById('hint-o').classList.add('tracing-hint');
+                document.getElementById('v1-t').classList.add('tracing-cross');
+                document.getElementById('v1-o').classList.add('tracing-cross');
+            }
+        }
+    }
+
+    function doSubtract(col, count) {
+        if(count === 0) return;
+        const container = document.getElementById(`vis-${col}`);
+        let selector = col === 'o' ? '.block-one' : (col === 't' ? '.block-ten' : '.block-hun');
+        
+        const blocks = Array.from(container.querySelectorAll(selector)).filter(b => b.style.opacity !== '0' && !b.classList.contains('removed'));
+        
+        blocks.slice(-count).forEach((el, i) => {
+            setTimeout(() => {
+                el.classList.add('removed');
+            }, i * 150);
+        });
+    }
+
+    function checkAnswer() {
+        const h = document.getElementById('ans-h').value || "0";
+        const t = document.getElementById('ans-t').value || "0";
+        const o = document.getElementById('ans-o').value || "0";
+        const ans = parseInt(h + t + o);
+        const fb = document.getElementById('feedback');
+        
+        if (ans === (n1 - n2)) {
+            fb.innerText = langLib[currentLang].correct;
+            fb.style.color = "#10b981";
+        } else {
+            fb.innerText = langLib[currentLang].wrong;
+            fb.style.color = "#ef4444";
+        }
+    }
+
+    // 手寫畫布邏輯
+    const canvas = document.getElementById('sketch-canvas'), ctx = canvas.getContext('2d'), mathBox = document.getElementById('math-container');
+    let drawing = false;
+    function resizeCanvas() { 
+        canvas.width = mathBox.offsetWidth; canvas.height = mathBox.offsetHeight; 
+        ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 3; ctx.lineCap = 'round'; 
+    }
+    function draw(e) {
+        if (!drawing) return;
+        const r = canvas.getBoundingClientRect();
+        const x = (e.clientX || e.touches?.[0].clientX) - r.left;
+        const y = (e.clientY || e.touches?.[0].clientY) - r.top;
+        ctx.lineTo(x, y); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x, y);
+    }
+    canvas.addEventListener('mousedown', () => drawing = true);
+    canvas.addEventListener('mousemove', draw);
+    window.addEventListener('mouseup', () => { drawing = false; ctx.beginPath(); });
+    canvas.addEventListener('touchstart', (e) => { e.preventDefault(); drawing = true; });
+    canvas.addEventListener('touchmove', (e) => { e.preventDefault(); draw(e); });
+    function clearCanvas() { ctx.clearRect(0, 0, canvas.width, canvas.height); }
+
+    window.onload = () => { setDigits(2); handleStart(); };
+    window.onresize = resizeCanvas;
+</script>
+</body>
+</html>

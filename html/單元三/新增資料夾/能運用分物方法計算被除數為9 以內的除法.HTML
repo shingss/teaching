@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>開心分餅仔：認識平均分 (除法)</title>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Canvas Confetti for Rewards -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+HK:wght@400;700;900&display=swap');
+
+        body {
+            font-family: 'Noto Sans HK', sans-serif;
+            background-color: #f0f9ff; /* 淺藍色背景 */
+            overflow: hidden; /* 防止手機上下滑動 */
+            touch-action: none; /* 禁用預設手勢，利於拖放 */
+            user-select: none; /* 禁止文字選取 */
+        }
+
+        /* 3D 按鈕樣式 */
+        .btn-3d {
+            transition: all 0.1s;
+            box-shadow: 0 8px 0 0 rgba(0,0,0,0.2);
+        }
+        .btn-3d:active {
+            transform: translateY(8px);
+            box-shadow: 0 0 0 0 rgba(0,0,0,0.2);
+        }
+        .btn-3d:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: translateY(8px);
+            box-shadow: 0 0 0 0 rgba(0,0,0,0.2);
+        }
+
+        /* 碟子陰影 */
+        .plate-shadow {
+            box-shadow: inset 0 8px 16px rgba(0,0,0,0.1), 0 4px 6px rgba(0,0,0,0.05);
+        }
+
+        /* 餅乾懸浮動畫 */
+        @keyframes gentleBounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+        .animate-gentle-bounce {
+            animation: gentleBounce 2s infinite ease-in-out;
+        }
+
+        /* 語音播放時的發光動畫 */
+        @keyframes pulseGlow {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5); }
+            50% { box-shadow: 0 0 0 20px rgba(59, 130, 246, 0); }
+        }
+        .speaking-glow {
+            animation: pulseGlow 2s infinite;
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body class="w-screen h-screen flex items-center justify-center bg-gradient-to-br from-blue-100 to-indigo-200 p-2 md:p-8">
+    <div id="root" class="w-full h-full max-w-[1200px] max-h-[800px] relative"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useCallback } = React;
+
+        // --- 核心組件：SVG 圖示 ---
+        const CookieSVG = ({ className }) => (
+            <svg viewBox="0 0 100 100" className={`drop-shadow-lg ${className}`}>
+                <circle cx="50" cy="50" r="45" fill="#DEB887" stroke="#8B4513" strokeWidth="3"/>
+                <circle cx="30" cy="30" r="7" fill="#654321"/>
+                <circle cx="70" cy="40" r="8" fill="#654321"/>
+                <circle cx="40" cy="70" r="9" fill="#654321"/>
+                <circle cx="65" cy="75" r="6" fill="#654321"/>
+                <circle cx="50" cy="50" r="7" fill="#654321"/>
+                <circle cx="20" cy="55" r="5" fill="#654321"/>
+                <circle cx="80" cy="60" r="6" fill="#654321"/>
+            </svg>
+        );
+
+        const PlateSVG = ({ className }) => (
+            <svg viewBox="0 0 200 200" className={className}>
+                <circle cx="100" cy="100" r="95" fill="#F8FAFC" stroke="#CBD5E1" strokeWidth="5"/>
+                <circle cx="100" cy="100" r="70" fill="#F1F5F9" stroke="#E2E8F0" strokeWidth="2"/>
+            </svg>
+        );
+
+        // --- 全局語音與 UI 鎖定系統 ---
+        const SpeechLockOverlay = ({ isSpeaking }) => {
+            if (!isSpeaking) return null;
+            return (
+                <div className="absolute inset-0 z-50 bg-black/10 flex flex-col items-center justify-center rounded-3xl backdrop-blur-sm cursor-not-allowed">
+                    <div className="bg-white/90 p-8 rounded-full speaking-glow flex flex-col items-center shadow-2xl">
+                        <i data-lucide="volume-2" className="w-16 h-16 text-blue-500 animate-pulse mb-4"></i>
+                        <h2 className="text-3xl font-black text-blue-600">請聽老師講...</h2>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- 拖放互動遊戲核心組件 (通用於所有關卡) ---
+        const SharingGame = ({ level, totalCookies, totalPlates, instructions, successMsg, onComplete, playVoice, showMCQ = false }) => {
+            // 狀態管理
+            const [cookies, setCookies] = useState(
+                Array.from({ length: totalCookies }, (_, i) => ({ id: i, plateId: 'pool' }))
+            );
+            const [isChecking, setIsChecking] = useState(false);
+            const [showMCQPhase, setShowMCQPhase] = useState(false);
+
+            // 拖放相關狀態
+            const [draggedCookie, setDraggedCookie] = useState(null);
+            const [pointerPos, setPointerPos] = useState({ x: 0, y: 0 });
+            
+            // 進場語音
+            useEffect(() => {
+                playVoice(instructions);
+            }, []);
+
+            // 處理拖拽開始
+            const handlePointerDown = (e, cookie) => {
+                e.preventDefault();
+                // 如果設備支援，捕獲指標以確保平滑拖曳
+                if (e.target.setPointerCapture) {
+                    e.target.setPointerCapture(e.pointerId);
+                }
+                setDraggedCookie(cookie);
+                setPointerPos({ x: e.clientX, y: e.clientY });
+            };
+
+            // 處理拖拽移動
+            const handlePointerMove = (e) => {
+                if (!draggedCookie) return;
+                e.preventDefault();
+                setPointerPos({ x: e.clientX, y: e.clientY });
+            };
+
+            // 處理拖拽結束並判斷落點
+            const handlePointerUp = (e) => {
+                if (!draggedCookie) return;
+                e.preventDefault();
+                if (e.target.releasePointerCapture) {
+                    e.target.releasePointerCapture(e.pointerId);
+                }
+
+                // 使用 elementFromPoint 尋找落點是否為碟子
+                // 暫時隱藏被拖曳的物體，以免擋住偵測
+                const dropElements = document.elementsFromPoint(e.clientX, e.clientY);
+                const plateElement = dropElements.find(el => el.getAttribute('data-plate-id') !== null);
+
+                if (plateElement) {
+                    const plateId = parseInt(plateElement.getAttribute('data-plate-id'));
+                    setCookies(prev => prev.map(c => c.id === draggedCookie.id ? { ...c, plateId } : c));
+                } else {
+                    // 放回池子
+                    setCookies(prev => prev.map(c => c.id === draggedCookie.id ? { ...c, plateId: 'pool' } : c));
+                }
+                setDraggedCookie(null);
+            };
+
+            // 檢查是否所有餅乾都分完了
+            const allDistributed = cookies.every(c => c.plateId !== 'pool');
+
+            const checkAnswer = () => {
+                setIsChecking(true);
+                const targetPerPlate = totalCookies / totalPlates;
+                let isCorrect = true;
+
+                for (let i = 0; i < totalPlates; i++) {
+                    const count = cookies.filter(c => c.plateId === i).length;
+                    if (count !== targetPerPlate) isCorrect = false;
+                }
+
+                if (isCorrect) {
+                    confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+                    if (showMCQ) {
+                        playVoice("叻仔！分得好啱！而家話畀我知，每隻碟有幾多塊餅仔？", () => {
+                            setShowMCQPhase(true);
+                            setIsChecking(false);
+                        });
+                    } else {
+                        playVoice(successMsg, () => onComplete());
+                    }
+                } else {
+                    playVoice("咦？好似唔夠平均喎，有啲碟多啲，有啲碟少啲，我哋重新試下啦！", () => {
+                        // 錯誤則重置
+                        setCookies(Array.from({ length: totalCookies }, (_, i) => ({ id: i, plateId: 'pool' })));
+                        setIsChecking(false);
+                    });
+                }
+            };
+
+            const handleMCClick = (ans) => {
+                if (ans === totalCookies / totalPlates) {
+                    confetti({ particleCount: 200, spread: 100, origin: { y: 0.5 } });
+                    playVoice(successMsg, () => onComplete());
+                } else {
+                    playVoice("唔係呢個數字喎，你再數下每隻碟有幾多塊餅仔？");
+                }
+            };
+
+            if (showMCQPhase) {
+                return (
+                    <div className="w-full h-full flex flex-col items-center justify-center space-y-12">
+                        <h1 className="text-5xl font-black text-blue-800 drop-shadow-md text-center">每隻碟有幾多塊餅仔呢？</h1>
+                        
+                        {/* 顯示正確的碟子結果作為視覺提示 */}
+                        <div className="flex gap-8 scale-75">
+                             {Array.from({ length: totalPlates }).map((_, i) => (
+                                <div key={i} className="relative w-48 h-48">
+                                    <PlateSVG className="w-full h-full" />
+                                    <div className="absolute inset-0 flex flex-wrap items-center justify-center p-4">
+                                        {cookies.filter(c => c.plateId === i).map(c => (
+                                            <CookieSVG key={c.id} className="w-12 h-12 m-1" />
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="flex gap-8">
+                            {[2, 3, 4].map(num => (
+                                <button 
+                                    key={num}
+                                    onClick={() => handleMCClick(num)}
+                                    className="btn-3d bg-yellow-400 border-yellow-600 text-yellow-900 w-32 h-32 rounded-3xl text-6xl font-black"
+                                >
+                                    {num}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div 
+                    className="w-full h-full flex flex-col items-center p-4 relative"
+                    onPointerMove={handlePointerMove}
+                    onPointerUp={handlePointerUp}
+                    onPointerLeave={handlePointerUp}
+                >
+                    {/* 關卡標題 */}
+                    <div className="bg-white/80 px-8 py-4 rounded-full shadow-lg mb-6 border-4 border-blue-200">
+                        <h2 className="text-3xl md:text-4xl font-black text-blue-800">
+                            {level}：請將餅仔平均放落碟度
+                        </h2>
+                    </div>
+
+                    {/* 碟子區 (Drop Zones) */}
+                    <div className="flex-1 w-full flex items-center justify-center gap-4 md:gap-12 mb-8">
+                        {Array.from({ length: totalPlates }).map((_, i) => (
+                            <div 
+                                key={`plate-${i}`}
+                                data-plate-id={i}
+                                className="relative w-40 h-40 md:w-56 md:h-56 plate-shadow rounded-full bg-white flex flex-wrap items-center justify-center p-4 border-4 border-blue-100 transition-colors"
+                                style={{ backgroundColor: draggedCookie ? '#f8fafc' : '#ffffff' }}
+                            >
+                                <div className="absolute inset-0 pointer-events-none" /> {/* 防止內部元素干擾 drop 偵測 */}
+                                {/* 顯示在此碟子上的餅乾 */}
+                                {cookies.filter(c => c.plateId === i).map(c => (
+                                    <div key={c.id} className="relative w-12 h-12 md:w-16 md:h-16 m-1 pointer-events-none">
+                                        <CookieSVG className="w-full h-full animate-gentle-bounce" />
+                                    </div>
+                                ))}
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* 餅乾池 (Pool) */}
+                    <div className="w-full max-w-3xl bg-amber-100 border-4 border-amber-300 rounded-3xl p-6 min-h-[160px] flex items-center justify-center shadow-inner relative">
+                        <div className="flex flex-wrap items-center justify-center gap-4">
+                            {cookies.filter(c => c.plateId === 'pool').map(c => (
+                                <div 
+                                    key={c.id}
+                                    onPointerDown={(e) => handlePointerDown(e, c)}
+                                    className={`touch-none cursor-grab active:cursor-grabbing hover:scale-110 transition-transform ${draggedCookie?.id === c.id ? 'opacity-0' : 'opacity-100'}`}
+                                >
+                                    <CookieSVG className="w-16 h-16 md:w-24 md:h-24 drop-shadow-xl" />
+                                </div>
+                            ))}
+                        </div>
+                        
+                        {/* 提示字 */}
+                        {cookies.filter(c => c.plateId === 'pool').length > 0 && (
+                            <div className="absolute -top-5 left-1/2 -translate-x-1/2 bg-amber-500 text-white px-6 py-2 rounded-full font-bold text-xl shadow-md border-2 border-white">
+                                拉動餅仔去碟度 👉
+                            </div>
+                        )}
+                    </div>
+
+                    {/* 完成按鈕 */}
+                    <div className="h-24 mt-6 flex items-center justify-center w-full">
+                        {allDistributed && (
+                            <button 
+                                onClick={checkAnswer}
+                                disabled={isChecking}
+                                className="btn-3d bg-green-500 hover:bg-green-400 border-green-700 text-white px-12 py-4 md:py-6 rounded-full text-4xl md:text-5xl font-black flex items-center gap-4"
+                            >
+                                <i data-lucide="check-circle" className="w-10 h-10 md:w-12 md:h-12"></i>
+                                分好啦！
+                            </button>
+                        )}
+                    </div>
+
+                    {/* 拖曳中的分身 (跟隨游標) */}
+                    {draggedCookie && (
+                        <div 
+                            className="fixed pointer-events-none z-50 transform -translate-x-1/2 -translate-y-1/2"
+                            style={{ left: pointerPos.x, top: pointerPos.y }}
+                        >
+                            <CookieSVG className="w-20 h-20 md:w-28 md:h-28 drop-shadow-2xl scale-110" />
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // --- 主應用程式 ---
+        const App = () => {
+            const [gameState, setGameState] = useState('welcome'); // welcome, level1, level2, level3, reward
+            const [isSpeaking, setIsSpeaking] = useState(false);
+
+            // 初始化 Lucide 圖標
+            useEffect(() => {
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+            });
+
+            // 廣東話語音播放函數 (核心需求)
+            const playVoice = useCallback((text, onEndCallback = null) => {
+                if (!window.speechSynthesis) {
+                    if (onEndCallback) onEndCallback();
+                    return;
+                }
+
+                // 停止之前的語音
+                window.speechSynthesis.cancel();
+
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'zh-HK'; // 廣東話
+                utterance.rate = 0.85;     // 偏慢語速，適合特殊教育
+                utterance.pitch = 1.1;    // 稍微高音，比較親切
+
+                utterance.onstart = () => {
+                    setIsSpeaking(true);
+                };
+
+                utterance.onend = () => {
+                    setIsSpeaking(false);
+                    if (onEndCallback) onEndCallback();
+                };
+
+                utterance.onerror = () => {
+                    setIsSpeaking(false);
+                    if (onEndCallback) onEndCallback();
+                };
+
+                window.speechSynthesis.speak(utterance);
+            }, []);
+
+            const startGame = () => {
+                playVoice("歡迎嚟到開心分餅仔！我哋一齊玩啦！", () => {
+                    setGameState('level1');
+                });
+            };
+
+            // 根據狀態渲染不同畫面
+            const renderScreen = () => {
+                switch (gameState) {
+                    case 'welcome':
+                        return (
+                            <div className="w-full h-full flex flex-col items-center justify-center space-y-12 bg-white/50 rounded-3xl p-8">
+                                <h1 className="text-6xl md:text-7xl font-black text-blue-800 drop-shadow-lg text-center leading-tight">
+                                    開心分餅仔<br/><span className="text-4xl text-blue-600">認識平均分</span>
+                                </h1>
+                                <div className="relative">
+                                    <CookieSVG className="w-48 h-48 animate-gentle-bounce" />
+                                </div>
+                                <button 
+                                    onClick={startGame}
+                                    className="btn-3d bg-yellow-400 hover:bg-yellow-300 border-yellow-600 text-yellow-900 px-16 py-6 rounded-full text-5xl font-black flex items-center gap-4"
+                                >
+                                    <i data-lucide="play" className="w-12 h-12 fill-current"></i>
+                                    開始學習
+                                </button>
+                            </div>
+                        );
+                    case 'level1':
+                        return (
+                            <SharingGame 
+                                level="第一關"
+                                totalCookies={4}
+                                totalPlates={2}
+                                instructions="第一關！呢度有四塊餅仔，同埋兩隻碟。試下將啲餅仔，拉落去，平均放落兩隻碟度啦！"
+                                successMsg="叻仔！分得好好！每隻碟有兩塊餅仔！"
+                                playVoice={playVoice}
+                                onComplete={() => setGameState('level2')}
+                            />
+                        );
+                    case 'level2':
+                        return (
+                            <SharingGame 
+                                level="第二關"
+                                totalCookies={6}
+                                totalPlates={3}
+                                instructions="第二關！有六塊餅仔，分畀三隻碟，大家要一樣咁多喎！動手啦！"
+                                successMsg="好嘢！六塊餅，分三隻碟，每隻碟有兩塊！"
+                                playVoice={playVoice}
+                                onComplete={() => setGameState('level3')}
+                            />
+                        );
+                    case 'level3':
+                        return (
+                            <SharingGame 
+                                level="第三關 (挑戰)"
+                                totalCookies={9}
+                                totalPlates={3}
+                                instructions="第三關！九塊餅仔，分畀三隻碟。分好之後，要話畀我知每隻碟有幾多塊喎！"
+                                successMsg="答啱啦！九塊餅，分三份，每份有三塊！你真係好叻呀！"
+                                playVoice={playVoice}
+                                showMCQ={true}
+                                onComplete={() => setGameState('reward')}
+                            />
+                        );
+                    case 'reward':
+                        return (
+                            <div className="w-full h-full flex flex-col items-center justify-center space-y-10 bg-white/80 rounded-3xl p-8 text-center relative overflow-hidden">
+                                <div className="absolute inset-0 bg-yellow-200 opacity-20 animate-pulse"></div>
+                                <h1 className="text-6xl md:text-8xl font-black text-red-500 drop-shadow-xl z-10">
+                                    恭喜你！<br/>完成所有任務！
+                                </h1>
+                                <div className="flex gap-4 z-10">
+                                    <i data-lucide="star" className="w-24 h-24 text-yellow-400 fill-yellow-400 animate-bounce" style={{animationDelay: '0s'}}></i>
+                                    <i data-lucide="star" className="w-32 h-32 text-yellow-400 fill-yellow-400 animate-bounce" style={{animationDelay: '0.2s'}}></i>
+                                    <i data-lucide="star" className="w-24 h-24 text-yellow-400 fill-yellow-400 animate-bounce" style={{animationDelay: '0.4s'}}></i>
+                                </div>
+                                <button 
+                                    onClick={() => setGameState('welcome')}
+                                    className="btn-3d bg-blue-500 hover:bg-blue-400 border-blue-700 text-white px-12 py-5 rounded-full text-4xl font-black z-10"
+                                >
+                                    再玩一次
+                                </button>
+                                {useEffect(() => {
+                                    // 進入獎勵畫面時，持續噴發碎紙花
+                                    const duration = 3 * 1000;
+                                    const end = Date.now() + duration;
+                                    const frame = () => {
+                                        confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#ff0000', '#00ff00', '#0000ff', '#ffff00'] });
+                                        confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#ff0000', '#00ff00', '#0000ff', '#ffff00'] });
+                                        if (Date.now() < end) requestAnimationFrame(frame);
+                                    };
+                                    frame();
+                                    playVoice("太棒啦！你已經學識咗點樣平均分啦！真係好叻仔呀！");
+                                }, [])}
+                            </div>
+                        );
+                    default:
+                        return null;
+                }
+            };
+
+            return (
+                <div className="w-full h-full bg-white rounded-3xl shadow-2xl relative overflow-hidden border-8 border-white">
+                    {/* 頂部裝飾條 */}
+                    <div className="absolute top-0 left-0 w-full h-4 bg-gradient-to-r from-yellow-400 via-green-400 to-blue-400"></div>
+                    
+                    {/* 畫面內容 */}
+                    {renderScreen()}
+
+                    {/* 語音鎖定遮罩 (當語音播放時禁止互動) */}
+                    <SpeechLockOverlay isSpeaking={isSpeaking} />
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

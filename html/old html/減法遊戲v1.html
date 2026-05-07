@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小冒險家：圖像減法遊戲</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap');
+        
+        body {
+            font-family: 'ZCOOL KuaiLe', cursive, system-ui, sans-serif;
+            background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 0;
+            overflow: hidden; 
+            touch-action: none; 
+        }
+
+        .game-card {
+            background: white;
+            border-radius: 2rem;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.1);
+            width: 95%;
+            max-width: 900px;
+            padding: 1.5rem;
+            text-align: center;
+            position: relative;
+        }
+
+        .difficulty-btn {
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+        .difficulty-btn.active {
+            border-color: #4299E1;
+            background-color: #EBF8FF;
+            font-weight: bold;
+        }
+
+        .item-wrapper {
+            position: relative;
+            display: inline-block;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+
+        .item-icon {
+            display: block;
+            filter: drop-shadow(2px 4px 6px rgba(0,0,0,0.1));
+            transition: opacity 0.3s, filter 0.3s;
+        }
+
+        .cross-mark {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #E53E3E;
+            font-weight: bold;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            text-shadow: 1px 1px 0px white;
+        }
+
+        .item-wrapper.removed .item-icon {
+            opacity: 0.25;
+            filter: grayscale(1);
+        }
+
+        .item-wrapper.removed .cross-mark {
+            opacity: 0.9;
+        }
+
+        /* 直式計算樣式 */
+        .vertical-math-box {
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: bold;
+            background: #fdfdfd;
+            border: 2px solid #cbd5e0;
+            padding: 15px 25px;
+            border-radius: 1rem;
+            position: relative;
+            min-width: 250px;
+            display: none; /* 初始隱藏 */
+        }
+
+        .v-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 2.5rem;
+            text-align: center;
+            position: relative;
+            z-index: 2;
+        }
+
+        .v-table th {
+            font-size: 1rem;
+            padding-bottom: 5px;
+        }
+
+        .v-table td {
+            padding: 2px 0;
+            width: 20%;
+        }
+
+        .col-ones {
+            background-color: rgba(72, 187, 120, 0.15); /* 個位數底色 */
+        }
+
+        .v-operator {
+            text-align: left;
+            color: #E53E3E;
+        }
+
+        .v-line td {
+            border-bottom: 3px solid #2d3748;
+        }
+
+        #sketch-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            cursor: crosshair;
+            z-index: 10; /* 高於內容以便繪圖 */
+        }
+
+        .equation-box {
+            font-size: 2.2rem;
+            margin: 1rem 0;
+            color: #2D3748;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .btn-action {
+            padding: 0.6rem 1.5rem;
+            border-radius: 1rem;
+            font-size: 1.2rem;
+            transition: all 0.2s;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .btn-blue {
+            background-color: #4299E1;
+            color: white;
+            box-shadow: 0 4px 0 #2B6CB0;
+        }
+
+        .btn-blue:active {
+            transform: translateY(4px);
+            box-shadow: 0 0 0 #2B6CB0;
+        }
+
+        .btn-gray {
+            background-color: #EDF2F7;
+            color: #4A5568;
+            border: 1px solid #CBD5E0;
+            font-size: 0.9rem;
+            padding: 4px 12px;
+        }
+
+        .score-badge {
+            position: absolute;
+            top: -10px;
+            right: 10px;
+            background: #ED8936;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 50px;
+            font-size: 1.1rem;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            z-index: 20;
+        }
+
+        .size-lg { font-size: 3.5rem; margin: 8px; }
+        .size-md { font-size: 2.2rem; margin: 5px; }
+        .size-sm { font-size: 1.4rem; margin: 3px; }
+        .size-xs { font-size: 1rem; margin: 2px; }
+
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="game-card">
+        <div id="score" class="score-badge">得分: 0</div>
+        
+        <div class="flex flex-col md:flex-row justify-between items-center mb-4 gap-2">
+            <h1 class="text-2xl font-bold text-blue-600">減法大挑戰</h1>
+            <div class="flex items-center gap-2">
+                <div class="flex flex-wrap gap-1 bg-gray-100 p-1 rounded-2xl justify-center">
+                    <button onclick="setDifficulty('easy')" id="btn-easy" class="difficulty-btn active">簡單</button>
+                    <button onclick="setDifficulty('medium')" id="btn-medium" class="difficulty-btn">中等</button>
+                    <button onclick="setDifficulty('hard')" id="btn-hard" class="difficulty-btn">困難</button>
+                    <button onclick="setDifficulty('super_hard')" id="btn-super_hard" class="difficulty-btn">超困難</button>
+                    <button onclick="setDifficulty('super_super_hard')" id="btn-super_super_hard" class="difficulty-btn">超超困難</button>
+                </div>
+                <button onclick="initGame()" class="btn-gray rounded-full whitespace-nowrap">🔄 重新出題</button>
+            </div>
+        </div>
+
+        <p id="instruction" class="bg-blue-50 text-blue-800 p-2 rounded-xl mb-3 text-md">
+            點擊並刪掉 <span id="hint-num" class="font-bold text-red-600">?</span> 個物件！
+        </p>
+
+        <div class="flex flex-col lg:flex-row gap-4 items-center justify-center">
+            <!-- 圖像區域 -->
+            <div id="visual-area" class="flex-grow flex flex-wrap justify-center content-start min-h-[200px] max-h-[350px] overflow-y-auto border-4 border-blue-100 rounded-3xl p-4 bg-blue-50/10 w-full relative">
+                <div id="visual-message" class="hidden absolute inset-0 flex items-center justify-center text-xl text-gray-500 font-bold bg-white/90 rounded-2xl z-10">
+                    數量太大了！請使用右邊的直式算算看吧 📝
+                </div>
+            </div>
+
+            <!-- 直式草稿手寫區域 (僅在困難以上模式顯示) -->
+            <div id="sketch-area-container" class="flex flex-col items-center hidden">
+                <div id="vertical-box" class="vertical-math-box">
+                    <canvas id="sketch-canvas"></canvas>
+                    <table class="v-table">
+                        <colgroup>
+                            <col>
+                            <col id="col-th">
+                            <col id="col-h">
+                            <col id="col-t">
+                            <col class="col-ones"> <!-- 個位底色 -->
+                        </colgroup>
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th id="label-th" class="text-orange-600">千</th>
+                                <th id="label-h" class="text-blue-600">百</th>
+                                <th id="label-t" class="text-purple-600">十</th>
+                                <th id="label-o" class="text-green-600">個</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td></td>
+                                <td id="v-n1-th"></td>
+                                <td id="v-n1-h"></td>
+                                <td id="v-n1-t"></td>
+                                <td id="v-n1-o"></td>
+                            </tr>
+                            <tr class="v-line">
+                                <td class="v-operator">－</td>
+                                <td id="v-n2-th"></td>
+                                <td id="v-n2-h"></td>
+                                <td id="v-n2-t"></td>
+                                <td id="v-n2-o"></td>
+                            </tr>
+                            <tr class="text-transparent h-12">
+                                <td colspan="5">8</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <button onclick="clearCanvas()" class="mt-2 text-xs text-gray-500 underline">🧹 清除草稿</button>
+            </div>
+        </div>
+
+        <div class="equation-box">
+            <span id="num1" class="text-blue-600"></span>
+            <span class="text-red-500 font-bold">－</span>
+            <span id="num2" class="text-orange-500"></span>
+            <span class="font-bold">＝</span>
+            <input type="number" id="answer-input" class="w-20 h-14 border-b-4 border-blue-400 text-center focus:outline-none bg-transparent text-3xl" placeholder="?">
+        </div>
+
+        <button id="check-btn" class="btn-action btn-blue w-full">檢查答案</button>
+
+        <div id="feedback" class="mt-2 text-xl font-bold h-8"></div>
+    </div>
+
+    <script>
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playSound(type) {
+            const osc = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            osc.connect(g); g.connect(audioCtx.destination);
+            const now = audioCtx.currentTime;
+            if (type === 'click') {
+                osc.frequency.setValueAtTime(400, now); osc.frequency.exponentialRampToValueAtTime(10, now + 0.1);
+                g.gain.setValueAtTime(0.1, now); osc.start(); osc.stop(now + 0.1);
+            } else if (type === 'correct') {
+                [523, 659, 783].forEach((f, i) => osc.frequency.setValueAtTime(f, now + i * 0.1));
+                g.gain.setValueAtTime(0.1, now); osc.start(); osc.stop(now + 0.4);
+            } else if (type === 'wrong') {
+                osc.frequency.setValueAtTime(150, now); osc.frequency.linearRampToValueAtTime(100, now + 0.3);
+                g.gain.setValueAtTime(0.1, now); osc.start(); osc.stop(now + 0.3);
+            }
+        }
+
+        const canvas = document.getElementById('sketch-canvas');
+        const ctx = canvas.getContext('2d');
+        const vBox = document.getElementById('vertical-box');
+        let drawing = false;
+
+        function resizeCanvas() {
+            if (['hard', 'super_hard', 'super_super_hard'].includes(difficulty)) {
+                canvas.width = vBox.offsetWidth;
+                canvas.height = vBox.offsetHeight;
+                ctx.strokeStyle = 'rgba(74, 85, 104, 0.8)';
+                ctx.lineWidth = 3;
+                ctx.lineCap = 'round';
+            }
+        }
+
+        function clearCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            playSound('click');
+        }
+
+        function startDrawing(e) { drawing = true; draw(e); }
+        function stopDrawing() { drawing = false; ctx.beginPath(); }
+        function draw(e) {
+            if (!drawing) return;
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX || e.touches[0].clientX) - rect.left;
+            const y = (e.clientY || e.touches[0].clientY) - rect.top;
+            ctx.lineTo(x, y);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+        }
+
+        canvas.addEventListener('mousedown', startDrawing);
+        canvas.addEventListener('mousemove', draw);
+        window.addEventListener('mouseup', stopDrawing);
+        canvas.addEventListener('touchstart', (e) => { e.preventDefault(); startDrawing(e); });
+        canvas.addEventListener('touchmove', (e) => { e.preventDefault(); draw(e); });
+        window.addEventListener('touchend', stopDrawing);
+
+        let difficulty = 'easy';
+        let score = 0;
+        let currentLevel = {};
+        const itemsPool = ['🍎', '🍓', '⭐', '🎈', '🍦', '🍩', '🦁', '🚗', '🐱', '🦋', '⚽', '🎨'];
+        
+        const visualArea = document.getElementById('visual-area');
+        const visualMessage = document.getElementById('visual-message');
+        const num1El = document.getElementById('num1');
+        const num2El = document.getElementById('num2');
+        const hintNumEl = document.getElementById('hint-num');
+        const answerInput = document.getElementById('answer-input');
+        const feedbackEl = document.getElementById('feedback');
+        const scoreEl = document.getElementById('score');
+        const sketchArea = document.getElementById('sketch-area-container');
+
+        function setDifficulty(level) {
+            difficulty = level;
+            document.querySelectorAll('.difficulty-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`btn-${level}`).classList.add('active');
+            
+            // 只有困難、超困難、超超困難模式顯示直式草稿
+            if (['hard', 'super_hard', 'super_super_hard'].includes(difficulty)) {
+                sketchArea.classList.remove('hidden');
+                vBox.style.display = 'block';
+                setTimeout(resizeCanvas, 50); // 確保顯示後再調整畫布
+            } else {
+                sketchArea.classList.add('hidden');
+                vBox.style.display = 'none';
+            }
+            
+            playSound('click');
+            initGame();
+        }
+
+        function initGame() {
+            let min, max;
+            if (difficulty === 'easy') { min = 3; max = 10; }
+            else if (difficulty === 'medium') { min = 11; max = 20; }
+            else if (difficulty === 'hard') { min = 21; max = 99; }
+            else if (difficulty === 'super_hard') { min = 100; max = 999; }
+            else { min = 1000; max = 9999; } // super_super_hard
+
+            const n1 = Math.floor(Math.random() * (max - min + 1)) + min;
+            const n2 = Math.floor(Math.random() * (n1 - 1)) + 1;
+            const emoji = itemsPool[Math.floor(Math.random() * itemsPool.length)];
+
+            currentLevel = { num1: n1, num2: n2, item: emoji, removedCount: 0 };
+
+            num1El.innerText = n1;
+            num2El.innerText = n2;
+            
+            // 更新直式數字 (補齊4位數以利對齊)
+            const s1 = n1.toString().padStart(4, ' ');
+            const s2 = n2.toString().padStart(4, ' ');
+            
+            ['th', 'h', 't', 'o'].forEach((place, i) => {
+                const n1Cell = document.getElementById(`v-n1-${place}`);
+                const n2Cell = document.getElementById(`v-n2-${place}`);
+                if(n1Cell) n1Cell.innerText = s1[i] !== ' ' ? s1[i] : '';
+                if(n2Cell) n2Cell.innerText = s2[i] !== ' ' ? s2[i] : '';
+            });
+
+            // 根據位數自動隱藏不需要的直式欄位 (千位、百位)
+            document.getElementById('col-th').style.display = n1 < 1000 ? 'none' : 'table-column';
+            document.getElementById('label-th').style.display = n1 < 1000 ? 'none' : 'table-cell';
+            document.getElementById('v-n1-th').style.display = n1 < 1000 ? 'none' : 'table-cell';
+            document.getElementById('v-n2-th').style.display = n1 < 1000 ? 'none' : 'table-cell';
+
+            document.getElementById('col-h').style.display = n1 < 100 ? 'none' : 'table-column';
+            document.getElementById('label-h').style.display = n1 < 100 ? 'none' : 'table-cell';
+            document.getElementById('v-n1-h').style.display = n1 < 100 ? 'none' : 'table-cell';
+            document.getElementById('v-n2-h').style.display = n1 < 100 ? 'none' : 'table-cell';
+
+            hintNumEl.innerText = n2;
+            answerInput.value = '';
+            feedbackEl.innerText = '';
+            if (['hard', 'super_hard', 'super_super_hard'].includes(difficulty)) clearCanvas();
+            renderItems();
+        }
+
+        function renderItems() {
+            // 清除現有圖示，保留訊息框
+            Array.from(visualArea.children).forEach(child => {
+                if(child.id !== 'visual-message') child.remove();
+            });
+
+            if (currentLevel.num1 > 99) {
+                // 超過99個物件，隱藏圖示，顯示文字提示
+                visualMessage.classList.remove('hidden');
+                return;
+            } else {
+                visualMessage.classList.add('hidden');
+            }
+
+            let sizeClass = currentLevel.num1 > 50 ? 'size-xs' : (currentLevel.num1 > 25 ? 'size-sm' : (currentLevel.num1 > 12 ? 'size-md' : 'size-lg'));
+            for (let i = 0; i < currentLevel.num1; i++) {
+                const wrapper = document.createElement('div');
+                wrapper.className = `item-wrapper ${sizeClass}`;
+                wrapper.innerHTML = `<span class="item-icon">${currentLevel.item}</span><div class="cross-mark">✕</div>`;
+                wrapper.onclick = () => {
+                    playSound('click');
+                    wrapper.classList.toggle('removed');
+                    currentLevel.removedCount = document.querySelectorAll('.item-wrapper.removed').length;
+                    feedbackEl.innerText = (currentLevel.removedCount === currentLevel.num2) ? "好棒！數數看剩下的？" : "";
+                };
+                visualArea.appendChild(wrapper);
+            }
+        }
+
+        function checkAnswer() {
+            const userVal = parseInt(answerInput.value);
+            const correctVal = currentLevel.num1 - currentLevel.num2;
+            if (userVal === correctVal) {
+                playSound('correct');
+                let pts = 10;
+                if(difficulty === 'medium') pts = 20;
+                if(difficulty === 'hard') pts = 30;
+                if(difficulty === 'super_hard') pts = 40;
+                if(difficulty === 'super_super_hard') pts = 50;
+                score += pts;
+                
+                scoreEl.innerText = `得分: ${score}`;
+                feedbackEl.innerText = `對了！答案是 ${correctVal} 🌟`;
+                feedbackEl.className = "mt-2 text-xl font-bold h-8 text-green-500";
+                createConfetti();
+                setTimeout(initGame, 2000);
+            } else {
+                playSound('wrong');
+                feedbackEl.innerText = ['hard', 'super_hard', 'super_super_hard'].includes(difficulty) ? "再算一次看看，或在直式草稿檢查！" : "再數一次亮的圖示看看！";
+                feedbackEl.className = "mt-2 text-xl font-bold h-8 text-red-500";
+                answerInput.focus();
+            }
+        }
+
+        function createConfetti() {
+            for (let i = 0; i < 40; i++) {
+                const c = document.createElement('div');
+                c.className = 'fixed w-2 h-2 pointer-events-none z-[1000]';
+                c.style.left = Math.random() * 100 + '%'; c.style.top = '-10px';
+                c.style.backgroundColor = `hsl(${Math.random() * 360}, 80%, 60%)`;
+                document.body.appendChild(c);
+                c.animate([{ transform: 'translate3d(0,0,0) rotate(0)', opacity: 1 }, { transform: `translate3d(${(Math.random() - 0.5) * 400}px, ${window.innerHeight}px, 0) rotate(${Math.random() * 1000}deg)`, opacity: 0 }], { duration: 2000, easing: 'ease-out' }).onfinish = () => c.remove();
+            }
+        }
+
+        document.getElementById('check-btn').onclick = checkAnswer;
+        answerInput.onkeypress = (e) => { if (e.key === 'Enter') checkAnswer(); };
+
+        window.onload = () => {
+            setDifficulty('easy');
+        };
+        window.onresize = resizeCanvas;
+    </script>
+</body>
+</html>

@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>除法分嘢食學習 (Division Learning)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif, 'Microsoft JhengHei';
+            background-color: #f0fdf4; /* Light green background */
+        }
+        
+        #board-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            aspect-ratio: 1 / 1;
+            margin: 0 auto;
+            border-radius: 20px;
+            overflow: hidden;
+            background-color: #ffffff;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+        }
+
+        #table-circle {
+            position: absolute;
+            top: 15%;
+            left: 15%;
+            width: 70%;
+            height: 70%;
+            border-radius: 50%;
+            background: radial-gradient(circle, #e7c59a 0%, #d4a373 100%); /* Wood texture */
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.1), 0 10px 20px rgba(0,0,0,0.1);
+            border: 4px solid #b5835a;
+        }
+
+        .person {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            background-color: #fff;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border: 3px solid #3b82f6;
+            z-index: 10;
+            transform: translate(-50%, -50%);
+            transition: all 0.3s ease;
+        }
+
+        .item {
+            position: absolute;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            z-index: 20;
+            transform: translate(-50%, -50%);
+            transition: top 0.6s cubic-bezier(0.34, 1.56, 0.64, 1), left 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .subtitle-box {
+            min-height: 3rem;
+            transition: opacity 0.3s;
+        }
+
+        /* Pulse animation for active speaker */
+        @keyframes pulse-ring {
+            0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
+            100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+        }
+        .speaking-icon {
+            animation: pulse-ring 2s infinite;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8 text-gray-800">
+
+    <div class="max-w-4xl mx-auto">
+        
+        <!-- Header -->
+        <div class="text-center mb-6">
+            <h1 class="text-3xl md:text-4xl font-bold text-green-700 mb-2"><i class="fa-solid fa-divide mr-2"></i>齊齊學除法</h1>
+            <p class="text-gray-600">設定總數同人數，睇吓點樣平均分配啦！</p>
+        </div>
+
+        <!-- Controls -->
+        <div class="bg-white p-5 rounded-2xl shadow-sm mb-6 flex flex-wrap gap-4 items-end justify-center border border-green-100">
+            <div class="flex flex-col">
+                <label class="text-sm font-semibold text-gray-600 mb-1">物件總數 (1-50)</label>
+                <input type="number" id="total-items" min="1" max="50" value="14" class="border-2 border-gray-200 rounded-lg p-2 w-24 text-center font-bold text-lg focus:border-green-500 focus:outline-none">
+            </div>
+            
+            <div class="flex flex-col">
+                <label class="text-sm font-semibold text-gray-600 mb-1">一圍枱人數 (1-10)</label>
+                <input type="number" id="total-people" min="1" max="10" value="3" class="border-2 border-gray-200 rounded-lg p-2 w-24 text-center font-bold text-lg focus:border-green-500 focus:outline-none">
+            </div>
+
+            <div class="flex flex-col">
+                <label class="text-sm font-semibold text-gray-600 mb-1">物件種類</label>
+                <select id="item-type" class="border-2 border-gray-200 rounded-lg p-2 w-32 font-bold text-lg focus:border-green-500 focus:outline-none appearance-none bg-white">
+                    <option value="apple">蘋果 🍎</option>
+                    <option value="cube">方塊 🟩</option>
+                    <option value="candy">糖果 🍬</option>
+                    <option value="coin">金幣 🪙</option>
+                </select>
+            </div>
+
+            <div class="flex gap-2 w-full md:w-auto mt-2 md:mt-0">
+                <button id="btn-setup" onclick="setupBoard()" class="flex-1 md:flex-none bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-6 rounded-lg transition-colors">
+                    <i class="fa-solid fa-arrows-rotate mr-2"></i>擺好陣勢
+                </button>
+                <button id="btn-start" onclick="startDistribution()" class="flex-1 md:flex-none bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-6 rounded-lg transition-colors shadow-md shadow-green-200">
+                    <i class="fa-solid fa-play mr-2"></i>開始派發
+                </button>
+            </div>
+        </div>
+
+        <!-- Subtitles / Status -->
+        <div class="bg-blue-50 text-blue-800 rounded-xl p-4 mb-6 text-center text-lg font-medium shadow-sm border border-blue-100 subtitle-box flex items-center justify-center gap-3">
+            <i id="audio-indicator" class="fa-solid fa-volume-high hidden text-blue-500 speaking-icon"></i>
+            <span id="subtitle-text">請撳「擺好陣勢」準備，然後撳「開始派發」。</span>
+        </div>
+
+        <!-- Interactive Board -->
+        <div id="board-container">
+            <div id="table-circle"></div>
+            <div id="people-layer" class="absolute inset-0 pointer-events-none"></div>
+            <div id="items-layer" class="absolute inset-0 pointer-events-none"></div>
+        </div>
+
+        <!-- Equation Result (Hidden initially) -->
+        <div id="equation-panel" class="mt-8 bg-yellow-50 border-2 border-yellow-300 rounded-2xl p-6 text-center opacity-0 transform translate-y-4 transition-all duration-700 hidden">
+            <h2 class="text-xl font-bold text-yellow-800 mb-2">除法列式</h2>
+            <div id="equation-math" class="text-4xl md:text-5xl font-black text-gray-800 tracking-wider">
+                14 ÷ 3 = 4 ... 2
+            </div>
+            <div id="equation-text" class="mt-4 text-lg text-gray-600 font-medium">
+                14 個蘋果分畀 3 個人，每人有 4 個，剩低 2 個。
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // API Key - Will be populated by the environment. Do not change.
+        const apiKey = ""; 
+
+        // State variables
+        let itemsData = [];
+        let peopleData = [];
+        let isAnimating = false;
+        
+        const itemInfo = {
+            'apple': { emoji: '🍎', name: '蘋果' },
+            'cube': { emoji: '🟩', name: '方塊' },
+            'candy': { emoji: '🍬', name: '糖果' },
+            'coin': { emoji: '🪙', name: '金幣' }
+        };
+
+        const peopleEmojis = ['👦', '👧', '👨', '👩', '👴', '👵', '👱‍♂️', '👱‍♀️', '👲', '🧕'];
+
+        // --- Helper: PCM to WAV Converter for TTS ---
+        function pcmToWav(pcmData, sampleRate = 24000) {
+            const numChannels = 1;
+            const bitsPerSample = 16;
+            const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+            const blockAlign = numChannels * (bitsPerSample / 8);
+            const dataSize = pcmData.length;
+            const buffer = new ArrayBuffer(44 + dataSize);
+            const view = new DataView(buffer);
+
+            const writeString = (view, offset, string) => {
+                for (let i = 0; i < string.length; i++) {
+                    view.setUint8(offset + i, string.charCodeAt(i));
+                }
+            };
+
+            writeString(view, 0, 'RIFF');
+            view.setUint32(4, 36 + dataSize, true);
+            writeString(view, 8, 'WAVE');
+            writeString(view, 12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true);
+            view.setUint16(22, numChannels, true);
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, byteRate, true);
+            view.setUint16(32, blockAlign, true);
+            view.setUint16(34, bitsPerSample, true);
+            writeString(view, 36, 'data');
+            view.setUint32(40, dataSize, true);
+
+            let offset = 44;
+            for (let i = 0; i < pcmData.length; i++, offset++) {
+                view.setUint8(offset, pcmData[i]);
+            }
+
+            return new Blob([view], { type: 'audio/wav' });
+        }
+
+        function base64ToArrayBuffer(base64) {
+            const binary_string = window.atob(base64);
+            const len = binary_string.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binary_string.charCodeAt(i);
+            }
+            return bytes;
+        }
+
+        // --- TTS Engine with exponential backoff ---
+        async function fetchTTSWithRetry(text, retries = 5) {
+            if (!apiKey) {
+                console.warn("No API key provided, simulating TTS audio delay.");
+                return null; // Silent fallback
+            }
+
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`;
+            const payload = {
+                contents: [{ parts: [{ text: `請用流利活潑嘅廣東話朗讀以下句子：${text}` }] }],
+                generationConfig: {
+                    responseModalities: ["AUDIO"],
+                    speechConfig: {
+                        voiceConfig: {
+                            prebuiltVoiceConfig: { voiceName: "Aoede" } // Prebuilt voice supporting Chinese
+                        }
+                    }
+                }
+            };
+
+            let delay = 1000;
+            for (let attempt = 0; attempt <= retries; attempt++) {
+                try {
+                    const response = await fetch(url, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    
+                    const result = await response.json();
+                    if (result.candidates && result.candidates[0].content.parts[0].inlineData) {
+                        return result.candidates[0].content.parts[0].inlineData.data;
+                    } else {
+                        throw new Error("No audio data in response");
+                    }
+                } catch (error) {
+                    if (attempt === retries) {
+                        console.error("TTS API failed after all retries.", error);
+                        return null;
+                    }
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    delay *= 2; // Exponential backoff
+                }
+            }
+            return null;
+        }
+
+        async function playAudioAndShowText(text) {
+            const subtitleEl = document.getElementById('subtitle-text');
+            const iconEl = document.getElementById('audio-indicator');
+            subtitleEl.textContent = text;
+            iconEl.classList.remove('hidden');
+
+            const base64Audio = await fetchTTSWithRetry(text);
+            
+            return new Promise(resolve => {
+                if (base64Audio) {
+                    try {
+                        const pcmBytes = base64ToArrayBuffer(base64Audio);
+                        const wavBlob = pcmToWav(pcmBytes, 24000);
+                        const audioUrl = URL.createObjectURL(wavBlob);
+                        const audio = new Audio(audioUrl);
+                        
+                        audio.onended = () => {
+                            iconEl.classList.add('hidden');
+                            resolve();
+                        };
+                        audio.onerror = () => {
+                            console.error("Error playing audio blob");
+                            iconEl.classList.add('hidden');
+                            setTimeout(resolve, 2000); // fallback delay
+                        };
+                        audio.play().catch(e => {
+                            console.error("Audio autoplay blocked or failed", e);
+                            iconEl.classList.add('hidden');
+                            setTimeout(resolve, 2000);
+                        });
+                    } catch (e) {
+                        console.error("Error processing audio", e);
+                        iconEl.classList.add('hidden');
+                        setTimeout(resolve, 2000);
+                    }
+                } else {
+                    // Fallback visual reading time if TTS fails
+                    setTimeout(() => {
+                        iconEl.classList.add('hidden');
+                        resolve();
+                    }, text.length * 200 + 1000); // rough estimate of reading time
+                }
+            });
+        }
+
+        // --- Core App Logic ---
+
+        function setupBoard() {
+            if (isAnimating) return;
+
+            const totalItems = parseInt(document.getElementById('total-items').value);
+            const numPeople = parseInt(document.getElementById('total-people').value);
+            const itemType = document.getElementById('item-type').value;
+            const emoji = itemInfo[itemType].emoji;
+
+            // Validate inputs
+            if (isNaN(totalItems) || totalItems < 1 || totalItems > 50) return alert("請輸入 1 至 50 嘅物件總數！");
+            if (isNaN(numPeople) || numPeople < 1 || numPeople > 10) return alert("請輸入 1 至 10 嘅人數！");
+
+            const boardContainer = document.getElementById('board-container');
+            const itemsLayer = document.getElementById('items-layer');
+            const peopleLayer = document.getElementById('people-layer');
+            
+            // Clear layers and hide equation
+            itemsLayer.innerHTML = '';
+            peopleLayer.innerHTML = '';
+            const eqPanel = document.getElementById('equation-panel');
+            eqPanel.classList.add('hidden');
+            eqPanel.classList.remove('opacity-100', 'translate-y-0');
+            eqPanel.classList.add('opacity-0', 'translate-y-4');
+            
+            document.getElementById('subtitle-text').textContent = "陣勢已經擺好！撳「開始派發」開始啦。";
+            document.getElementById('btn-start').disabled = false;
+            document.getElementById('btn-start').classList.remove('opacity-50', 'cursor-not-allowed');
+
+            const boardSize = boardContainer.clientWidth || 500; // fallback if invisible
+            const centerX = boardSize / 2;
+            const centerY = boardSize / 2;
+
+            // 1. Arrange People in a circle
+            peopleData = [];
+            const radiusPeople = boardSize * 0.38; // Distance from center
+            for (let i = 0; i < numPeople; i++) {
+                const angle = (i * (Math.PI * 2) / numPeople) - (Math.PI / 2); // Start at top
+                const px = centerX + radiusPeople * Math.cos(angle);
+                const py = centerY + radiusPeople * Math.sin(angle);
+                
+                const personEl = document.createElement('div');
+                personEl.className = 'person';
+                personEl.style.left = `${(px / boardSize) * 100}%`;
+                personEl.style.top = `${(py / boardSize) * 100}%`;
+                personEl.innerHTML = peopleEmojis[i % peopleEmojis.length];
+                
+                peopleLayer.appendChild(personEl);
+                peopleData.push({ id: i, x: px, y: py, itemsReceived: 0, el: personEl });
+            }
+
+            // 2. Arrange Items in a neat grid at the center
+            itemsData = [];
+            const cols = Math.ceil(Math.sqrt(totalItems));
+            const rows = Math.ceil(totalItems / cols);
+            const spacing = 35; // Pixels between items
+            
+            const startX = centerX - ((cols - 1) * spacing) / 2;
+            const startY = centerY - ((rows - 1) * spacing) / 2;
+
+            for (let i = 0; i < totalItems; i++) {
+                const r = Math.floor(i / cols);
+                const c = i % cols;
+                const ix = startX + (c * spacing);
+                const iy = startY + (r * spacing);
+
+                const itemEl = document.createElement('div');
+                itemEl.className = 'item';
+                // Use percentages for responsive resizing
+                itemEl.style.left = `${(ix / boardSize) * 100}%`;
+                itemEl.style.top = `${(iy / boardSize) * 100}%`;
+                itemEl.innerHTML = emoji;
+                
+                itemsLayer.appendChild(itemEl);
+                itemsData.push({ 
+                    id: i, 
+                    el: itemEl, 
+                    homeX: (ix / boardSize) * 100, 
+                    homeY: (iy / boardSize) * 100,
+                    distributed: false 
+                });
+            }
+        }
+
+        async function startDistribution() {
+            if (isAnimating) return;
+            
+            // Check if board is setup, if not or changed, setup again
+            const totalItems = parseInt(document.getElementById('total-items').value);
+            if (itemsData.length !== totalItems || itemsData.some(i => i.distributed)) {
+                setupBoard();
+            }
+
+            isAnimating = true;
+            document.getElementById('btn-setup').disabled = true;
+            document.getElementById('btn-start').disabled = true;
+            document.getElementById('btn-setup').classList.add('opacity-50', 'cursor-not-allowed');
+            document.getElementById('btn-start').classList.add('opacity-50', 'cursor-not-allowed');
+
+            const total = itemsData.length;
+            const numPeople = peopleData.length;
+            const itemTypeStr = itemInfo[document.getElementById('item-type').value].name;
+            const quotient = Math.floor(total / numPeople);
+            const remainder = total % numPeople;
+
+            // 1. Intro Speech
+            await playAudioAndShowText(`我哋而家有 ${total} 個${itemTypeStr}，準備平均分畀 ${numPeople} 個人。`);
+            
+            // 2. Animate Distribution (Round-robin)
+            await playAudioAndShowText(`一個一個慢慢分...`);
+            
+            const boardSize = document.getElementById('board-container').clientWidth;
+            let currentItemIndex = total - 1; // take from the end of the array (bottom right of grid)
+
+            for (let round = 0; round < quotient; round++) {
+                for (let p = 0; p < numPeople; p++) {
+                    const person = peopleData[p];
+                    const item = itemsData[currentItemIndex];
+                    
+                    // Calculate target position slightly offset around the person
+                    // Circle around the person based on how many they have
+                    const offsetRadius = 45; 
+                    const offsetAngle = (person.itemsReceived * (Math.PI * 2) / 8); // 8 items per ring approx
+                    
+                    // Convert person pixel coordinates back to percentage for consistency
+                    const targetPxX = person.x + offsetRadius * Math.cos(offsetAngle);
+                    const targetPxY = person.y + offsetRadius * Math.sin(offsetAngle);
+                    
+                    const targetPctX = (targetPxX / boardSize) * 100;
+                    const targetPctY = (targetPxY / boardSize) * 100;
+
+                    // Move item
+                    item.el.style.left = `${targetPctX}%`;
+                    item.el.style.top = `${targetPctY}%`;
+                    item.distributed = true;
+                    
+                    person.itemsReceived++;
+                    currentItemIndex--;
+
+                    // Wait for CSS transition
+                    await new Promise(r => setTimeout(r, 600)); 
+                }
+            }
+
+            // 3. Finish up & Show Equation
+            const remainText = remainder > 0 ? `仲剩低 ${remainder} 個。` : `啱啱好分得晒，冇剩低。`;
+            const finishText = `分完啦！每人分到 ${quotient} 個，${remainText} 數學列式係：${total} 除以 ${numPeople}，等於 ${quotient}，餘數係 ${remainder}。`;
+            
+            showEquation(total, numPeople, quotient, remainder, itemTypeStr);
+            await playAudioAndShowText(finishText);
+
+            // Reset UI state
+            isAnimating = false;
+            document.getElementById('btn-setup').disabled = false;
+            document.getElementById('btn-setup').classList.remove('opacity-50', 'cursor-not-allowed');
+            document.getElementById('btn-start').innerHTML = '<i class="fa-solid fa-rotate-left mr-2"></i>重新開始';
+            document.getElementById('btn-start').disabled = false;
+            document.getElementById('btn-start').classList.remove('opacity-50', 'cursor-not-allowed');
+            // Change function of start button to restart
+            document.getElementById('btn-start').onclick = () => {
+                document.getElementById('btn-start').innerHTML = '<i class="fa-solid fa-play mr-2"></i>開始派發';
+                document.getElementById('btn-start').onclick = startDistribution;
+                setupBoard();
+            };
+        }
+
+        function showEquation(total, people, quotient, remainder, itemName) {
+            const eqPanel = document.getElementById('equation-panel');
+            const eqMath = document.getElementById('equation-math');
+            const eqText = document.getElementById('equation-text');
+
+            if (remainder > 0) {
+                eqMath.innerHTML = `<span class="text-blue-600">${total}</span> ÷ <span class="text-green-600">${people}</span> = <span class="text-purple-600">${quotient}</span> <span class="text-gray-400 text-3xl">...</span> <span class="text-red-500">${remainder}</span>`;
+                eqText.innerHTML = `<span class="font-bold">${total}</span> 個${itemName}分畀 <span class="font-bold">${people}</span> 個人，每人有 <span class="font-bold">${quotient}</span> 個，剩低 <span class="font-bold">${remainder}</span> 個。`;
+            } else {
+                eqMath.innerHTML = `<span class="text-blue-600">${total}</span> ÷ <span class="text-green-600">${people}</span> = <span class="text-purple-600">${quotient}</span>`;
+                eqText.innerHTML = `<span class="font-bold">${total}</span> 個${itemName}分畀 <span class="font-bold">${people}</span> 個人，每人啱啱好分到 <span class="font-bold">${quotient}</span> 個。`;
+            }
+
+            eqPanel.classList.remove('hidden');
+            // Trigger reflow to ensure transition happens
+            void eqPanel.offsetWidth;
+            eqPanel.classList.remove('opacity-0', 'translate-y-4');
+            eqPanel.classList.add('opacity-100', 'translate-y-0');
+        }
+
+        // Initialize on load
+        window.onload = () => {
+            // Add resize listener to handle responsive board recalculations if needed
+            window.addEventListener('resize', () => {
+                if (!isAnimating && itemsData.length > 0 && !itemsData.some(i => i.distributed)) {
+                    setupBoard();
+                }
+            });
+            setupBoard();
+        };
+
+    </script>
+</body>
+</html>

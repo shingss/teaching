@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Math Master v6.0 - 全功能教學版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        body { background: #f0f4f8; min-height: 100vh; display: flex; justify-content: center; align-items: center; font-family: 'Noto Sans TC', sans-serif; }
+        
+        /* 十位棒棒與刻度 */
+        .block-ten { 
+            width: 22px; height: 110px; background: #22c55e; border-radius: 4px; border: 2px solid #166534; 
+            display: flex; flex-direction: column; overflow: hidden; transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1); position: relative;
+        }
+        .block-ten-segment { flex: 1; border-bottom: 1px solid #166534; }
+        .block-ten-segment:last-child { border-bottom: none; }
+
+        /* 虛線數字樣式 */
+        .tracing { color: #e2e8f0 !important; -webkit-text-stroke: 1px #cbd5e0; font-style: italic; text-shadow: none !important; }
+
+        /* 紅色圈選 */
+        .ring-highlight {
+            position: absolute; border: 3px solid #ef4444; border-radius: 8px; box-shadow: 0 0 15px #ef4444;
+            animation: ring-pulse 1s infinite; pointer-events: none; z-index: 30; opacity: 0; transition: opacity 0.3s;
+        }
+        @keyframes ring-pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+
+        /* 積木 */
+        .block-one { width: 18px; height: 18px; background: #facc15; border-radius: 3px; border: 1.5px solid #a16207; transition: all 0.4s; }
+        .block-one.borrowed { background: #22c55e !important; border: 1.5px solid #166534 !important; }
+        .block-one.removed { opacity: 0.1; transform: scale(0.6) rotate(30deg); position: relative; }
+        .block-one.removed::after { content: '✕'; position: absolute; top: -5px; left: 0; color: #ef4444; font-size: 18px; font-weight: 900; }
+
+        .vertical-math-box { font-family: 'Courier New', monospace; background: white; border: 2px solid #e2e8f0; padding: 20px 40px; border-radius: 1.5rem; position: relative; }
+        .v-table { border-collapse: collapse; font-size: 3.5rem; text-align: center; }
+        .v-table td { width: 70px; height: 80px; position: relative; }
+        .v-line { border-bottom: 4px solid #1e293b; }
+        .answer-input { width: 65px; height: 70px; border-bottom: 3px dashed #cbd5e0; text-align: center; color: #2563eb; outline: none; background: transparent; }
+        #sketch-canvas { position: absolute; top: 0; left: 0; z-index: 10; cursor: crosshair; touch-action: none; }
+    </style>
+</head>
+<body class="p-4">
+
+<div class="max-w-6xl w-full flex flex-col gap-4">
+    <div class="bg-white p-6 rounded-3xl shadow-xl border border-slate-200">
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            
+            <div class="space-y-3">
+                <div class="flex bg-slate-100 p-1 rounded-xl">
+                    <button onclick="setMode('random')" id="btn-mode-random" class="flex-1 py-1 rounded-lg font-bold transition bg-white shadow text-blue-600" data-zh="🎲 隨機" data-en="🎲 Random">🎲 隨機</button>
+                    <button onclick="setMode('manual')" id="btn-mode-manual" class="flex-1 py-1 rounded-lg font-bold transition text-slate-500" data-zh="✍️ 自訂" data-en="✍️ Manual">✍️ 自訂</button>
+                </div>
+                <div id="ui-random" class="space-y-2">
+                    <select id="borrow-type" class="w-full p-2 border rounded-lg text-sm font-bold">
+                        <option value="must" data-zh="必須退位" data-en="Must Borrow">必須退位</option>
+                        <option value="none" data-zh="不需退位" data-en="No Borrow">不需退位</option>
+                        <option value="any" data-zh="完全隨機" data-en="Full Random">完全隨機</option>
+                    </select>
+                </div>
+                <div id="ui-manual" class="hidden flex gap-2">
+                    <input type="number" id="m-n1" class="w-1/2 p-2 border-2 border-blue-200 rounded-lg text-center font-bold" placeholder="被減數">
+                    <input type="number" id="m-n2" class="w-1/2 p-2 border-2 border-blue-200 rounded-lg text-center font-bold" placeholder="減數">
+                </div>
+            </div>
+
+            <div class="flex flex-col justify-center gap-3 bg-slate-50 p-3 rounded-2xl border">
+                <label class="flex items-center gap-2 font-bold text-slate-600 cursor-pointer">
+                    <input type="checkbox" id="check-tracing" onchange="updateUI()" class="w-5 h-5"> 
+                    <span data-zh="虛線數字" data-en="Tracing Font">虛線數字</span>
+                </label>
+                <div class="flex gap-2">
+                    <button onclick="setLang('zh')" id="lang-zh" class="flex-1 text-xs py-1 rounded border-2 border-blue-500 bg-blue-500 text-white font-bold">中</button>
+                    <button onclick="setLang('en')" id="lang-en" class="flex-1 text-xs py-1 rounded border-2 border-slate-300 font-bold">EN</button>
+                </div>
+            </div>
+
+            <div class="flex flex-col justify-center gap-2">
+                <button onclick="replayAnimation()" class="w-full py-2 rounded-xl bg-slate-200 font-bold hover:bg-slate-300 transition" data-zh="🔄 重播演示" data-en="🔄 Replay">🔄 重播演示</button>
+                <button onclick="togglePause()" id="pause-btn" class="w-full py-2 rounded-xl bg-amber-100 text-amber-700 font-bold">
+                    <span id="pause-text" data-zh="⏸ 暫停" data-en="⏸ Pause">⏸ 暫停</span>
+                </button>
+            </div>
+
+            <button onclick="handleStart()" class="bg-blue-600 text-white rounded-2xl font-black text-xl shadow-lg hover:bg-blue-700 active:scale-95 transition">
+                GO!
+            </button>
+        </div>
+    </div>
+
+    <div class="flex flex-col lg:flex-row gap-6 items-stretch">
+        <div class="bg-white p-6 rounded-3xl shadow-lg border border-slate-200 w-full lg:w-80 text-center">
+            <div id="problem-display" class="text-2xl font-black text-slate-800 mb-4"></div>
+            <div id="math-container" class="vertical-math-box mx-auto">
+                <canvas id="sketch-canvas"></canvas>
+                <table class="v-table">
+                    <thead><tr class="text-xs text-slate-400"><th></th><th data-zh="十" data-en="T">十</th><th data-zh="個" data-en="O">個</th></tr></thead>
+                    <tbody>
+                        <tr><td></td><td id="v-n1-t"></td><td id="v-n1-o"></td></tr>
+                        <tr class="v-line"><td class="text-red-500">－</td><td id="v-n2-t"></td><td id="v-n2-o"></td></tr>
+                        <tr><td></td><td><input type="number" class="answer-input" id="in-t"></td><td><input type="number" class="answer-input" id="in-o"></td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="mt-6 flex flex-col gap-2">
+                <button onclick="checkAnswer()" class="w-full bg-emerald-500 text-white py-3 rounded-xl font-bold shadow-md" data-zh="檢查答案" data-en="Check">檢查答案</button>
+                <button onclick="clearCanvas()" class="text-slate-400 text-xs underline" data-zh="清除手寫" data-en="Clear">清除手寫</button>
+            </div>
+            <div id="feedback" class="mt-4 font-bold text-lg h-6"></div>
+        </div>
+
+        <div class="bg-white p-6 rounded-3xl shadow-lg border border-slate-200 flex-grow">
+            <div class="flex gap-4">
+                <div class="flex-1 bg-green-50 p-4 rounded-2xl min-h-[250px]">
+                    <div class="text-center font-bold text-green-700 mb-4 border-b border-green-200" data-zh="十位" data-en="Tens">十位</div>
+                    <div id="visual-tens" class="flex flex-wrap gap-3 justify-center relative">
+                        <div id="ring" class="ring-highlight"></div>
+                    </div>
+                </div>
+                <div class="flex-1 bg-yellow-50 p-4 rounded-2xl min-h-[250px]">
+                    <div class="text-center font-bold text-yellow-700 mb-4 border-b border-yellow-200" data-zh="個位" data-en="Ones">個位</div>
+                    <div id="visual-ones" class="grid grid-cols-5 gap-2 justify-items-center"></div>
+                </div>
+            </div>
+            <div id="step-desc" class="mt-6 p-4 bg-blue-900 text-white rounded-2xl font-bold text-lg shadow-lg"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let n1, n2, isPaused = false, animationTimeouts = [], currentStep = 0, currentLang = 'zh', currentMode = 'random';
+
+    const langLib = {
+        zh: {
+            init: (t, o) => `原本：${t} 個十，${o} 個一。`,
+            check_b: (o, s) => `個位只有 ${o}，不夠減 ${s}，要借位！`,
+            check_n: (o, s) => `個位有 ${o}，減去 ${s}，夠減喔。`,
+            borrow: () => `圈出一個「十位棒」...`,
+            transform: () => `借過來個位，換成 10 個「綠色」的小積木。`,
+            subOnes: (o, s) => `個位相減：${o} － ${s}。`,
+            subTens: (t, s) => `十位相減：剩下 ${t} 減 ${s}。`,
+            correct: "🌟 正確！", wrong: "❌ 算錯囉！"
+        },
+        en: {
+            init: (t, o) => `Original: ${t} Tens, ${o} Ones.`,
+            check_b: (o, s) => `${o} < ${s}, need to borrow!`,
+            check_n: (o, s) => `${o} >= ${s}, no need to borrow.`,
+            borrow: () => `Circle one "Ten" block...`,
+            transform: () => `Borrow it! Swap for 10 green one-blocks.`,
+            subOnes: (o, s) => `Subtract ones: ${o} - ${s}.`,
+            subTens: (t, s) => `Subtract tens: ${t} - ${s}.`,
+            correct: "🌟 Correct!", wrong: "❌ Try again!"
+        }
+    };
+
+    function setMode(m) {
+        currentMode = m;
+        document.getElementById('btn-mode-random').className = m === 'random' ? 'flex-1 py-1 rounded-lg font-bold bg-white shadow text-blue-600' : 'flex-1 py-1 rounded-lg font-bold text-slate-500';
+        document.getElementById('btn-mode-manual').className = m === 'manual' ? 'flex-1 py-1 rounded-lg font-bold bg-white shadow text-blue-600' : 'flex-1 py-1 rounded-lg font-bold text-slate-500';
+        document.getElementById('ui-random').classList.toggle('hidden', m !== 'random');
+        document.getElementById('ui-manual').classList.toggle('hidden', m !== 'manual');
+    }
+
+    function setLang(l) {
+        currentLang = l;
+        document.querySelectorAll('[data-zh]').forEach(el => el.innerText = el.getAttribute(`data-${l}`));
+        document.getElementById('lang-zh').className = l === 'zh' ? 'flex-1 text-xs py-1 rounded border-2 border-blue-500 bg-blue-500 text-white font-bold' : 'flex-1 text-xs py-1 rounded border-2 border-slate-300 font-bold';
+        document.getElementById('lang-en').className = l === 'en' ? 'flex-1 text-xs py-1 rounded border-2 border-blue-500 bg-blue-500 text-white font-bold' : 'flex-1 text-xs py-1 rounded border-2 border-slate-300 font-bold';
+        if(n1) updateUI();
+    }
+
+    function handleStart() {
+        if(currentMode === 'random') {
+            const type = document.getElementById('borrow-type').value;
+            let t1, t2, isB;
+            do {
+                t1 = Math.floor(Math.random() * 80) + 19;
+                t2 = Math.floor(Math.random() * (t1 - 5)) + 1;
+                isB = (t1 % 10) < (t2 % 10);
+            } while (type === 'must' && !isB || type === 'none' && isB);
+            n1 = t1; n2 = t2;
+        } else {
+            n1 = parseInt(document.getElementById('m-n1').value);
+            n2 = parseInt(document.getElementById('m-n2').value);
+            if(!n1 || !n2 || n1 <= n2) return alert("請輸入有效的數字 (被減數大於減數)");
+        }
+        isPaused = false;
+        updateUI();
+        replayAnimation();
+    }
+
+    function updateUI() {
+        document.getElementById('problem-display').innerText = `${n1} － ${n2} = ?`;
+        const isT = document.getElementById('check-tracing').checked;
+        const s1 = n1.toString().padStart(2, ' '), s2 = n2.toString().padStart(2, ' ');
+        const cells = [document.getElementById('v-n1-t'), document.getElementById('v-n1-o'), document.getElementById('v-n2-t'), document.getElementById('v-n2-o')];
+        cells[0].innerText = s1[0]; cells[1].innerText = s1[1]; cells[2].innerText = s2[0]; cells[3].innerText = s2[1];
+        cells.forEach(c => c.className = isT ? 'tracing' : '');
+        document.getElementById('feedback').innerText = "";
+        clearCanvas();
+        setTimeout(resizeCanvas, 50);
+    }
+
+    function togglePause() {
+        isPaused = !isPaused;
+        document.getElementById('pause-text').innerText = isPaused ? (currentLang==='zh'?"▶ 繼續":"▶ Resume") : (currentLang==='zh'?"⏸ 暫停":"⏸ Pause");
+        if (!isPaused) runNextStep();
+    }
+
+    function replayAnimation() {
+        animationTimeouts.forEach(clearTimeout);
+        animationTimeouts = []; isPaused = false; currentStep = 0;
+        document.getElementById('visual-tens').innerHTML = '<div id="ring" class="ring-highlight"></div>';
+        document.getElementById('visual-ones').innerHTML = '';
+        runNextStep();
+    }
+
+    function runNextStep() {
+        if (isPaused) return;
+        const isB = (n1 % 10) < (n2 % 10);
+        const seq = [
+            { id: 'init', d: 800, fn: initBlocks, desc: () => langLib[currentLang].init(Math.floor(n1/10), n1%10) },
+            { id: 'check', d: 1500, fn: () => {}, desc: () => isB ? langLib[currentLang].check_b(n1%10, n2%10) : langLib[currentLang].check_n(n1%10, n2%10) }
+        ];
+        if(isB) {
+            seq.push({ id: 'ring', d: 1000, fn: doRing, desc: () => langLib[currentLang].borrow() });
+            seq.push({ id: 'trans', d: 1800, fn: doTrans, desc: () => langLib[currentLang].transform() });
+        }
+        seq.push({ id: 'subO', d: 2000, fn: doSubO, desc: () => langLib[currentLang].subOnes(n1%10 + (isB?10:0), n2%10) });
+        seq.push({ id: 'subT', d: 1500, fn: doSubT, desc: () => langLib[currentLang].subTens(Math.floor(n1/10) - (isB?1:0), Math.floor(n2/10)) });
+
+        if(currentStep >= seq.length) return;
+        const step = seq[currentStep];
+        document.getElementById('step-desc').innerText = step.desc();
+        step.fn();
+        currentStep++;
+        animationTimeouts.push(setTimeout(runNextStep, step.d));
+    }
+
+    function initBlocks() {
+        const tCount = Math.floor(n1/10), oCount = n1%10;
+        const tc = document.getElementById('visual-tens'), oc = document.getElementById('visual-ones');
+        for(let i=0; i<tCount; i++) {
+            const b = document.createElement('div'); b.className='block-ten'; b.id=`t-${i}`;
+            for(let j=0; j<10; j++) b.appendChild(document.createElement('div')).className='block-ten-segment';
+            tc.appendChild(b);
+        }
+        for(let i=0; i<oCount; i++) {
+            const b = document.createElement('div'); b.className='block-one'; oc.appendChild(b);
+        }
+    }
+
+    function doRing() {
+        const last = document.getElementById(`t-${Math.floor(n1/10)-1}`);
+        const ring = document.getElementById('ring');
+        if(last) {
+            ring.style.opacity="1"; ring.style.width=(last.offsetWidth+12)+"px"; ring.style.height=(last.offsetHeight+12)+"px";
+            ring.style.left=(last.offsetLeft-6)+"px"; ring.style.top=(last.offsetTop-6)+"px";
+        }
+    }
+
+    function doTrans() {
+        const last = document.getElementById(`t-${Math.floor(n1/10)-1}`);
+        document.getElementById('ring').style.opacity="0";
+        if(last) {
+            last.style.transform="translateX(200px) rotate(90deg) scale(0)"; last.style.opacity="0";
+            setTimeout(() => {
+                const oc = document.getElementById('visual-ones');
+                for(let i=0; i<10; i++) { const b=document.createElement('div'); b.className='block-one borrowed'; oc.appendChild(b); }
+            }, 800);
+        }
+    }
+
+    function doSubO() {
+        const ones = Array.from(document.getElementById('visual-ones').children);
+        const sub = n2 % 10;
+        ones.slice(-sub).forEach((el, i) => setTimeout(() => el.classList.add('removed'), i*200));
+    }
+
+    function doSubT() {
+        const sub = Math.floor(n2/10);
+        const start = Math.floor(n1/10) - ((n1%10 < n2%10)?1:0);
+        for(let i=0; i<sub; i++) {
+            setTimeout(() => { const t = document.getElementById(`t-${start-1-i}`); if(t){ t.style.opacity="0.1"; t.style.transform="scale(0.8)"; } }, i*300);
+        }
+    }
+
+    function checkAnswer() {
+        const ans = parseInt(document.getElementById('in-t').value + document.getElementById('in-o').value);
+        const fb = document.getElementById('feedback');
+        const correct = ans === (n1 - n2);
+        fb.innerText = correct ? langLib[currentLang].correct : langLib[currentLang].wrong;
+        fb.style.color = correct ? "#10b981" : "#ef4444";
+    }
+
+    // Canvas
+    const canvas = document.getElementById('sketch-canvas'), ctx = canvas.getContext('2d'), mathBox = document.getElementById('math-container');
+    let drawing = false;
+    function resizeCanvas() { canvas.width = mathBox.offsetWidth; canvas.height = mathBox.offsetHeight; ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 3; ctx.lineCap = 'round'; }
+    function draw(e) {
+        if (!drawing) return;
+        const r = canvas.getBoundingClientRect();
+        const x = (e.clientX || e.touches?.[0].clientX) - r.left;
+        const y = (e.clientY || e.touches?.[0].clientY) - r.top;
+        ctx.lineTo(x, y); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x, y);
+    }
+    canvas.addEventListener('mousedown', () => drawing = true);
+    canvas.addEventListener('mousemove', draw);
+    window.addEventListener('mouseup', () => { drawing = false; ctx.beginPath(); });
+    canvas.addEventListener('touchstart', (e) => { e.preventDefault(); drawing = true; });
+    canvas.addEventListener('touchmove', (e) => { e.preventDefault(); draw(e); });
+    function clearCanvas() { ctx.clearRect(0, 0, canvas.width, canvas.height); }
+
+    window.onload = () => { handleStart(); setLang('zh'); };
+    window.onresize = resizeCanvas;
+</script>
+</body>
+</html>

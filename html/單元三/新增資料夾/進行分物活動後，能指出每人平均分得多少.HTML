@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>開心分分樂：平均分配小學堂 2.0</title>
+    
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+HK:wght@700;900&display=swap');
+        body {
+            font-family: 'Noto Sans HK', sans-serif;
+            background-color: #FFFBEB;
+            touch-action: manipulation;
+            overflow: hidden;
+            user-select: none;
+        }
+        .plate {
+            background: radial-gradient(circle, #ffffff 60%, #f1f5f9 100%);
+            box-shadow: inset 0 4px 6px rgba(0,0,0,0.1), 0 10px 15px -3px rgba(0,0,0,0.1);
+            border: 6px solid #e2e8f0;
+            transition: all 0.3s;
+        }
+        .plate.active { border-color: #fbbf24; transform: scale(1.05); }
+        .item-anim { animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes popIn {
+            0% { transform: scale(0); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .shake { animation: shake 0.5s ease-in-out; }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            75% { transform: translateX(10px); }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const speak = (text) => {
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'zh-HK';
+            utterance.rate = 0.8;
+            window.speechSynthesis.speak(utterance);
+        };
+
+        const App = () => {
+            const [view, setView] = useState('home'); 
+            const [level, setLevel] = useState(0);
+            const [plates, setPlates] = useState([]); // 盤內的物件
+            const [remaining, setRemaining] = useState(0); // 剩餘未分的
+            const [errorShake, setErrorShake] = useState(null); // 錯誤動畫標記
+
+            const LEVELS = [
+                { id: 1, total: 2, people: 2, item: "🍎", name: "蘋果" },
+                { id: 2, total: 4, people: 2, item: "🍪", name: "餅乾" },
+                { id: 3, total: 6, people: 3, item: "🍬", name: "糖果" },
+                { id: 4, total: 6, people: 2, item: "🧁", name: "蛋糕" },
+                { id: 5, total: 9, people: 3, item: "🍓", name: "士多啤梨" }
+            ];
+
+            const current = LEVELS[level];
+            const targetPerPerson = current.total / current.people;
+
+            const initGame = (idx) => {
+                setPlates(Array(LEVELS[idx].people).fill(0));
+                setRemaining(LEVELS[idx].total);
+                const txt = `我有 ${LEVELS[idx].total} 個${LEVELS[idx].name}，我哋平均分畀 ${LEVELS[idx].people} 個小朋友啦！`;
+                speak(txt);
+            };
+
+            const handleDistribute = (pIdx) => {
+                if (remaining <= 0) return;
+
+                // 檢查是否已經分夠了 (平均分配檢查)
+                if (plates[pIdx] >= targetPerPerson) {
+                    setErrorShake(pIdx);
+                    speak("呢位小朋友夠喇，試下分畀其他人啦！");
+                    setTimeout(() => setErrorShake(null), 500);
+                    return;
+                }
+
+                // 執行分配
+                const newPlates = [...plates];
+                newPlates[pIdx] += 1;
+                setPlates(newPlates);
+                setRemaining(remaining - 1);
+                
+                speak("畀你一個！");
+
+                // 檢查是否完結
+                if (remaining - 1 === 0) {
+                    // 檢查是否真的平均 (由於上面有攔截，這裡理論上一定平均，但作雙重保險)
+                    const isAverage = newPlates.every(count => count === targetPerPerson);
+                    if (isAverage) {
+                        setTimeout(() => {
+                            confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+                            speak(`分得好準呀！每人都有 ${targetPerPerson} 個${current.name}！`);
+                            setTimeout(() => setView('result'), 3500);
+                        }, 500);
+                    }
+                }
+            };
+
+            if (view === 'home') {
+                return (
+                    <div className="h-screen flex flex-col items-center justify-center p-6 bg-orange-50">
+                        <h1 className="text-7xl font-black text-orange-600 mb-8">開心分分樂</h1>
+                        <div className="text-[150px] mb-12 animate-bounce">🍎 ➔ 👦👧</div>
+                        <button 
+                            onClick={() => { setView('game'); initGame(0); }}
+                            className="bg-orange-500 text-white text-5xl font-black py-10 px-20 rounded-full shadow-[0_12px_0_#c2410c] active:translate-y-2 active:shadow-none transition-all"
+                        >
+                            開始挑戰
+                        </button>
+                    </div>
+                );
+            }
+
+            if (view === 'game') {
+                return (
+                    <div className="h-screen flex flex-col">
+                        <div className="bg-white p-6 shadow-xl text-center border-b-8 border-orange-200">
+                            <h2 className="text-4xl font-bold text-slate-800">
+                                每人要分到 <span className="text-6xl text-orange-500">{targetPerPerson}</span> 個才對喔！
+                            </h2>
+                        </div>
+
+                        <div className="flex-1 flex flex-col items-center justify-center gap-12 p-4">
+                            {/* 剩餘物件區 */}
+                            <div className="bg-white/50 border-4 border-dashed border-orange-300 rounded-3xl p-8 min-h-[160px] flex flex-wrap justify-center items-center gap-4 w-full max-w-4xl">
+                                {Array.from({length: remaining}).map((_, i) => (
+                                    <span key={i} className="text-6xl item-anim">{current.item}</span>
+                                ))}
+                                {remaining === 0 && <span className="text-4xl text-green-600 font-black animate-pulse">分完喇！好棒！</span>}
+                            </div>
+
+                            {/* 角色與盤子區 */}
+                            <div className="flex justify-around w-full max-w-6xl">
+                                {plates.map((count, pIdx) => (
+                                    <div 
+                                        key={pIdx}
+                                        onClick={() => handleDistribute(pIdx)}
+                                        className={`flex flex-col items-center transition-all ${errorShake === pIdx ? 'shake' : ''}`}
+                                    >
+                                        <div className="text-8xl mb-4 transition-transform hover:scale-110">
+                                            {pIdx % 2 === 0 ? '👦' : '👧'}
+                                        </div>
+                                        <div className={`plate w-40 h-40 md:w-56 md:h-56 rounded-full flex flex-wrap items-center justify-center p-4 ${remaining > 0 ? 'hover:bg-orange-50 cursor-pointer active' : ''}`}>
+                                            {Array.from({length: count}).map((_, i) => (
+                                                <span key={i} className="text-4xl md:text-5xl item-anim">{current.item}</span>
+                                            ))}
+                                        </div>
+                                        <div className="mt-4 bg-orange-100 text-orange-700 px-6 py-2 rounded-full text-2xl font-bold border-2 border-orange-300">
+                                            我有 {count} 個
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="p-6 text-center text-gray-500 text-2xl font-bold animate-pulse">
+                            點擊小朋友個盤，將{current.name}分畀佢哋！
+                        </div>
+                    </div>
+                );
+            }
+
+            if (view === 'result') {
+                return (
+                    <div className="h-screen flex flex-col items-center justify-center bg-green-50 p-6 text-center">
+                        <div className="text-[200px] mb-8">🎉</div>
+                        <h2 className="text-6xl font-black text-green-600 mb-6">太叻喇！</h2>
+                        <p className="text-4xl text-slate-700 mb-12">
+                            你成功將 {current.total} 個{current.name} <br/>
+                            平均分畀 {current.people} 個人，每人有 {targetPerPerson} 個！
+                        </p>
+                        <button 
+                            onClick={() => {
+                                if (level < LEVELS.length - 1) {
+                                    const next = level + 1;
+                                    setLevel(next);
+                                    setView('game');
+                                    initGame(next);
+                                } else {
+                                    setView('home');
+                                    setLevel(0);
+                                }
+                            }}
+                            className="bg-green-500 text-white text-5xl font-black py-10 px-20 rounded-full shadow-[0_12px_0_#15803d] active:translate-y-2 active:shadow-none transition-all"
+                        >
+                            {level < LEVELS.length - 1 ? "下一關" : "返去首頁"}
+                        </button>
+                    </div>
+                );
+            }
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

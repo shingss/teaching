@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>除法學習工具：平均分配</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 自訂樣式，主要用於物品移動的平滑過渡動畫 */
+        .item-transition {
+            transition: left 0.6s cubic-bezier(0.34, 1.56, 0.64, 1), 
+                        top 0.6s cubic-bezier(0.34, 1.56, 0.64, 1),
+                        transform 0.3s ease;
+        }
+        
+        /* 拖拉時取消過渡效果，讓物品緊跟游標 */
+        .dragging {
+            transition: none !important;
+            z-index: 100 !important;
+            transform: scale(1.2) translate(-50%, -50%) !important;
+            cursor: grabbing !important;
+        }
+
+        .draggable {
+            cursor: grab;
+            touch-action: none; /* 防止手機拖拉時滾動頁面 */
+        }
+        
+        /* 隱藏/顯示動畫 */
+        .fade-in {
+            animation: fadeIn 0.5s ease-in forwards;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* 木頭質感的桌子 */
+        .wood-table {
+            background-color: #d4a373;
+            box-shadow: inset 0 0 50px rgba(0,0,0,0.3), 0 10px 20px rgba(0,0,0,0.2);
+            border: 8px solid #8b5a2b;
+        }
+
+        /* 碟子高亮效果 (拖拉到上方時) */
+        .plate-highlight {
+            border-color: #3b82f6 !important;
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.5) !important;
+            background-color: #eff6ff !important;
+        }
+    </style>
+</head>
+<body class="bg-blue-50 min-h-screen flex flex-col items-center py-8 font-sans">
+
+    <div class="max-w-5xl w-full px-4 flex flex-col items-center">
+        <!-- 標題區域 -->
+        <h1 class="text-4xl font-bold text-blue-800 mb-6 flex items-center gap-3">
+            <span>➗</span> 齊齊學除法：平均分配
+        </h1>
+
+        <!-- 模式切換標籤 -->
+        <div class="flex gap-2 mb-6 bg-gray-200 p-1 rounded-xl shadow-inner flex-wrap justify-center">
+            <button id="tab-demo" class="px-5 py-2 rounded-lg font-bold text-lg transition duration-200 bg-white text-blue-600 shadow">
+                📺 示範
+            </button>
+            <button id="tab-quiz-norem" class="px-5 py-2 rounded-lg font-bold text-lg transition duration-200 text-gray-600 hover:bg-gray-300">
+                ✍️ 測驗 (無餘數)
+            </button>
+            <button id="tab-quiz-rem" class="px-5 py-2 rounded-lg font-bold text-lg transition duration-200 text-gray-600 hover:bg-gray-300">
+                ✍️ 測驗 (有餘數)
+            </button>
+            <button id="tab-wp" class="px-5 py-2 rounded-lg font-bold text-lg transition duration-200 text-gray-600 hover:bg-gray-300">
+                📝 應用題
+            </button>
+        </div>
+
+        <!-- 示範模式控制面板 -->
+        <div id="panel-demo" class="bg-white p-6 rounded-2xl shadow-lg w-full max-w-3xl mb-8 flex flex-wrap gap-4 items-end justify-center z-10 relative">
+            <div class="flex flex-col">
+                <label class="text-gray-700 font-bold mb-1">物品總數 (被除數)</label>
+                <input type="number" id="input-items" min="1" max="30" value="14" class="border-2 border-gray-300 rounded-lg px-4 py-2 w-32 text-lg focus:border-blue-500 focus:outline-none">
+            </div>
+            <div class="flex flex-col">
+                <label class="text-gray-700 font-bold mb-1">同枱人數 (除數)</label>
+                <input type="number" id="input-people" min="1" max="10" value="3" class="border-2 border-gray-300 rounded-lg px-4 py-2 w-32 text-lg focus:border-blue-500 focus:outline-none">
+            </div>
+            <div class="flex flex-col">
+                <label class="text-gray-700 font-bold mb-1">物品種類</label>
+                <select id="select-type" class="border-2 border-gray-300 rounded-lg px-4 py-2 text-lg focus:border-blue-500 focus:outline-none bg-white">
+                    <option value="🍎" data-name="蘋果">🍎 蘋果</option>
+                    <option value="🧊" data-name="方塊">🧊 方塊</option>
+                    <option value="🍬" data-name="糖果">🍬 糖果</option>
+                    <option value="⭐" data-name="星星">⭐ 星星</option>
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <button id="btn-setup" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-lg text-lg transition duration-200 shadow-md">
+                    排好物品
+                </button>
+                <button id="btn-start" disabled class="bg-green-500 hover:bg-green-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-bold py-2 px-6 rounded-lg text-lg transition duration-200 shadow-md">
+                    ▶️ 開始分配
+                </button>
+            </div>
+        </div>
+
+        <!-- 測驗模式控制面板 (預設隱藏) -->
+        <div id="panel-quiz" class="hidden bg-white p-6 rounded-2xl shadow-lg w-full max-w-4xl mb-8 flex flex-col items-center gap-4 z-10 relative border-4 border-indigo-200">
+            <div class="flex justify-between items-center w-full mb-2 flex-wrap gap-2">
+                <p class="text-lg font-bold text-indigo-700">👆 請將中間的物品拖拉到各個人的碟子上，然後列出除法算式！</p>
+                <button id="btn-random-quiz" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-6 rounded-lg text-md transition duration-200 shadow-md flex items-center gap-2">
+                    🎲 隨機出題
+                </button>
+            </div>
+            
+            <!-- 學生輸入算式區 -->
+            <div class="bg-indigo-50 p-4 rounded-xl w-full flex flex-wrap items-center justify-center gap-3 text-2xl font-bold">
+                <div class="flex flex-col items-center">
+                    <input type="number" id="quiz-dividend" class="w-20 text-center border-2 border-indigo-300 rounded p-2 focus:border-indigo-600 outline-none" placeholder="總數">
+                    <span class="text-xs text-gray-500 mt-1">被除數</span>
+                </div>
+                <span>÷</span>
+                <div class="flex flex-col items-center">
+                    <input type="number" id="quiz-divisor" class="w-20 text-center border-2 border-indigo-300 rounded p-2 focus:border-indigo-600 outline-none" placeholder="人數">
+                    <span class="text-xs text-gray-500 mt-1">除數</span>
+                </div>
+                <span>=</span>
+                <div class="flex flex-col items-center">
+                    <input type="number" id="quiz-quotient" class="w-20 text-center border-2 border-green-300 rounded p-2 focus:border-green-600 outline-none" placeholder="每人">
+                    <span class="text-xs text-gray-500 mt-1">商 (每人分得)</span>
+                </div>
+                
+                <!-- 餘數區域 (無餘數模式下會隱藏) -->
+                <div id="quiz-remainder-group" class="flex items-center gap-3" style="display: flex;">
+                    <span>... 餘</span>
+                    <div class="flex flex-col items-center">
+                        <input type="number" id="quiz-remainder" class="w-20 text-center border-2 border-orange-300 rounded p-2 focus:border-orange-600 outline-none" placeholder="剩餘">
+                        <span class="text-xs text-gray-500 mt-1">餘數 (未分配)</span>
+                    </div>
+                </div>
+                
+                <button id="btn-check" class="ml-4 bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-8 rounded-lg text-xl transition duration-200 shadow-md">
+                    ✅ 檢查答案
+                </button>
+            </div>
+            <div id="quiz-feedback" class="text-xl font-bold mt-2 hidden rounded p-2 px-6"></div>
+        </div>
+
+        <!-- 應用題模式 控制面板 -->
+        <div id="panel-wp" class="hidden bg-white p-6 rounded-2xl shadow-lg w-full max-w-4xl mb-8 flex flex-col items-center gap-4 z-10 relative border-4 border-pink-200">
+            <div class="w-full bg-pink-50 p-4 rounded-xl border-2 border-pink-200 mb-2">
+                <p id="wp-question" class="text-2xl font-bold text-pink-800 text-center leading-relaxed">
+                    載入題目中...
+                </p>
+            </div>
+            
+            <div class="flex justify-between items-center w-full mb-2 flex-wrap gap-2">
+                <p class="text-lg font-bold text-pink-700">👆 閱讀題目後，拖拉物品平均分配並列出算式！</p>
+                <button id="btn-next-wp" class="bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-4 rounded-lg text-md transition duration-200 shadow-md flex items-center gap-2">
+                    🔄 下一題
+                </button>
+            </div>
+            
+            <!-- 學生輸入算式區 (純除法，無餘數) -->
+            <div class="bg-pink-50 p-4 rounded-xl w-full flex flex-wrap items-center justify-center gap-3 text-2xl font-bold">
+                <div class="flex flex-col items-center">
+                    <input type="number" id="wp-dividend" class="w-20 text-center border-2 border-pink-300 rounded p-2 focus:border-pink-600 outline-none" placeholder="總數">
+                    <span class="text-xs text-gray-500 mt-1">被除數</span>
+                </div>
+                <span>÷</span>
+                <div class="flex flex-col items-center">
+                    <input type="number" id="wp-divisor" class="w-20 text-center border-2 border-pink-300 rounded p-2 focus:border-pink-600 outline-none" placeholder="人數">
+                    <span class="text-xs text-gray-500 mt-1">除數</span>
+                </div>
+                <span>=</span>
+                <div class="flex flex-col items-center">
+                    <input type="number" id="wp-quotient" class="w-20 text-center border-2 border-green-300 rounded p-2 focus:border-green-600 outline-none" placeholder="每人">
+                    <span class="text-xs text-gray-500 mt-1">商</span>
+                </div>
+                
+                <button id="btn-check-wp" class="ml-4 bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-8 rounded-lg text-xl transition duration-200 shadow-md">
+                    ✅ 檢查答案
+                </button>
+            </div>
+            <div id="wp-feedback" class="text-xl font-bold mt-2 hidden rounded p-2 px-6"></div>
+        </div>
+
+        <!-- 算式顯示區 (示範模式用) -->
+        <div id="equation-container" class="mb-6 opacity-0 hidden transition-all duration-500">
+            <div class="bg-yellow-100 border-4 border-yellow-400 px-8 py-4 rounded-2xl shadow-lg text-center text-3xl font-bold text-yellow-800">
+                <span id="eq-dividend">14</span> ÷ <span id="eq-divisor">3</span> = <span id="eq-quotient">4</span> ... 餘 <span id="eq-remainder">2</span>
+            </div>
+        </div>
+
+        <!-- 動畫與互動展示區 -->
+        <div class="relative w-full max-w-[650px] aspect-square flex items-center justify-center mt-2">
+            <!-- 圓桌 -->
+            <div id="table" class="wood-table w-[70%] h-[70%] rounded-full absolute"></div>
+            
+            <!-- 存放人物和物品的容器 -->
+            <div id="scene" class="absolute w-full h-full relative">
+                <!-- Javascript 將會在這裡動態加入人物和物品的 DOM 元素 -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 狀態變數 ---
+        let currentMode = 'demo'; // 'demo', 'quiz-norem', 'quiz-rem', 或 'wp'
+        let totalItems = 14;
+        let peopleCount = 3;
+        let itemEmoji = '🍎';
+        let itemName = '蘋果';
+        let isAnimating = false;
+        
+        // 測驗模式專用變數
+        let plateData = []; // 儲存碟子的位置與狀態 {x, y, personIndex, items: []}
+        let unassignedItems = []; // 尚未分配的物品陣列
+        let draggedItem = null;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+
+        // DOM 元素參考
+        const scene = document.getElementById('scene');
+        const eqContainer = document.getElementById('equation-container');
+        const feedbackContainer = document.getElementById('quiz-feedback');
+        
+        // 面板與按鈕
+        const tabDemo = document.getElementById('tab-demo');
+        const tabQuizNoRem = document.getElementById('tab-quiz-norem');
+        const tabQuizRem = document.getElementById('tab-quiz-rem');
+        const tabWp = document.getElementById('tab-wp');
+        const panelDemo = document.getElementById('panel-demo');
+        const panelQuiz = document.getElementById('panel-quiz');
+        const panelWp = document.getElementById('panel-wp');
+        const quizRemainderGroup = document.getElementById('quiz-remainder-group');
+        
+        // 示範模式控制項
+        const btnSetup = document.getElementById('btn-setup');
+        const btnStart = document.getElementById('btn-start');
+        const inputItems = document.getElementById('input-items');
+        const inputPeople = document.getElementById('input-people');
+        const selectType = document.getElementById('select-type');
+        
+        // 測驗模式控制項
+        const btnRandomQuiz = document.getElementById('btn-random-quiz');
+        const btnCheck = document.getElementById('btn-check');
+        const quizDividend = document.getElementById('quiz-dividend');
+        const quizDivisor = document.getElementById('quiz-divisor');
+        const quizQuotient = document.getElementById('quiz-quotient');
+        const quizRemainder = document.getElementById('quiz-remainder');
+
+        // 應用題模式控制項
+        const btnNextWp = document.getElementById('btn-next-wp');
+        const btnCheckWp = document.getElementById('btn-check-wp');
+        const wpDividend = document.getElementById('wp-dividend');
+        const wpDivisor = document.getElementById('wp-divisor');
+        const wpQuotient = document.getElementById('wp-quotient');
+        const wpFeedback = document.getElementById('wp-feedback');
+        const wpQuestionText = document.getElementById('wp-question');
+
+        // 人物頭像陣列與物品選擇
+        const peopleAvatars = ['🧑', '👧', '👨', '👩', '👱‍♂️', '👱‍♀️', '👴', '👵', '👦', '🧒'];
+        const itemOptions = [
+            { emoji: '🍎', name: '蘋果' },
+            { emoji: '🍬', name: '糖果' },
+            { emoji: '🍪', name: '餅乾' },
+            { emoji: '🍓', name: '士多啤梨' },
+            { emoji: '⚽', name: '足球' }
+        ];
+
+        // --- 語音功能 (廣東話) ---
+        if ('speechSynthesis' in window) { window.speechSynthesis.getVoices(); }
+        function speakCantonese(text, callback) {
+            if (!('speechSynthesis' in window)) { if(callback) callback(); return; }
+            const synth = window.speechSynthesis;
+            synth.cancel(); // 停止先前的語音
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'zh-HK';
+            utterance.rate = 0.9;
+            const voices = synth.getVoices();
+            const hkVoice = voices.find(v => v.lang === 'zh-HK' || v.lang === 'yue-HK' || v.name.includes('Cantonese'));
+            if (hkVoice) utterance.voice = hkVoice;
+            if (callback) utterance.onend = callback;
+            synth.speak(utterance);
+        }
+
+        // --- 模式切換 ---
+        function switchMode(mode) {
+            if (isAnimating) return;
+            currentMode = mode;
+            window.speechSynthesis.cancel();
+            
+            // 重置所有分頁的樣式
+            const allTabs = [tabDemo, tabQuizNoRem, tabQuizRem, tabWp];
+            allTabs.forEach(tab => {
+                tab.classList.replace('text-blue-600', 'text-gray-600');
+                tab.classList.replace('bg-white', 'hover:bg-gray-300');
+                tab.classList.remove('shadow');
+            });
+            
+            // 隱藏所有面板
+            const allPanels = [panelDemo, panelQuiz, panelWp];
+            allPanels.forEach(panel => panel.classList.add('hidden'));
+            
+            eqContainer.classList.add('hidden');
+            feedbackContainer.classList.add('hidden');
+            wpFeedback.classList.add('hidden');
+
+            if (mode === 'demo') {
+                tabDemo.classList.replace('text-gray-600', 'text-blue-600');
+                tabDemo.classList.replace('hover:bg-gray-300', 'bg-white');
+                tabDemo.classList.add('shadow');
+                panelDemo.classList.remove('hidden');
+                setupScene();
+            } else if (mode === 'quiz-norem') {
+                tabQuizNoRem.classList.replace('text-gray-600', 'text-blue-600');
+                tabQuizNoRem.classList.replace('hover:bg-gray-300', 'bg-white');
+                tabQuizNoRem.classList.add('shadow');
+                panelQuiz.classList.remove('hidden');
+                quizRemainderGroup.style.display = 'none'; // 隱藏餘數輸入框
+                generateRandomQuiz();
+            } else if (mode === 'quiz-rem') {
+                tabQuizRem.classList.replace('text-gray-600', 'text-blue-600');
+                tabQuizRem.classList.replace('hover:bg-gray-300', 'bg-white');
+                tabQuizRem.classList.add('shadow');
+                panelQuiz.classList.remove('hidden');
+                quizRemainderGroup.style.display = 'flex'; // 顯示餘數輸入框
+                generateRandomQuiz();
+            } else if (mode === 'wp') {
+                tabWp.classList.replace('text-gray-600', 'text-blue-600');
+                tabWp.classList.replace('hover:bg-gray-300', 'bg-white');
+                tabWp.classList.add('shadow');
+                panelWp.classList.remove('hidden');
+                generateWordProblem();
+            }
+        }
+
+        // --- 排版與場景建立 ---
+        function setupScene(isRandom = false) {
+            if (isAnimating) return;
+            
+            if (!isRandom && currentMode === 'demo') {
+                totalItems = parseInt(inputItems.value) || 0;
+                peopleCount = parseInt(inputPeople.value) || 1;
+                if (totalItems <= 0 || totalItems > 40) { alert("物品請設定在 1 到 40 之間！"); inputItems.value = 14; totalItems = 14; }
+                if (peopleCount <= 0 || peopleCount > 8) { alert("人數請設定在 1 到 8 之間！"); inputPeople.value = 3; peopleCount = 3; }
+                itemEmoji = selectType.value;
+                itemName = selectType.options[selectType.selectedIndex].dataset.name;
+            }
+
+            scene.innerHTML = '';
+            eqContainer.classList.add('hidden');
+            eqContainer.classList.remove('fade-in');
+            
+            plateData = [];
+            unassignedItems = [];
+
+            const sceneWidth = scene.clientWidth;
+            const sceneHeight = scene.clientHeight;
+            const centerX = sceneWidth / 2;
+            const centerY = sceneHeight / 2;
+            const tableRadius = sceneWidth * 0.35; 
+            const peopleRadius = tableRadius + 50; 
+            const plateRadius = tableRadius - 35;  
+
+            // 1. 佈置人物與碟子
+            for (let i = 0; i < peopleCount; i++) {
+                const angle = (i * (2 * Math.PI) / peopleCount) - (Math.PI / 2);
+                
+                // 人物
+                const x = centerX + peopleRadius * Math.cos(angle);
+                const y = centerY + peopleRadius * Math.sin(angle);
+                const personDiv = document.createElement('div');
+                personDiv.className = 'absolute text-5xl flex flex-col items-center justify-center transform -translate-x-1/2 -translate-y-1/2 pointer-events-none z-30';
+                personDiv.style.left = `${x}px`;
+                personDiv.style.top = `${y}px`;
+                const avatar = peopleAvatars[i % peopleAvatars.length];
+                personDiv.innerHTML = `
+                    <div class="drop-shadow-lg">${avatar}</div>
+                    <div class="bg-white rounded-full px-3 py-1 text-sm font-bold text-gray-700 shadow border-2 border-gray-200 mt-2" id="person-count-${i}">0</div>
+                `;
+                scene.appendChild(personDiv);
+
+                // 碟子
+                const plateX = centerX + plateRadius * Math.cos(angle);
+                const plateY = centerY + plateRadius * Math.sin(angle);
+                const plateDiv = document.createElement('div');
+                plateDiv.id = `plate-${i}`;
+                plateDiv.className = 'absolute rounded-full bg-white border-2 border-gray-200 shadow-[inset_0_3px_6px_rgba(0,0,0,0.1),0_2px_4px_rgba(0,0,0,0.2)] transform -translate-x-1/2 -translate-y-1/2 z-10 transition-colors duration-200';
+                plateDiv.style.width = '80px';
+                plateDiv.style.height = '80px';
+                plateDiv.style.left = `${plateX}px`;
+                plateDiv.style.top = `${plateY}px`;
+                plateDiv.innerHTML = '<div class="absolute inset-2 rounded-full border border-gray-100 opacity-50 pointer-events-none"></div>';
+                scene.appendChild(plateDiv);
+
+                // 記錄碟子資料以供互動拖拉判定
+                plateData.push({ x: plateX, y: plateY, personIndex: i, element: plateDiv, items: [] });
+            }
+
+            // 2. 佈置物品 (置中)
+            const cols = Math.ceil(Math.sqrt(totalItems));
+            const rows = Math.ceil(totalItems / cols);
+            const itemSize = 40; 
+            const gap = 5;       
+            const gridWidth = cols * itemSize + (cols - 1) * gap;
+            const gridHeight = rows * itemSize + (rows - 1) * gap;
+            const startX = centerX - gridWidth / 2 + itemSize / 2;
+            const startY = centerY - gridHeight / 2 + itemSize / 2;
+
+            for (let i = 0; i < totalItems; i++) {
+                const row = Math.floor(i / cols);
+                const col = i % cols;
+                const x = startX + col * (itemSize + gap);
+                const y = startY + row * (itemSize + gap);
+
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'item-transition absolute text-4xl drop-shadow-md flex items-center justify-center transform -translate-x-1/2 -translate-y-1/2 z-20';
+                
+                // 除了示範模式，其他模式皆可拖拉
+                if (currentMode !== 'demo') {
+                    itemDiv.classList.add('draggable');
+                    itemDiv.addEventListener('pointerdown', handlePointerDown);
+                } else {
+                    itemDiv.classList.add('pointer-events-none');
+                }
+
+                itemDiv.id = `item-${i}`;
+                itemDiv.style.left = `${x}px`;
+                itemDiv.style.top = `${y}px`;
+                itemDiv.innerHTML = itemEmoji;
+                itemDiv.dataset.index = i;
+                itemDiv.dataset.assignedPlate = "-1"; // -1 代表在中央未分配
+
+                scene.appendChild(itemDiv);
+                unassignedItems.push({ id: i, element: itemDiv, origX: x, origY: y });
+            }
+
+            if (currentMode === 'demo') {
+                btnStart.disabled = false;
+                speakCantonese(`枱面上有 ${totalItems} 個${itemName}，準備分畀 ${peopleCount} 個人。`);
+            } else if (currentMode.includes('quiz')) {
+                speakCantonese(`考考你，將 ${totalItems} 個${itemName}分畀 ${peopleCount} 個人，然後填寫算式啦！`);
+            }
+        }
+
+        // --- 測驗模式：隨機出題 ---
+        function generateRandomQuiz() {
+            peopleCount = Math.floor(Math.random() * 4) + 2; // 人數 2 到 5
+            let quotient = Math.floor(Math.random() * 5) + 2; // 每人分得數量 2 到 6
+            
+            if (currentMode === 'quiz-norem') {
+                totalItems = peopleCount * quotient; // 保證無餘數
+            } else {
+                let remainder = Math.floor(Math.random() * (peopleCount - 1)) + 1; // 產生 1 到 (人數-1) 之間的餘數
+                totalItems = (peopleCount * quotient) + remainder;
+            }
+            
+            const randomItem = itemOptions[Math.floor(Math.random() * itemOptions.length)];
+            itemEmoji = randomItem.emoji;
+            itemName = randomItem.name;
+
+            // 清空輸入框和回饋
+            quizDividend.value = '';
+            quizDivisor.value = '';
+            quizQuotient.value = '';
+            quizRemainder.value = '';
+            feedbackContainer.classList.add('hidden');
+
+            setupScene(true);
+        }
+
+        // --- 應用題模式：生成題目 ---
+        const wpSubjects = ['媽媽', '老師', '陳先生', '李太太', '店長', '婆婆'];
+        const wpActions = ['買咗', '準備咗', '有', '整咗', '帶咗'];
+
+        function generateWordProblem() {
+            peopleCount = Math.floor(Math.random() * 4) + 2; // 人數 2 到 5
+            let quotient = Math.floor(Math.random() * 5) + 2; // 每人分得數量 2 到 6
+            
+            // 確保無餘數
+            totalItems = peopleCount * quotient;
+            
+            const randomItem = itemOptions[Math.floor(Math.random() * itemOptions.length)];
+            itemEmoji = randomItem.emoji;
+            itemName = randomItem.name;
+
+            const subject = wpSubjects[Math.floor(Math.random() * wpSubjects.length)];
+            const action = wpActions[Math.floor(Math.random() * wpActions.length)];
+            
+            // 生成廣東話應用題句子
+            const questionText = `${subject}${action} ${totalItems} 個${itemName}，準備平均分畀 ${peopleCount} 個小朋友，請問每個小朋友可以分到幾多個${itemName}呢？`;
+            
+            wpQuestionText.innerText = questionText;
+
+            // 清空輸入框和回饋
+            wpDividend.value = '';
+            wpDivisor.value = '';
+            wpQuotient.value = '';
+            wpFeedback.classList.add('hidden');
+            
+            setupScene(true);
+            speakCantonese(questionText);
+        }
+
+        // --- 拖拉互動邏輯 ---
+        function handlePointerDown(e) {
+            if (currentMode === 'demo') return;
+            e.preventDefault();
+            draggedItem = e.currentTarget;
+            
+            // 將物品移到最上層，取消動畫
+            draggedItem.classList.add('dragging');
+            draggedItem.setPointerCapture(e.pointerId);
+
+            // 計算游標與物品中心的偏移量，防止點擊時跳動
+            const rect = draggedItem.getBoundingClientRect();
+            const parentRect = scene.getBoundingClientRect();
+            // 轉換至 scene 的相對座標
+            const itemX = rect.left - parentRect.left + rect.width / 2;
+            const itemY = rect.top - parentRect.top + rect.height / 2;
+            
+            const pointerX = e.clientX - parentRect.left;
+            const pointerY = e.clientY - parentRect.top;
+            
+            dragOffsetX = itemX - pointerX;
+            dragOffsetY = itemY - pointerY;
+
+            draggedItem.addEventListener('pointermove', handlePointerMove);
+            draggedItem.addEventListener('pointerup', handlePointerUp);
+            draggedItem.addEventListener('pointercancel', handlePointerUp);
+            
+            // 如果原本在碟子上，先從碟子資料中移除
+            const prevPlateIdx = parseInt(draggedItem.dataset.assignedPlate);
+            if (prevPlateIdx !== -1) {
+                removeItemsFromPlate(draggedItem, prevPlateIdx);
+            }
+        }
+
+        function handlePointerMove(e) {
+            if (!draggedItem) return;
+            
+            const parentRect = scene.getBoundingClientRect();
+            const pointerX = e.clientX - parentRect.left;
+            const pointerY = e.clientY - parentRect.top;
+
+            const newX = pointerX + dragOffsetX;
+            const newY = pointerY + dragOffsetY;
+
+            draggedItem.style.left = `${newX}px`;
+            draggedItem.style.top = `${newY}px`;
+
+            // 檢查是否靠近任何碟子 (高亮效果)
+            plateData.forEach(plate => {
+                const dist = Math.hypot(plate.x - newX, plate.y - newY);
+                if (dist < 60) {
+                    plate.element.classList.add('plate-highlight');
+                } else {
+                    plate.element.classList.remove('plate-highlight');
+                }
+            });
+        }
+
+        function handlePointerUp(e) {
+            if (!draggedItem) return;
+            
+            draggedItem.removeEventListener('pointermove', handlePointerMove);
+            draggedItem.removeEventListener('pointerup', handlePointerUp);
+            draggedItem.removeEventListener('pointercancel', handlePointerUp);
+            draggedItem.releasePointerCapture(e.pointerId);
+            draggedItem.classList.remove('dragging');
+
+            const parentRect = scene.getBoundingClientRect();
+            const dropX = e.clientX - parentRect.left + dragOffsetX;
+            const dropY = e.clientY - parentRect.top + dragOffsetY;
+
+            // 尋找最近的碟子
+            let targetPlateIndex = -1;
+            let minDistance = 60; // 吸附半徑
+
+            plateData.forEach((plate, index) => {
+                plate.element.classList.remove('plate-highlight'); // 移除高亮
+                const dist = Math.hypot(plate.x - dropX, plate.y - dropY);
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    targetPlateIndex = index;
+                }
+            });
+
+            const itemDataObj = unassignedItems.find(item => item.element === draggedItem) || 
+                                plateData.flatMap(p => p.items).find(item => item.element === draggedItem);
+
+            if (targetPlateIndex !== -1 && itemDataObj) {
+                // 放入碟子
+                draggedItem.dataset.assignedPlate = targetPlateIndex;
+                plateData[targetPlateIndex].items.push(itemDataObj);
+                
+                // 從未分配陣列移除(如果存在)
+                const unassignedIdx = unassignedItems.findIndex(item => item.element === draggedItem);
+                if (unassignedIdx > -1) unassignedItems.splice(unassignedIdx, 1);
+                
+                // 重排該碟子內的物品，使其看起來堆疊在一起
+                rearrangePlate(targetPlateIndex);
+                
+                // 播放清脆的音效 (可選，這裡用簡單的縮放動畫代替)
+                draggedItem.style.transform = 'translate(-50%, -50%) scale(0.7)';
+                setTimeout(() => { if (draggedItem) draggedItem.style.transform = 'translate(-50%, -50%) scale(0.8)'; }, 150);
+
+            } else if (itemDataObj) {
+                // 彈回中央原位
+                draggedItem.dataset.assignedPlate = "-1";
+                draggedItem.style.left = `${itemDataObj.origX}px`;
+                draggedItem.style.top = `${itemDataObj.origY}px`;
+                draggedItem.style.transform = 'translate(-50%, -50%) scale(1)';
+                
+                // 加回未分配陣列
+                if (!unassignedItems.includes(itemDataObj)) {
+                    unassignedItems.push(itemDataObj);
+                }
+            }
+
+            draggedItem = null;
+        }
+
+        function removeItemsFromPlate(itemElement, plateIndex) {
+            const plate = plateData[plateIndex];
+            const idx = plate.items.findIndex(item => item.element === itemElement);
+            if (idx > -1) {
+                plate.items.splice(idx, 1);
+                updatePersonCount(plateIndex, plate.items.length);
+                rearrangePlate(plateIndex); // 重新排版剩下的物品
+            }
+        }
+
+        function rearrangePlate(plateIndex) {
+            const plate = plateData[plateIndex];
+            const items = plate.items;
+            updatePersonCount(plateIndex, items.length);
+
+            items.forEach((itemObj, i) => {
+                // 螺旋排列演算法
+                const angleOffset = i * 2.4; 
+                const radiusOffset = Math.sqrt(i) * 10; 
+                const offsetX = radiusOffset * Math.cos(angleOffset);
+                const offsetY = radiusOffset * Math.sin(angleOffset);
+
+                itemObj.element.style.left = `${plate.x + offsetX}px`;
+                itemObj.element.style.top = `${plate.y + offsetY}px`;
+                itemObj.element.style.transform = 'translate(-50%, -50%) scale(0.8)';
+            });
+        }
+
+        function updatePersonCount(index, count) {
+            const badge = document.getElementById(`person-count-${index}`);
+            if (!badge) return;
+            badge.innerText = count;
+            badge.classList.add('scale-125', 'text-blue-600', 'transition', 'duration-200');
+            setTimeout(() => badge.classList.remove('scale-125', 'text-blue-600'), 200);
+        }
+
+        // --- 測驗模式：檢查答案 ---
+        function checkQuizAnswer() {
+            const ansDiv = parseInt(quizDividend.value);
+            const ansDsr = parseInt(quizDivisor.value);
+            const ansQuo = parseInt(quizQuotient.value);
+            let ansRem = 0; // 無餘數模式預設餘數為 0
+
+            const correctQuo = Math.floor(totalItems / peopleCount);
+            const correctRem = totalItems % peopleCount;
+
+            feedbackContainer.classList.remove('hidden', 'bg-green-100', 'text-green-800', 'bg-red-100', 'text-red-800');
+
+            // 1. 檢查算式邏輯是否正確填寫
+            if (isNaN(ansDiv) || isNaN(ansDsr) || isNaN(ansQuo)) {
+                showFeedback('⚠️ 請填滿所有空格再檢查喔！', 'error');
+                return;
+            }
+
+            // 若在「有餘數」模式下，額外檢查餘數欄位
+            if (currentMode === 'quiz-rem') {
+                ansRem = parseInt(quizRemainder.value);
+                if (isNaN(ansRem)) {
+                    showFeedback('⚠️ 請填寫餘數喔！', 'error');
+                    return;
+                }
+            }
+
+            if (ansDiv !== totalItems || ansDsr !== peopleCount) {
+                showFeedback(`❌ 被除數或除數錯了。總共有 ${totalItems} 個物品，分給 ${peopleCount} 個人。`, 'error');
+                return;
+            }
+
+            if (ansQuo !== correctQuo || (currentMode === 'quiz-rem' && ansRem !== correctRem)) {
+                showFeedback(`❌ 答案不太對喔！請再算一次，或者拖拉物品試試看。`, 'error');
+                return;
+            }
+
+            // 2. 檢查學生是否有確實進行拖拉分配 (額外條件)
+            let isDraggingCorrect = true;
+            for (let p of plateData) {
+                if (p.items.length !== correctQuo) {
+                    isDraggingCorrect = false;
+                    break;
+                }
+            }
+
+            if (isDraggingCorrect) {
+                showFeedback(`🎉 答對啦！算式和分配畫面都完全正確！`, 'success');
+                let speechText = `叻仔！答對啦！${totalItems} 除以 ${peopleCount}，等於 ${correctQuo}`;
+                if (currentMode === 'quiz-rem') speechText += `，餘數係 ${correctRem}`;
+                speakCantonese(speechText + `。`);
+            } else {
+                showFeedback(`✅ 算式答對了！(但畫面上的物品好像還沒完全平均分配喔，你可以試著分完它)`, 'success');
+                speakCantonese(`算式寫得啱！`);
+            }
+        }
+
+        function showFeedback(text, type) {
+            feedbackContainer.innerText = text;
+            feedbackContainer.classList.remove('hidden');
+            if (type === 'success') {
+                feedbackContainer.classList.add('bg-green-100', 'text-green-800', 'border-2', 'border-green-400');
+            } else {
+                feedbackContainer.classList.add('bg-red-100', 'text-red-800', 'border-2', 'border-red-400');
+            }
+        }
+
+        // --- 應用題模式：檢查答案 ---
+        function checkWpAnswer() {
+            const ansDiv = parseInt(wpDividend.value);
+            const ansDsr = parseInt(wpDivisor.value);
+            const ansQuo = parseInt(wpQuotient.value);
+
+            const correctQuo = Math.floor(totalItems / peopleCount);
+
+            wpFeedback.classList.remove('hidden', 'bg-green-100', 'text-green-800', 'bg-red-100', 'text-red-800');
+
+            if (isNaN(ansDiv) || isNaN(ansDsr) || isNaN(ansQuo)) {
+                showWpFeedback('⚠️ 請填滿所有空格再檢查喔！', 'error');
+                return;
+            }
+
+            if (ansDiv !== totalItems || ansDsr !== peopleCount) {
+                showWpFeedback(`❌ 睇下上面嘅題目，總共有 ${totalItems} 個物品，分畀 ${peopleCount} 個人喔。`, 'error');
+                return;
+            }
+
+            if (ansQuo !== correctQuo) {
+                showWpFeedback(`❌ 答案不太對喔！試下將物品拖落碟度數下。`, 'error');
+                return;
+            }
+
+            let isDraggingCorrect = true;
+            for (let p of plateData) {
+                if (p.items.length !== correctQuo) {
+                    isDraggingCorrect = false;
+                    break;
+                }
+            }
+
+            if (isDraggingCorrect) {
+                showWpFeedback(`🎉 答對啦！算式同分配都非常正確！`, 'success');
+                speakCantonese(`叻仔！答對啦！${totalItems} 除以 ${peopleCount}，等於 ${correctQuo}。`);
+            } else {
+                showWpFeedback(`✅ 算式答對了！(你可以試下將畫面上嘅物品都分埋佢)`, 'success');
+                speakCantonese(`算式寫得啱！`);
+            }
+        }
+
+        function showWpFeedback(text, type) {
+            wpFeedback.innerText = text;
+            wpFeedback.classList.remove('hidden');
+            if (type === 'success') {
+                wpFeedback.classList.add('bg-green-100', 'text-green-800', 'border-2', 'border-green-400');
+            } else {
+                wpFeedback.classList.add('bg-red-100', 'text-red-800', 'border-2', 'border-red-400');
+            }
+        }
+
+        // --- 示範模式動畫 ---
+        function startDemoDistribution() {
+            if (isAnimating) return;
+            isAnimating = true;
+            
+            btnSetup.disabled = true;
+            btnStart.disabled = true;
+            inputItems.disabled = true;
+            inputPeople.disabled = true;
+            selectType.disabled = true;
+
+            window.speechSynthesis.cancel();
+            speakCantonese(`開始分啦！`);
+
+            const quotient = Math.floor(totalItems / peopleCount); 
+            const remainder = totalItems % peopleCount;            
+
+            let personReceivedCount = new Array(peopleCount).fill(0);
+            let currentItemIndex = 0;
+
+            const intervalId = setInterval(() => {
+                if (currentItemIndex >= quotient * peopleCount) {
+                    clearInterval(intervalId);
+                    // 餘數動畫：加上空值檢查防止錯誤
+                    for(let i = currentItemIndex; i < totalItems; i++) {
+                        const itemDiv = document.getElementById(`item-${i}`);
+                        if (itemDiv) {
+                            itemDiv.style.transform = 'translate(-50%, -50%) scale(1.2)';
+                            setTimeout(() => {
+                                if (itemDiv) itemDiv.style.transform = 'translate(-50%, -50%) scale(1)';
+                            }, 300);
+                        }
+                    }
+                    setTimeout(() => showDemoResult(quotient, remainder), 1000);
+                    return;
+                }
+
+                const personIndex = currentItemIndex % peopleCount;
+                const itemDiv = document.getElementById(`item-${currentItemIndex}`);
+                const plate = plateData[personIndex];
+                
+                // 加上空值檢查防止動畫中斷出錯
+                if (itemDiv && plate) {
+                    const received = personReceivedCount[personIndex];
+                    const angleOffset = received * 2.4; 
+                    const radiusOffset = Math.sqrt(received) * 10; 
+                    const offsetX = radiusOffset * Math.cos(angleOffset);
+                    const offsetY = radiusOffset * Math.sin(angleOffset);
+
+                    itemDiv.style.left = `${plate.x + offsetX}px`;
+                    itemDiv.style.top = `${plate.y + offsetY}px`;
+                    itemDiv.style.transform = `translate(-50%, -50%) scale(0.8)`; 
+                }
+                
+                personReceivedCount[personIndex]++;
+                updatePersonCount(personIndex, personReceivedCount[personIndex]);
+
+                currentItemIndex++;
+            }, 500);
+        }
+
+        function showDemoResult(quotient, remainder) {
+            document.getElementById('eq-dividend').innerText = totalItems;
+            document.getElementById('eq-divisor').innerText = peopleCount;
+            document.getElementById('eq-quotient').innerText = quotient;
+            document.getElementById('eq-remainder').innerText = remainder;
+
+            eqContainer.classList.remove('hidden');
+            eqContainer.classList.add('fade-in');
+
+            let text = `每個人分到 ${quotient} 個。`;
+            text += remainder > 0 ? `淨低 ${remainder} 個。` : `無淨低。`;
+            text += `算式係：${totalItems} 除以 ${peopleCount}，等於 ${quotient}，餘 ${remainder}。`;
+
+            speakCantonese(text, () => {
+                isAnimating = false;
+                btnSetup.disabled = false;
+                inputItems.disabled = false;
+                inputPeople.disabled = false;
+                selectType.disabled = false;
+            });
+        }
+
+        // --- 事件綁定 ---
+        tabDemo.addEventListener('click', () => switchMode('demo'));
+        tabQuizNoRem.addEventListener('click', () => switchMode('quiz-norem'));
+        tabQuizRem.addEventListener('click', () => switchMode('quiz-rem'));
+        tabWp.addEventListener('click', () => switchMode('wp'));
+        
+        btnSetup.addEventListener('click', () => setupScene(false));
+        btnStart.addEventListener('click', startDemoDistribution);
+        
+        btnRandomQuiz.addEventListener('click', generateRandomQuiz);
+        btnCheck.addEventListener('click', checkQuizAnswer);
+
+        btnNextWp.addEventListener('click', generateWordProblem);
+        btnCheckWp.addEventListener('click', checkWpAnswer);
+
+        window.addEventListener('resize', () => {
+            if (!isAnimating) {
+                if(currentMode === 'demo') setupScene();
+                // 測驗模式若調整視窗大小，由於座標會變動，建議重新出題或重置
+                else setupScene(true); 
+            }
+        });
+
+        window.addEventListener('load', () => {
+            setTimeout(() => setupScene(false), 100);
+        });
+
+    </script>
+</body>
+</html>

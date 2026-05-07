@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>整理數數遊戲 (單機版)</title>
+    
+    <!-- 引入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 引入 React 與 ReactDOM (Umd 版) -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    
+    <!-- 引入 Babel 用來即時編譯 JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- 內建 CSS 樣式與動畫 -->
+    <style>
+        @keyframes popIn { 0% { transform: scale(0.3); opacity: 0; } 50% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+        .animate-popIn { animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-8px); } 50% { transform: translateX(8px); } 75% { transform: translateX(-8px); } }
+        .animate-shake { animation: shake 0.4s ease-in-out; }
+        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        
+        /* 防止拖拉時選取文字造成干擾 */
+        .no-select { user-select: none; -webkit-user-select: none; }
+    </style>
+</head>
+<body class="bg-sky-50 m-0 p-0 font-sans text-gray-800 min-h-screen flex flex-col items-center">
+    
+    <div id="root" class="w-full h-full flex flex-col items-center"></div>
+
+    <!-- 遊戲主程式 (React) -->
+    <script type="text/babel" data-type="module">
+        const { useState, useEffect, useRef } = React;
+
+        // 預設可選物件
+        const DEFAULT_OBJECTS = [
+          { type: 'emoji', value: '🍎' },
+          { type: 'emoji', value: '🐶' },
+          { type: 'emoji', value: '🚗' },
+          { type: 'emoji', value: '⚽' },
+          { type: 'emoji', value: '⭐' },
+          { type: 'emoji', value: '🎈' }
+        ];
+
+        function App() {
+          // --- 系統與設定狀態 ---
+          const [appMode, setAppMode] = useState('settings'); // 'settings', 'game'
+          const [isRandomMode, setIsRandomMode] = useState(false);
+          const [teacherTarget, setTeacherTarget] = useState(10);
+          const [teacherObject, setTeacherObject] = useState(DEFAULT_OBJECTS[0]);
+          const fileInputRef = useRef(null);
+
+          // --- 遊戲內部狀態 ---
+          const [activeConfig, setActiveConfig] = useState({ targetCount: 10, object: DEFAULT_OBJECTS[0] });
+          const [gameState, setGameState] = useState('playing'); // 'playing', 'input', 'win'
+          const [items, setItems] = useState([]);
+          const [time, setTime] = useState(0);
+          
+          // --- 拖拉相關狀態 ---
+          const [selectedId, setSelectedId] = useState(null);
+          const [draggingItem, setDraggingItem] = useState(null);
+          const [dragPos, setDragPos] = useState({ x: 0, y: 0 });
+          
+          const [animatingCells, setAnimatingCells] = useState([]);
+          const [userAnswer, setUserAnswer] = useState('');
+          const [errorShake, setErrorShake] = useState(false);
+
+          // 參考 DOM 元素以計算座標
+          const gridRef = useRef(null);
+          const cellRefs = useRef([]);
+
+          // --- 遊戲計時器 ---
+          useEffect(() => {
+            let timer;
+            if (appMode === 'game' && gameState === 'playing') {
+              timer = setInterval(() => setTime((t) => t + 1), 1000);
+            }
+            return () => clearInterval(timer);
+          }, [appMode, gameState]);
+
+          // --- 檢查是否所有物件已排好 ---
+          useEffect(() => {
+            if (appMode === 'game' && gameState === 'playing' && items.length > 0) {
+              const allPlaced = items.every((item) => item.gridIndex !== null);
+              if (allPlaced) {
+                setGameState('input');
+              }
+            }
+          }, [items, gameState, appMode]);
+
+          // --- 圖片上傳壓縮邏輯 ---
+          const handleImageUpload = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (event) => {
+              const img = new Image();
+              img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const MAX_SIZE = 100;
+                let width = img.width, height = img.height;
+                if (width > height && width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; } 
+                else if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; }
+                canvas.width = width; canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                const dataUrl = canvas.toDataURL('image/png');
+                setTeacherObject({ type: 'image', value: dataUrl });
+              };
+              img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+          };
+
+          // --- 遊戲控制邏輯 ---
+          const startGame = () => {
+            let finalCount = parseInt(teacherTarget);
+            if (isRandomMode) {
+              finalCount = Math.floor(Math.random() * (18 - 5 + 1)) + 5; // 5~18 隨機
+            }
+            if (isNaN(finalCount) || finalCount < 1) finalCount = 1;
+            if (finalCount > 18) finalCount = 18;
+
+            setActiveConfig({ targetCount: finalCount, object: teacherObject });
+            
+            const newItems = Array.from({ length: finalCount }).map((_, i) => ({
+              id: i, 
+              x: Math.random() * 75 + 10, 
+              y: Math.random() * 75 + 10, 
+              gridIndex: null,
+            }));
+            
+            setItems(newItems);
+            setGameState('playing');
+            setTime(0);
+            setUserAnswer('');
+            setErrorShake(false);
+            setSelectedId(null);
+            setDraggingItem(null);
+            setAnimatingCells([]);
+            setAppMode('game');
+          };
+
+          const backToSettings = () => {
+            setAppMode('settings');
+          };
+
+          const handleSubmitAnswer = () => {
+            if (parseInt(userAnswer) === activeConfig.targetCount) {
+              playSound('success'); 
+              setGameState('win');
+            } else {
+              setErrorShake(true); 
+              setTimeout(() => setErrorShake(false), 500);
+            }
+          };
+
+          // --- 音效與渲染 ---
+          const playSound = (type) => {
+            try {
+              const ctx = new (window.AudioContext || window.webkitAudioContext)();
+              const osc = ctx.createOscillator(); const gain = ctx.createGain();
+              osc.connect(gain); gain.connect(ctx.destination); const now = ctx.currentTime;
+              if (type === 'pop') {
+                osc.type = 'triangle'; osc.frequency.setValueAtTime(400, now); osc.frequency.exponentialRampToValueAtTime(800, now + 0.1);
+                gain.gain.setValueAtTime(0.5, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                osc.start(); osc.stop(now + 0.1);
+              } else if (type === 'success') {
+                osc.type = 'sine'; osc.frequency.setValueAtTime(523.25, now); osc.frequency.setValueAtTime(659.25, now + 0.1);
+                osc.frequency.setValueAtTime(783.99, now + 0.2); osc.frequency.setValueAtTime(1046.50, now + 0.3);
+                gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(0.3, now + 0.05);
+                gain.gain.setValueAtTime(0.3, now + 0.3); gain.gain.linearRampToValueAtTime(0, now + 0.5);
+                osc.start(now); osc.stop(now + 0.5);
+              }
+            } catch (e) {}
+          };
+
+          const renderObject = (objData, isAnimating = false) => {
+            if (!objData) return null;
+            const baseClass = `select-none filter drop-shadow-md pointer-events-none ${isAnimating ? 'animate-popIn' : ''}`;
+            if (objData.type === 'image') return <img src={objData.value} alt="item" className={`w-10 h-10 object-contain ${baseClass}`} draggable="false" />;
+            return <div className={`text-3xl sm:text-4xl ${baseClass}`}>{objData.value}</div>;
+          };
+
+          const placeItem = (itemId, cellIndex) => {
+            playSound('pop');
+            setItems((prev) => prev.map((item) => item.id === itemId ? { ...item, gridIndex: cellIndex } : item));
+            setAnimatingCells((prev) => [...prev, cellIndex]);
+            setTimeout(() => setAnimatingCells((prev) => prev.filter((c) => c !== cellIndex)), 400);
+          };
+
+          // --- 拖拉邏輯 (Pointer Events) ---
+          const handlePointerDown = (e, id) => {
+            if (e.button !== 0 && e.type !== 'touchstart') return; 
+            
+            setSelectedId(id === selectedId ? null : id);
+            setDraggingItem(id);
+            
+            const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+            const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+            setDragPos({ x: clientX, y: clientY });
+
+            if (e.type === 'touchstart') document.body.style.overflow = 'hidden';
+          };
+
+          useEffect(() => {
+            const handlePointerMove = (e) => {
+              if (draggingItem === null) return;
+              const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+              const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+              setDragPos({ x: clientX, y: clientY });
+            };
+
+            const handlePointerUp = (e) => {
+              if (draggingItem !== null) {
+                const clientX = e.clientX || (e.changedTouches && e.changedTouches[0].clientX);
+                const clientY = e.clientY || (e.changedTouches && e.changedTouches[0].clientY);
+                
+                let droppedCellIndex = null;
+                for (let i = 0; i < 25; i++) {
+                  const cell = cellRefs.current[i];
+                  if (cell) {
+                    const rect = cell.getBoundingClientRect();
+                    if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
+                      droppedCellIndex = i;
+                      break;
+                    }
+                  }
+                }
+
+                if (droppedCellIndex !== null && !items.find((i) => i.gridIndex === droppedCellIndex)) {
+                  placeItem(draggingItem, droppedCellIndex);
+                  setSelectedId(null); 
+                }
+
+                setDraggingItem(null);
+                document.body.style.overflow = 'auto';
+              }
+            };
+
+            if (draggingItem !== null) {
+              window.addEventListener('mousemove', handlePointerMove);
+              window.addEventListener('mouseup', handlePointerUp);
+              window.addEventListener('touchmove', handlePointerMove, { passive: false });
+              window.addEventListener('touchend', handlePointerUp);
+            }
+
+            return () => {
+              window.removeEventListener('mousemove', handlePointerMove);
+              window.removeEventListener('mouseup', handlePointerUp);
+              window.removeEventListener('touchmove', handlePointerMove);
+              window.removeEventListener('touchend', handlePointerUp);
+            };
+          }, [draggingItem, items]);
+
+          const handleClickCell = (index) => {
+            if (selectedId !== null && draggingItem === null && !items.find((i) => i.gridIndex === index)) { 
+                placeItem(selectedId, index); 
+                setSelectedId(null); 
+            }
+          };
+
+          // ================= 畫面渲染 =================
+
+          return (
+            <div className="flex flex-col items-center p-4 w-full h-full max-w-5xl">
+
+              {/* ===== 設定面板 (原老師控制台) ===== */}
+              {appMode === 'settings' && (
+                <div className="bg-white p-8 sm:p-12 rounded-3xl shadow-xl w-full mt-10 animate-popIn">
+                  <div className="text-center mb-10">
+                    <div className="text-7xl mb-4">🍎</div>
+                    <h1 className="text-3xl sm:text-4xl font-bold text-amber-600">整理數數遊戲 <span className="text-xl text-gray-400 font-normal">單機版</span></h1>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
+                      {/* 數量設定 */}
+                      <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200">
+                          <h3 className="text-xl font-bold text-gray-700 mb-4 flex items-center gap-2">🔢 1. 設定數量</h3>
+                          <div className="flex items-center gap-3 mb-4">
+                              <button onClick={() => setIsRandomMode(false)} className={`py-3 rounded-xl font-bold transition-colors flex-1 ${!isRandomMode ? 'bg-sky-500 text-white shadow-md' : 'bg-gray-200 text-gray-500 hover:bg-gray-300'}`}>固定數量</button>
+                              <button onClick={() => setIsRandomMode(true)} className={`py-3 rounded-xl font-bold transition-colors flex-1 ${isRandomMode ? 'bg-purple-500 text-white shadow-md' : 'bg-gray-200 text-gray-500 hover:bg-gray-300'}`}>隨機 (5-18)</button>
+                          </div>
+                          {!isRandomMode && (
+                              <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                                  <label className="font-bold text-gray-600 text-lg">指定數量 (1-18)：</label>
+                                  <input type="number" min="1" max="18" value={teacherTarget} onChange={(e) => setTeacherTarget(e.target.value)} className="w-20 text-center text-2xl p-2 border-2 border-sky-200 rounded-lg outline-none focus:border-sky-500 font-bold text-sky-700"/>
+                              </div>
+                          )}
+                      </div>
+
+                      {/* 物件設定 */}
+                      <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200">
+                          <h3 className="text-xl font-bold text-gray-700 mb-4 flex items-center justify-between">
+                              <span className="flex items-center gap-2">🧸 2. 選擇排版物件</span>
+                          </h3>
+                          
+                          <div className="flex items-center justify-center mb-4 p-4 bg-white rounded-xl border border-amber-200 shadow-inner">
+                              <span className="text-gray-500 mr-4 font-bold">目前選擇：</span>
+                              <div className="w-16 h-16 flex items-center justify-center bg-amber-50 rounded-lg">
+                                  {renderObject(teacherObject)}
+                              </div>
+                          </div>
+
+                          <div className="flex flex-wrap gap-3 justify-center">
+                              {DEFAULT_OBJECTS.map((obj, idx) => (
+                                  <button key={idx} onClick={() => setTeacherObject(obj)}
+                                      className={`text-3xl w-14 h-14 flex items-center justify-center rounded-xl transition-transform hover:scale-110 
+                                      ${teacherObject.value === obj.value ? 'bg-amber-200 shadow-inner ring-4 ring-amber-400' : 'bg-white shadow border border-gray-200'}`}
+                                  >
+                                      {obj.value}
+                                  </button>
+                              ))}
+                              {/* 上傳圖片按鈕 */}
+                              <div className="relative">
+                                  <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
+                                  <button onClick={() => fileInputRef.current.click()}
+                                      className={`h-14 px-4 flex items-center justify-center gap-2 rounded-xl font-bold transition-transform hover:scale-105
+                                      ${teacherObject.type === 'image' ? 'bg-amber-200 text-amber-800 ring-4 ring-amber-400' : 'bg-white text-gray-600 shadow border border-gray-200'}`}
+                                  >
+                                      🖼️ 上傳圖片
+                                  </button>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+
+                  <button onClick={startGame} className="w-full py-5 bg-green-500 hover:bg-green-600 text-white text-2xl font-bold rounded-2xl shadow-lg transition-transform active:scale-95 flex justify-center items-center gap-2">
+                    🚀 開始遊戲
+                  </button>
+                </div>
+              )}
+
+              {/* ===== 遊戲畫面 ===== */}
+              {appMode === 'game' && (
+                <div className="w-full flex flex-col items-center no-select">
+                  <div className="w-full flex justify-between items-center mb-6 bg-white px-6 py-4 rounded-2xl shadow-sm">
+                    <h1 className="text-2xl font-bold text-amber-600 flex items-center gap-2">
+                       🎯 整理小幫手 
+                    </h1>
+                    <div className="flex gap-4 items-center">
+                        <div className="text-xl font-bold text-sky-600 bg-sky-100 px-4 py-2 rounded-lg">計時：{time} 秒</div>
+                        <button onClick={backToSettings} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg font-bold text-gray-700 transition-colors">
+                            結束並返回
+                        </button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col md:flex-row w-full gap-8 justify-center">
+                    {/* --- 左側：5x5 表格 (維持固定不變形) --- */}
+                    <div className="w-full md:w-1/2 flex flex-col items-center">
+                      <h2 className="text-xl font-bold text-gray-700 mb-4 bg-white/50 px-4 py-1 rounded-full pointer-events-none">左側：排放整齊</h2>
+                      <div 
+                        ref={gridRef}
+                        className="grid grid-cols-5 grid-rows-5 gap-1 sm:gap-2 w-[320px] h-[320px] sm:w-[400px] sm:h-[400px] shrink-0 p-2 sm:p-3 bg-amber-100 rounded-2xl shadow-inner border-4 border-amber-200"
+                      >
+                        {Array.from({ length: 25 }).map((_, i) => {
+                          const itemInCell = items.find((item) => item.gridIndex === i);
+                          const isAnimating = animatingCells.includes(i);
+                          return (
+                            <div 
+                              key={i} 
+                              ref={el => cellRefs.current[i] = el}
+                              onClick={() => handleClickCell(i)} 
+                              className={`w-full h-full bg-white rounded-xl shadow-sm flex items-center justify-center relative transition-colors overflow-hidden
+                                ${selectedId !== null && !itemInCell ? 'ring-2 ring-amber-300 ring-inset cursor-pointer hover:bg-amber-50' : ''}
+                              `}
+                            >
+                              {itemInCell && renderObject(activeConfig.object, isAnimating)}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* --- 右側：動態區域 --- */}
+                    <div className="w-full md:w-1/2 flex flex-col items-center justify-center">
+                      {gameState === 'playing' && (
+                        <>
+                          <h2 className="text-xl font-bold text-gray-700 mb-4 bg-white/50 px-4 py-1 rounded-full pointer-events-none">右側：混亂的物品</h2>
+                          <div className="w-[320px] h-[320px] sm:w-[400px] sm:h-[400px] shrink-0 relative bg-green-50 rounded-2xl border-4 border-dashed border-green-400 p-4 overflow-hidden shadow-inner touch-none">
+                            {items.filter((item) => item.gridIndex === null).map((item) => (
+                              <div 
+                                key={item.id} 
+                                onMouseDown={(e) => handlePointerDown(e, item.id)}
+                                onTouchStart={(e) => handlePointerDown(e, item.id)}
+                                style={{ 
+                                  left: draggingItem !== item.id ? `${item.x}%` : undefined, 
+                                  top: draggingItem !== item.id ? `${item.y}%` : undefined,
+                                }}
+                                className={`absolute flex items-center justify-center touch-none
+                                  ${draggingItem === item.id ? 'opacity-0' : 'cursor-grab active:cursor-grabbing hover:scale-110 transition-transform'}
+                                  ${selectedId === item.id && draggingItem !== item.id ? 'scale-125 ring-4 ring-yellow-400 rounded-full bg-yellow-100/80 z-10 p-1' : ''}
+                                `}
+                              >
+                                 {renderObject(activeConfig.object)}
+                              </div>
+                            ))}
+                            
+                            {/* 提示文字 */}
+                            {items.filter((item) => item.gridIndex === null).length > 0 && (
+                              <div className="absolute bottom-4 left-0 right-0 text-center text-green-600/60 font-bold pointer-events-none px-4">
+                                可<span className="text-green-700 underline">拖曳</span>或<span className="text-green-700 underline">點擊</span>物品<br/>再放到左邊空格
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
+
+                      {/* --- 答題區域 --- */}
+                      {gameState === 'input' && (
+                        <div className="bg-white rounded-3xl p-8 max-w-[400px] w-full text-center shadow-xl border-4 border-sky-100 animate-popIn">
+                          <div className="text-5xl mb-4 pointer-events-none">✨</div>
+                          <h2 className="text-2xl font-bold text-sky-600 mb-2 pointer-events-none">整理完成！</h2>
+                          <p className="text-md text-gray-600 mb-6 pointer-events-none">
+                            花了 <strong className="text-sky-600">{time}</strong> 秒鐘排整齊。<br/>
+                            請看著左邊數一數，總共有幾個呢？
+                          </p>
+                          
+                          <input type="number" value={userAnswer} onChange={(e) => setUserAnswer(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSubmitAnswer()}
+                            className={`w-32 text-center text-4xl p-3 border-4 rounded-xl focus:outline-none mb-2 transition-colors
+                              ${errorShake ? 'border-red-400 bg-red-50 text-red-600 animate-shake' : 'border-sky-200 focus:border-sky-400 text-sky-800'}
+                            `}
+                            autoFocus placeholder="?"
+                          />
+                          <div className="h-8 mb-4 flex items-center justify-center pointer-events-none">
+                            {errorShake && <p className="text-red-500 font-bold text-sm">數量不對喔，重新數數看！</p>}
+                          </div>
+
+                          <button onClick={handleSubmitAnswer} className="w-full py-4 bg-sky-500 hover:bg-sky-600 text-white text-xl font-bold rounded-xl shadow-lg transition-transform active:scale-95">
+                            提交答案
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* --- 獨立渲染正在被拖拉的物件 (使圖層保持在最上層) --- */}
+              {draggingItem !== null && (
+                 <div 
+                   className="fixed pointer-events-none z-50 scale-125 ring-4 ring-yellow-400 rounded-full bg-yellow-100/80 p-1 flex items-center justify-center drop-shadow-2xl"
+                   style={{
+                     left: dragPos.x,
+                     top: dragPos.y,
+                     transform: 'translate(-50%, -50%)'
+                   }}
+                 >
+                   {renderObject(activeConfig.object)}
+                 </div>
+              )}
+
+              {/* ===== 勝利結算畫面 ===== */}
+              {appMode === 'game' && gameState === 'win' && (
+                <div className="fixed inset-0 bg-green-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                  <div className="bg-white rounded-3xl p-10 max-w-md w-full text-center shadow-2xl animate-popIn">
+                    <div className="text-7xl mb-6 flex justify-center pointer-events-none">{renderObject(activeConfig.object)}</div>
+                    <h2 className="text-4xl font-bold text-green-600 mb-4 pointer-events-none">太棒了！答對了！</h2>
+                    <p className="text-xl text-gray-700 mb-8 pointer-events-none">
+                      花了 <strong className="text-sky-500">{time}</strong> 秒完成！
+                    </p>
+
+                    <div className="flex flex-col gap-3">
+                        <button onClick={startGame} className="w-full py-4 bg-green-500 hover:bg-green-600 text-white text-xl font-bold rounded-xl shadow transition-transform active:scale-95 pointer-events-auto">
+                            再來一局
+                        </button>
+                        <button onClick={backToSettings} className="w-full py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold rounded-xl shadow transition-transform active:scale-95 pointer-events-auto">
+                            返回設定
+                        </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
