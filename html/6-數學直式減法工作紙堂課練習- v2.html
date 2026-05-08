@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>數學直式減法工作紙</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Noto+Sans+TC:wght@500;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root { 
+            --ones: #eab308; 
+            --tens: #22c55e; 
+            --huns: #3b82f6; 
+            --block-scale: 1; /* 積木大小控制變數 */
+        }
+        body { 
+            background: #f1f5f9; 
+            font-family: 'Noto Sans TC', sans-serif; 
+            margin: 0;
+            padding: 20px;
+        }
+        
+        .math-font { font-family: 'Poppins', sans-serif; }
+
+        /* A4 頁面模擬 */
+        .page {
+            background: white;
+            width: 210mm;
+            min-height: 297mm;
+            padding: 12mm 15mm 15mm 15mm;
+            margin: 10px auto;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            position: relative;
+            box-sizing: border-box;
+            page-break-after: always;
+        }
+
+        /* 題目容器：一頁三題 */
+        .problem-container {
+            height: calc((297mm - 30mm) / 3); 
+            border-bottom: 1px dashed #e2e8f0;
+            padding: 15px 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            position: relative; /* 給左上角退位標記定位用 */
+        }
+        .problem-container:last-child { border-bottom: none; }
+
+        /* 積木樣式設計 (支援自訂大小縮放) */
+        .block-hundred { 
+            width: calc(48px * var(--block-scale)); 
+            height: calc(48px * var(--block-scale)); 
+            border: 1px solid rgba(0,0,0,0.15); 
+            border-radius: 4px;
+            background-image: linear-gradient(to right, rgba(255,255,255,0.3) 1px, transparent 1px), 
+                              linear-gradient(to bottom, rgba(255,255,255,0.3) 1px, transparent 1px);
+            background-size: 10% 10%;
+        }
+        .block-ten { 
+            width: calc(14px * var(--block-scale)); 
+            height: calc(48px * var(--block-scale)); 
+            border: 1px solid rgba(0,0,0,0.15); 
+            border-radius: 2px;
+            background-image: linear-gradient(to bottom, rgba(255,255,255,0.3) 1px, transparent 1px);
+            background-size: 100% 10%;
+        }
+        .block-unit { 
+            width: calc(12px * var(--block-scale)); 
+            height: calc(12px * var(--block-scale)); 
+            border: 1px solid rgba(0,0,0,0.15); 
+            border-radius: 2px; 
+        }
+
+        /* 直式表格樣式 */
+        .v-grid-3 { display: grid; grid-template-columns: 35px 55px 55px; row-gap: 4px; }
+        .v-grid-4 { display: grid; grid-template-columns: 35px 55px 55px 55px; row-gap: 4px; }
+        .v-cell { display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 600; line-height: 1; }
+        
+        /* 背景顏色選項 */
+        .bg-tens-col { background-color: rgba(34, 197, 94, 0.08); }
+        .bg-ones-col { background-color: rgba(234, 179, 8, 0.08); }
+
+        /* 列印隱藏及修復空白問題 */
+        @media print {
+            @page { margin: 0; size: A4 portrait; }
+            body { background: white; padding: 0; margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .no-print { display: none !important; }
+            .page { 
+                margin: 0; 
+                box-shadow: none; 
+                border: none; 
+                width: 210mm;
+                min-height: 297mm;
+                padding: 12mm 15mm; 
+                page-break-after: always;
+                page-break-inside: avoid;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 控制面板 -->
+    <div class="no-print max-w-6xl mx-auto bg-white p-6 rounded-xl shadow-lg mb-8 border border-blue-100">
+        <h1 id="mainTitle" class="text-2xl font-bold text-blue-800 mb-6 flex items-center gap-2">
+            🖨️ 工作紙產生器
+        </h1>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-4">
+            <div>
+                <label id="lblCustomTitle" class="block text-sm font-bold text-gray-700 mb-1">自訂標題 / Title</label>
+                <input type="text" id="custom-title" value="堂課練習" class="w-full p-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-800 font-semibold">
+            </div>
+            <div>
+                <label id="lblDiff" class="block text-sm font-bold text-gray-700 mb-1">題目難度</label>
+                <select id="diff-select" class="w-full p-2 border border-gray-300 rounded-lg bg-gray-50">
+                    <option value="no-borrow">不退位 (2位數)</option>
+                    <option value="borrow-10">退位 (2位數)</option>
+                    <option value="borrow-100" selected>退位 (3位數內)</option>
+                    <option value="double-borrow">連續退位 (3位數內)</option>
+                    <option value="across-zero">隔位退位 (例: 305-128)</option>
+                    <option value="custom">自訂範圍設定</option>
+                </select>
+            </div>
+            <div>
+                <label id="lblPages" class="block text-sm font-bold text-gray-700 mb-1">生成頁數</label>
+                <input type="number" id="page-count" value="1" min="1" max="20" class="w-full p-2 border border-gray-300 rounded-lg bg-gray-50">
+            </div>
+            <div>
+                <label id="lblLang" class="block text-sm font-bold text-gray-700 mb-1">語言 / Language</label>
+                <select id="lang-select" class="w-full p-2 border border-gray-300 rounded-lg bg-gray-50">
+                    <option value="zh" selected>中文 (Chinese)</option>
+                    <option value="en">English</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- 自訂範圍專用區塊 -->
+        <div id="custom-range-container" class="hidden mb-4 bg-blue-50/50 p-4 rounded-lg border border-blue-200 flex-wrap gap-4 items-end">
+            <div>
+                <label id="lblCustomMin" class="block text-sm font-bold text-gray-700 mb-1">被減數最小值</label>
+                <input type="number" id="custom-min" value="10" min="2" max="999" class="w-24 p-2 border border-gray-300 rounded-lg bg-white">
+            </div>
+            <div class="text-xl font-bold text-gray-400 mb-2">-</div>
+            <div>
+                <label id="lblCustomMax" class="block text-sm font-bold text-gray-700 mb-1">被減數最大值</label>
+                <input type="number" id="custom-max" value="50" min="2" max="999" class="w-24 p-2 border border-gray-300 rounded-lg bg-white">
+            </div>
+            <div class="ml-2">
+                <label id="lblCustomBorrow" class="block text-sm font-bold text-gray-700 mb-1">退位設定</label>
+                <select id="custom-borrow" class="w-36 p-2 border border-gray-300 rounded-lg bg-white">
+                    <option value="random">隨機 (皆可)</option>
+                    <option value="no-borrow">必定不退位</option>
+                    <option value="borrow">必定退位</option>
+                </select>
+            </div>
+            <div id="customHint" class="text-sm text-gray-500 mb-2 ml-2 font-semibold">
+                (減數將自動小於被減數)
+            </div>
+        </div>
+
+        <div class="mb-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
+            <div class="flex items-center justify-between mb-2">
+                <label id="lblOptions" class="block text-sm font-bold text-gray-700">版面選項 / Layout Options</label>
+                
+                <!-- 積木大小設定 -->
+                <div class="flex items-center gap-2">
+                    <label id="lblBlockSize" class="text-sm font-bold text-gray-700">積木大小：</label>
+                    <select id="block-size" class="p-1 border border-gray-300 rounded bg-white text-sm">
+                        <option value="0.75" id="optBsSmall">小</option>
+                        <option value="1" selected id="optBsNormal">中</option>
+                        <option value="1.25" id="optBsLarge">大</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap gap-6 items-center">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" id="chk-bg-tens" class="w-5 h-5 text-green-600 rounded">
+                    <span id="optBgTens" class="text-sm font-bold text-gray-700">十位背景色</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" id="chk-bg-ones" class="w-5 h-5 text-yellow-600 rounded">
+                    <span id="optBgOnes" class="text-sm font-bold text-gray-700">個位背景色</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" id="chk-hint" class="w-5 h-5 text-blue-600 rounded">
+                    <span id="optHint" class="text-sm font-bold text-gray-700">退位提示 (灰色數字)</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" id="chk-block-total" class="w-5 h-5 text-indigo-500 rounded">
+                    <span id="optBlockTotal" class="text-sm font-bold text-gray-700">顯示積木區總數</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" id="chk-gray" class="w-5 h-5 text-gray-500 rounded">
+                    <span id="optGray" class="text-sm font-bold text-gray-700">直式灰色 (描寫)</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" id="chk-blank" class="w-5 h-5 text-purple-600 rounded">
+                    <span id="optBlank" class="text-sm font-bold text-gray-700">直式空白模式</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer ml-auto">
+                    <input type="checkbox" id="chk-ans" class="w-5 h-5 text-red-600 rounded">
+                    <span id="optAns" class="text-sm font-bold text-gray-700">顯示答案</span>
+                </label>
+            </div>
+            
+            <!-- 文字題模式設定 -->
+            <div class="mt-4 pt-4 border-t border-gray-200 flex flex-wrap gap-4 items-center">
+                <label class="flex items-center gap-2 cursor-pointer bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-200">
+                    <input type="checkbox" id="chk-word-problem" class="w-5 h-5 text-indigo-600 rounded">
+                    <span id="optWordProblem" class="text-sm font-bold text-indigo-800">📖 文字題模式 (無積木，顯示情境圖片與數字)</span>
+                </label>
+                <div id="wp-type-container" class="hidden items-center gap-2 ml-2">
+                    <label id="lblWpType" class="text-sm font-bold text-gray-600">類型：</label>
+                    <select id="wp-type" class="p-1.5 border border-indigo-300 rounded bg-white text-sm font-bold text-indigo-800 shadow-sm w-80">
+                        <option value="1" id="optWpType1">1. 買東西以金錢為主 (算剩餘)</option>
+                        <option value="2" id="optWpType2">2. 取了/拿去吃了 (算剩餘物品)</option>
+                        <option value="3" id="optWpType3">3. 比較 (算相差多少/貴多少)</option>
+                        <option value="4" id="optWpType4">4. 不同類型的減數 (求部分)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        <div class="flex gap-4 mt-6">
+            <button id="btnGen" onclick="generateNewWorksheet()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition shadow-sm">
+                🎲 重新生成題目
+            </button>
+            <button id="btnPrint" onclick="triggerPrint()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg transition shadow-sm">
+                🖨️ 另存 PDF / 列印
+            </button>
+        </div>
+        <div class="mt-3 text-right">
+            <p id="hintText" class="text-xs text-red-500 font-bold">⚠️ 若「列印按鈕」無反應，請直接按鍵盤 Ctrl + P (Mac 請按 Cmd + P) 進行列印。</p>
+            <p class="text-xs text-gray-400 italic mt-1">建議使用 A4 直向列印，列印設定中勾選「背景圖形」以獲得最佳效果。</p>
+        </div>
+    </div>
+
+    <!-- 工作紙內容 -->
+    <div id="worksheet-root"></div>
+
+    <script>
+        // 多國語言辭典
+        const i18n = {
+            zh: {
+                title: "🖨️ 工作紙產生器", lblLang: "語言 / Language", lblDiff: "題目難度", lblCustomTitle: "自訂標題 / Title", lblOptions: "版面選項", lblPages: "生成頁數",
+                optNoBorrow: "不退位 (2位數)", optBorrow10: "退位 (2位數)", optBorrow100: "退位 (3位數內)", optDoubleBorrow: "連續退位 (3位數內)", optAcrossZero: "隔位退位 (例: 305-128)", optCustom: "自訂範圍設定",
+                lblCustomMin: "被減數最小值", lblCustomMax: "被減數最大值", customHint: "(減數將自動小於被減數)", lblCustomBorrow: "退位設定", optCB_rand: "隨機 (皆可)", optCB_noborrow: "必定不退位", optCB_borrow: "必定退位",
+                optBgTens: "十位背景色", optBgOnes: "個位背景色", optHint: "退位提示 (灰色數字)", optBlockTotal: "顯示積木區總數", optGray: "直式灰色 (描寫)", optBlank: "直式空白模式", optAns: "顯示答案", 
+                lblBlockSize: "積木大小：", optBsSmall: "小", optBsNormal: "中", optBsLarge: "大",
+                optWordProblem: "📖 文字題模式 (無積木，顯示情境圖片)", lblWpType: "文字題類型：", 
+                optWpType1: "1. 買東西以金錢為主 (算剩餘)", optWpType2: "2. 取了/拿去吃了 (算剩餘物品)", optWpType3: "3. 比較 (算相差多少/貴多少)", optWpType4: "4. 不同類型的減數 (已知總數求部分)",
+                btnGen: "🎲 重新生成題目", btnPrint: "🖨️ 另存 PDF / 列印",
+                sheetName: "姓名：____________________________________", sheetClass: "班別：____________________", 
+                sheetDate: "日期：__________年________月________日",
+                calcPrefix: "請計算：", blockHint: "積木輔助示意 (被減數)：", ansPrefix: "答：",
+                hunsZone: "百位區", tensZone: "十位區", onesZone: "個位區",
+                huns: "百", tens: "十", ones: "個", empty: "無"
+            },
+            en: {
+                title: "🖨️ Worksheet Generator", lblLang: "Language", lblDiff: "Difficulty", lblCustomTitle: "Title", lblOptions: "Layout Options", lblPages: "Pages",
+                optNoBorrow: "No Borrow (2-digit)", optBorrow10: "Borrow (2-digit)", optBorrow100: "Borrow (Up to 3-digit)", optDoubleBorrow: "Double Borrow (Up to 3-digit)", optAcrossZero: "Across Zero (e.g. 305-128)", optCustom: "Custom Range Settings",
+                lblCustomMin: "Minuend Min", lblCustomMax: "Minuend Max", customHint: "(Subtrahend will be smaller)", lblCustomBorrow: "Borrowing", optCB_rand: "Random", optCB_noborrow: "No Borrow", optCB_borrow: "Must Borrow",
+                optBgTens: "Tens Color", optBgOnes: "Ones Color", optHint: "Borrow Hints (Gray)", optBlockTotal: "Show Block Totals", optGray: "Gray Math (Tracing)", optBlank: "Blank Math Grid", optAns: "Show Answers", 
+                lblBlockSize: "Block Size:", optBsSmall: "Small", optBsNormal: "Normal", optBsLarge: "Large",
+                optWordProblem: "📖 Word Problem (No Blocks, With Images)", lblWpType: "Problem Type:", 
+                optWpType1: "1. Buying items with money", optWpType2: "2. Taken/Eaten (Remainder)", optWpType3: "3. Comparison (Difference)", optWpType4: "4. Missing Part",
+                btnGen: "🎲 Generate Math", btnPrint: "🖨️ Save PDF / Print",
+                sheetName: "Name: ____________________________________", sheetClass: "Class: ____________________",
+                sheetDate: "Date: __________ / ________ / __________",
+                calcPrefix: "Calculate: ", blockHint: "Base Ten Blocks (Minuend):", ansPrefix: "Ans:",
+                hunsZone: "Hundreds", tensZone: "Tens", onesZone: "Ones",
+                huns: "Hundreds", tens: "Tens", ones: "Ones", empty: "None"
+            }
+        };
+
+        const root = document.getElementById('worksheet-root');
+        let currentLang = 'zh';
+        
+        // 全域題目狀態
+        let globalProblems = [];
+
+        function triggerPrint() {
+            try { window.print(); } catch (e) { alert("請直接使用鍵盤快捷鍵：Ctrl + P (Windows) 或 Cmd + P (Mac) 進行列印。"); }
+        }
+
+        function updateUIState() {
+            const type = document.getElementById('diff-select').value;
+            const customContainer = document.getElementById('custom-range-container');
+            if (type === 'custom') {
+                customContainer.classList.remove('hidden'); customContainer.classList.add('flex');
+            } else {
+                customContainer.classList.add('hidden'); customContainer.classList.remove('flex');
+            }
+
+            const wpChecked = document.getElementById('chk-word-problem').checked;
+            const wpTypeContainer = document.getElementById('wp-type-container');
+            if (wpChecked) {
+                wpTypeContainer.classList.remove('hidden'); wpTypeContainer.classList.add('flex');
+            } else {
+                wpTypeContainer.classList.add('hidden'); wpTypeContainer.classList.remove('flex');
+            }
+
+            // 更新 CSS 變數以控制積木大小
+            document.documentElement.style.setProperty('--block-scale', document.getElementById('block-size').value);
+        }
+
+        // 簡化語言切換：只更新變數並重新渲染工作紙，上方介面保持中文
+        function updateLang() {
+            currentLang = document.getElementById('lang-select').value;
+            renderWorksheet();
+        }
+
+        function getRandom(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+
+        function generateNumbers(type) {
+            let n1, n2;
+            switch(type) {
+                case 'no-borrow':
+                    n1 = getRandom(21, 99); n2 = getRandom(11, n1);
+                    if ((n1 % 10) < (n2 % 10)) return generateNumbers(type); break;
+                case 'borrow-10':
+                    n1 = getRandom(21, 99); n2 = getRandom(11, n1 - 5);
+                    if ((n1 % 10) >= (n2 % 10)) return generateNumbers(type); break;
+                case 'borrow-100':
+                    n1 = getRandom(150, 399); n2 = getRandom(60, n1 - 10);
+                    if (!((n1 % 10 < n2 % 10) || (Math.floor(n1/10)%10 < Math.floor(n2/10)%10))) return generateNumbers(type); break;
+                case 'double-borrow':
+                    n1 = getRandom(222, 399); n2 = getRandom(135, n1 - 20);
+                    if (!((n1 % 10 < n2 % 10) && (Math.floor(n1/10)%10 < Math.floor(n2/10)%10))) return generateNumbers(type); break;
+                case 'across-zero':
+                    n1 = getRandom(2, 3) * 100 + getRandom(1, 9); n2 = getRandom(110, n1 - 50);
+                    if (n1 % 10 >= n2 % 10) return generateNumbers(type); break;
+                case 'custom':
+                    let cMin = parseInt(document.getElementById('custom-min').value) || 10;
+                    let cMax = parseInt(document.getElementById('custom-max').value) || 50;
+                    let borrowType = document.getElementById('custom-borrow').value;
+                    if (cMin > cMax) { const temp = cMin; cMin = cMax; cMax = temp; }
+                    cMax = Math.min(cMax, 999); cMin = Math.max(cMin, 2);
+                    
+                    let attempts = 0;
+                    do {
+                        n1 = getRandom(cMin, cMax); n2 = getRandom(1, n1 - 1);
+                        if (n1 === 1) n2 = 1;
+                        if (borrowType === 'random') break;
+                        let isBorrow = (n1 % 10 < n2 % 10) || (Math.floor(n1/10)%10 < Math.floor(n2/10)%10);
+                        if (borrowType === 'no-borrow' && !isBorrow) break;
+                        if (borrowType === 'borrow' && isBorrow) break;
+                        attempts++;
+                    } while (attempts < 150);
+                    break;
+            }
+            return [n1, n2];
+        }
+
+        // 文字題生成邏輯 (包含場景與圖案設計、專屬單位)
+        function generateWordProblem(n1, n2, lang, wpType) {
+            // 定義三大場景與對應題型，新增單位(unit)屬性
+            const scenarios = {
+                '1': [ // Type 1: 買東西以金錢為主
+                    { loc: "超市", i1: "👛", l1: {zh:"原有", en:"Had"}, i2: "🛒", l2: {zh:"花費", en:"Spent"}, unit: {zh:"元", en:"dollars"}, tZh: () => `媽媽帶了 ${n1} 元去超市。她買蔬菜和肉類用去了 ${n2} 元，請問媽媽還剩下多少元？`, tEn: () => `Mom brought $${n1} to the supermarket. She spent $${n2} on groceries. How much money does she have left?` },
+                    { loc: "便利店", i1: "💵", l1: {zh:"帶了", en:"Brought"}, i2: "🏪", l2: {zh:"買零食", en:"Snacks"}, unit: {zh:"元", en:"dollars"}, tZh: () => `哥哥有 ${n1} 元。他在便利店買零食花了 ${n2} 元，請問他還剩下多少元？`, tEn: () => `Brother had $${n1}. He spent $${n2} on snacks at the convenience store. How much money is left?` },
+                    { loc: "麵包店", i1: "💰", l1: {zh:"零用錢", en:"Allowance"}, i2: "🍰", l2: {zh:"買蛋糕", en:"Cake"}, unit: {zh:"元", en:"dollars"}, tZh: () => `小華帶了 ${n1} 元去麵包店。他買了一個生日蛋糕用去 ${n2} 元，請問他還剩下多少元？`, tEn: () => `Hua brought $${n1} to the bakery. He bought a cake for $${n2}. How much money does he have left?` }
+                ],
+                '2': [ // Type 2: 取了拿去吃了 (算剩餘)
+                    { loc: "超市", i1: "🍎", l1: {zh:"原有蘋果", en:"Total Apples"}, i2: "🛍️", l2: {zh:"賣出", en:"Sold"}, unit: {zh:"顆", en:"apples"}, tZh: () => `超市早上有 ${n1} 顆蘋果。今天一共賣出了 ${n2} 顆，請問超市還剩下幾顆蘋果？`, tEn: () => `The supermarket had ${n1} apples. They sold ${n2} apples today. How many apples are left?` },
+                    { loc: "便利店", i1: "🍙", l1: {zh:"進貨數量", en:"Stocked"}, i2: "🏃", l2: {zh:"客人買走", en:"Bought"}, unit: {zh:"個", en:"rice balls"}, tZh: () => `便利店進貨了 ${n1} 個飯糰。客人買走了 ${n2} 個，請問架上還剩下幾個飯糰？`, tEn: () => `The convenience store stocked ${n1} rice balls. Customers bought ${n2}. How many are left?` },
+                    { loc: "麵包店", i1: "🥐", l1: {zh:"剛出爐", en:"Freshly Baked"}, i2: "😋", l2: {zh:"吃掉了", en:"Eaten"}, unit: {zh:"個", en:"croissants"}, tZh: () => `麵包店烤了 ${n1} 個牛角包。有 ${n2} 個被客人當場吃掉了，請問還剩下幾個牛角包？`, tEn: () => `The bakery baked ${n1} croissants. ${n2} were eaten by customers. How many are left?` }
+                ],
+                '3': [ // Type 3: 比較 (貴多少/相差多少)
+                    { loc: "超市", i1: "🍉", l1: {zh:"大西瓜", en:"Watermelon"}, i2: "🍈", l2: {zh:"哈密瓜", en:"Melon"}, unit: {zh:"元", en:"dollars"}, tZh: () => `超市裡，大西瓜售價 ${n1} 元，哈密瓜售價 ${n2} 元。請問大西瓜比哈密瓜貴多少元？`, tEn: () => `At the supermarket, a watermelon costs $${n1} and a melon costs $${n2}. How much more expensive is the watermelon?` },
+                    { loc: "便利店", i1: "🥤", l1: {zh:"果汁", en:"Juice"}, i2: "🧊", l2: {zh:"礦泉水", en:"Water"}, unit: {zh:"元", en:"dollars"}, tZh: () => `便利店的果汁賣 ${n1} 元，礦泉水賣 ${n2} 元。請問果汁比礦泉水貴多少元？`, tEn: () => `Juice costs $${n1} and water costs $${n2} at the store. How much more does the juice cost?` },
+                    { loc: "麵包店", i1: "🍩", l1: {zh:"甜甜圈", en:"Donut"}, i2: "🍪", l2: {zh:"手工餅乾", en:"Cookie"}, unit: {zh:"元", en:"dollars"}, tZh: () => `麵包店裡，一盒甜甜圈賣 ${n1} 元，一包手工餅乾賣 ${n2} 元。請問這兩樣東西相差多少元？`, tEn: () => `A box of donuts is $${n1} and cookies are $${n2}. What is the price difference?` }
+                ],
+                '4': [ // Type 4: 不同類型的減數 (已知總數求部分)
+                    { loc: "超市", i1: "📦", l1: {zh:"總共箱數", en:"Total Boxes"}, i2: "🍇", l2: {zh:"葡萄", en:"Grapes"}, unit: {zh:"箱", en:"boxes"}, tZh: () => `超市進貨了 ${n1} 箱水果。其中 ${n2} 箱是葡萄，剩下的都是橘子。請問橘子有幾箱？`, tEn: () => `The supermarket got ${n1} boxes of fruit. ${n2} boxes are grapes, the rest are oranges. How many boxes of oranges?` },
+                    { loc: "便利店", i1: "🥫", l1: {zh:"冷藏櫃飲料", en:"All Drinks"}, i2: "🍵", l2: {zh:"綠茶", en:"Green Tea"}, unit: {zh:"瓶", en:"bottles"}, tZh: () => `便利店的冷藏櫃裡共有 ${n1} 瓶飲料。其中 ${n2} 瓶是綠茶，其他都是咖啡。請問咖啡有幾瓶？`, tEn: () => `There are ${n1} drinks in the fridge. ${n2} are green tea, the rest are coffee. How many coffees?` },
+                    { loc: "麵包店", i1: "🥖", l1: {zh:"總共麵包", en:"Total Breads"}, i2: "🍫", l2: {zh:"巧克力味", en:"Chocolate"}, unit: {zh:"個", en:"breads"}, tZh: () => `麵包店今天做了 ${n1} 個麵包。其中 ${n2} 個是巧克力口味，剩下的都是原味。請問原味麵包有幾個？`, tEn: () => `The bakery made ${n1} breads today. ${n2} are chocolate, the rest are plain. How many plain breads?` }
+                ]
+            };
+
+            const typeScenarios = scenarios[wpType] || scenarios['1'];
+            const sc = typeScenarios[Math.floor(Math.random() * typeScenarios.length)];
+            
+            return {
+                text: lang === 'zh' ? sc.tZh() : sc.tEn(),
+                v_icon1: sc.i1, v_label1: lang === 'zh' ? sc.l1.zh : sc.l1.en, v_num1: n1,
+                v_icon2: sc.i2, v_label2: lang === 'zh' ? sc.l2.zh : sc.l2.en, v_num2: n2,
+                unit: lang === 'zh' ? sc.unit.zh : sc.unit.en
+            };
+        }
+
+        // 產生基礎資料
+        function generateData() {
+            const type = document.getElementById('diff-select').value;
+            const pages = parseInt(document.getElementById('page-count').value) || 1;
+            const wpType = document.getElementById('wp-type').value;
+            
+            globalProblems = [];
+            for (let p = 0; p < pages; p++) {
+                let pageProbs = [];
+                for (let i = 0; i < 3; i++) {
+                    const [n1, n2] = generateNumbers(type);
+                    const wpZh = generateWordProblem(n1, n2, 'zh', wpType);
+                    const wpEn = generateWordProblem(n1, n2, 'en', wpType);
+                    
+                    // 判斷是否需要退位
+                    const isBorrow = (n1 % 10 < n2 % 10) || (Math.floor(n1/10)%10 < Math.floor(n2/10)%10);
+                    
+                    pageProbs.push({ n1, n2, wpZh, wpEn, isBorrow });
+                }
+                globalProblems.push(pageProbs);
+            }
+        }
+
+        // 渲染積木圖 (加入放大版顯示總數功能，並移除等號)
+        function createBlockHTML(num, L, is3Digit, showTotal) {
+            const h = Math.floor(num / 100); const t = Math.floor((num % 100) / 10); const o = num % 10;
+            let html = `<div class="flex gap-3 h-full items-stretch w-full max-w-lg">`;
+            
+            // 標題顯示總數邏輯：字體放大、加粗邊框與陰影 (移除 = 號)
+            const hTitle = is3Digit ? (showTotal ? `${L.hunsZone} <span class="text-[14px] font-black text-blue-700 bg-white px-1.5 py-0.5 rounded ml-1 border-2 border-blue-300 shadow-sm">${h*100}</span>` : L.hunsZone) : '';
+            const tTitle = showTotal ? `${L.tensZone} <span class="text-[14px] font-black text-green-700 bg-white px-1.5 py-0.5 rounded ml-1 border-2 border-green-300 shadow-sm">${t*10}</span>` : L.tensZone;
+            const oTitle = showTotal ? `${L.onesZone} <span class="text-[14px] font-black text-yellow-700 bg-white px-1.5 py-0.5 rounded ml-1 border-2 border-yellow-300 shadow-sm">${o}</span>` : L.onesZone;
+
+            if (is3Digit) {
+                html += `<div class="flex-1 border-2 border-blue-100 rounded-lg p-2 bg-blue-50/40 flex flex-col">
+                    <div class="text-center text-[12px] font-bold text-blue-800 mb-2 flex justify-center items-center">${hTitle}</div>
+                    <div class="flex flex-wrap gap-1 justify-center items-center flex-1">`;
+                for(let i=0; i<h; i++) html += `<div class="block-hundred relative flex items-center justify-center text-lg font-bold text-white drop-shadow-md" style="background-color:var(--huns)">100</div>`;
+                if(h===0) html += `<div class="text-gray-400 text-xs">${L.empty}</div>`;
+                html += `</div></div>`;
+            }
+
+            html += `<div class="flex-1 border-2 border-green-100 rounded-lg p-2 bg-green-50/40 flex flex-col">
+                <div class="text-center text-[12px] font-bold text-green-800 mb-2 flex justify-center items-center">${tTitle}</div>
+                <div class="flex flex-wrap gap-1 justify-center items-center flex-1">`;
+            for(let i=0; i<t; i++) html += `<div class="block-ten relative flex items-center justify-center text-[9px] font-bold text-white drop-shadow-md" style="background-color:var(--tens)"><span>10</span></div>`;
+            if(t===0) html += `<div class="text-gray-400 text-xs">${L.empty}</div>`;
+            html += `</div></div>`;
+
+            html += `<div class="flex-1 border-2 border-yellow-100 rounded-lg p-2 bg-yellow-50/40 flex flex-col">
+                <div class="text-center text-[12px] font-bold text-yellow-800 mb-2 flex justify-center items-center">${oTitle}</div>
+                <div class="flex flex-wrap gap-1 place-content-center flex-1">`;
+            for(let i=0; i<o; i++) html += `<div class="block-unit flex items-center justify-center text-[8px] font-bold text-yellow-900" style="background-color:var(--ones)">1</div>`;
+            if(o===0) html += `<div class="text-gray-400 text-xs w-full text-center">${L.empty}</div>`;
+            html += `</div></div></div>`;
+            
+            return html;
+        }
+
+        // 計算退位並渲染直式
+        function createVerticalMath(n1, n2, L, is3Digit, isBgTens, isBgOnes, isHint, isGray, isAns, isBlank) {
+            let h1 = Math.floor(n1/100), t1 = Math.floor((n1%100)/10), o1 = n1%10;
+            let h2 = Math.floor(n2/100), t2 = Math.floor((n2%100)/10), o2 = n2%10;
+            
+            let curH = h1, curT = t1, curO = o1;
+            let topH = '', topT = '', topO = '';
+            let strikeH = false, strikeT = false, strikeO = false;
+
+            if (curO < o2) {
+                if (curT > 0) { curT -= 1; curO += 10; strikeT = true; topT = curT; strikeO = true; topO = curO; } 
+                else if (curH > 0) { curH -= 1; curT = 9; curO += 10; strikeH = true; topH = curH; strikeT = true; topT = 9; strikeO = true; topO = curO; }
+            }
+            if (curT < t2) { curH -= 1; curT += 10; strikeH = true; topH = curH; strikeT = true; topT = curT; }
+
+            const bgT = isBgTens ? 'bg-tens-col' : ''; const bgO = isBgOnes ? 'bg-ones-col' : '';
+            const colsClass = is3Digit ? 'v-grid-4' : 'v-grid-3'; const colSpan = is3Digit ? 4 : 3;
+            const mainTextClass = isGray ? 'text-gray-300' : 'text-black';
+            const cellMinH = isBlank ? 'min-h-[50px]' : ''; const borrowMinH = isBlank ? 'min-h-[35px]' : '';
+
+            const renderBorrow = (val) => { if (isBlank || !isHint || val === '') return ''; return `<div class="text-gray-400 text-lg font-bold">${val}</div>`; };
+            const getDigitHTML = (digit, strike) => {
+                if (isBlank) return '';
+                let classes = mainTextClass;
+                if (isHint && strike) classes = 'line-through text-red-500 decoration-2';
+                return `<span class="${classes}">${digit}</span>`;
+            };
+
+            const ansStr = (n1 - n2).toString();
+            const aH = ansStr.length === 3 ? ansStr[0] : '';
+            const aT = ansStr.length >= 2 ? ansStr[ansStr.length - 2] : (ansStr.length === 1 && is3Digit && (h2>0 || t2>0) ? '' : '');
+            const aO = ansStr[ansStr.length - 1];
+
+            const ansColorClass = isGray ? 'text-gray-400' : 'text-red-600';
+            const renderAns = (val) => { if (!isAns || val === '') return ''; return `<span class="${ansColorClass} font-bold">${val}</span>`; };
+            const hdrClass = currentLang === 'en' ? 'text-[11px] tracking-tighter' : 'text-sm';
+
+            let html = `<div class="${colsClass} math-font mr-4">`;
+            
+            html += `<div class="v-cell"></div>`;
+            if(is3Digit) html += `<div class="v-cell rounded-t-xl ${hdrClass} font-bold text-gray-400 py-1">${L.huns}</div>`;
+            html += `<div class="v-cell ${bgT} rounded-t-xl ${hdrClass} font-bold text-gray-400 py-1">${L.tens}</div>`;
+            html += `<div class="v-cell ${bgO} rounded-t-xl ${hdrClass} font-bold text-gray-400 py-1">${L.ones}</div>`;
+
+            html += `<div class="v-cell ${borrowMinH}"></div>`;
+            if(is3Digit) html += `<div class="v-cell py-1 ${borrowMinH}">${renderBorrow(topH)}</div>`;
+            html += `<div class="v-cell ${bgT} py-1 ${borrowMinH}">${renderBorrow(topT)}</div>`;
+            html += `<div class="v-cell ${bgO} py-1 ${borrowMinH}">${renderBorrow(topO)}</div>`;
+
+            html += `<div class="v-cell ${cellMinH}"></div>`;
+            if(is3Digit) html += `<div class="v-cell ${cellMinH}">${getDigitHTML(h1, strikeH)}</div>`;
+            html += `<div class="v-cell ${bgT} ${cellMinH}">${getDigitHTML(t1, strikeT)}</div>`;
+            html += `<div class="v-cell ${bgO} ${cellMinH}">${getDigitHTML(o1, strikeO)}</div>`;
+
+            html += `<div class="v-cell text-2xl font-black ${mainTextClass} ${cellMinH}">${isBlank ? '' : '-'}</div>`;
+            if(is3Digit) html += `<div class="v-cell ${mainTextClass} ${cellMinH}">${isBlank ? '' : (h2 > 0 ? h2 : '')}</div>`;
+            html += `<div class="v-cell ${bgT} ${mainTextClass} ${cellMinH}">${isBlank ? '' : ((h2 > 0 || t2 > 0) ? t2 : '')}</div>`;
+            html += `<div class="v-cell ${bgO} ${mainTextClass} ${cellMinH}">${isBlank ? '' : o2}</div>`;
+
+            html += `<div class="border-t-[3px] border-black my-1" style="grid-column: span ${colSpan}; height: 0;"></div>`;
+
+            const ansBoxSize = isBlank ? 'w-12 h-12' : 'w-10 h-10';
+            html += `<div class="v-cell"></div>`;
+            if(is3Digit) html += `<div class="v-cell rounded-b-xl py-2"><div class="${ansBoxSize} border-2 border-gray-200 rounded flex items-center justify-center">${renderAns(aH)}</div></div>`;
+            html += `<div class="v-cell ${bgT} rounded-b-xl py-2"><div class="${ansBoxSize} border-2 border-gray-200 rounded flex items-center justify-center">${renderAns(aT)}</div></div>`;
+            html += `<div class="v-cell ${bgO} rounded-b-xl py-2"><div class="${ansBoxSize} border-2 border-gray-200 rounded flex items-center justify-center">${renderAns(aO)}</div></div>`;
+
+            html += `</div>`;
+            return html;
+        }
+
+        // 渲染整個 DOM 樹
+        function renderWorksheet() {
+            updateUIState();
+            
+            const customTitle = document.getElementById('custom-title').value || "堂課練習";
+            const isBgTens = document.getElementById('chk-bg-tens').checked;
+            const isBgOnes = document.getElementById('chk-bg-ones').checked;
+            const isHint = document.getElementById('chk-hint').checked;
+            const isBlockTotal = document.getElementById('chk-block-total').checked;
+            const isGray = document.getElementById('chk-gray').checked;
+            const isBlank = document.getElementById('chk-blank').checked;
+            const isAns = document.getElementById('chk-ans').checked;
+            const isWordProblem = document.getElementById('chk-word-problem').checked;
+            const L = i18n[currentLang];
+            
+            root.innerHTML = '';
+
+            globalProblems.forEach((pageProbs) => {
+                const pageDiv = document.createElement('div');
+                pageDiv.className = 'page';
+                
+                // 檢查這頁是否包含退位題目，並產生標題左上角的標記
+                const pageHasBorrow = pageProbs.some(p => p.isBorrow);
+                const borrowBadge = pageHasBorrow ? `<div class="absolute -top-3 -left-4 text-[10px] text-gray-300 font-bold border border-gray-100 bg-white rounded px-1 z-10" title="此頁包含退位題目">退</div>` : '';
+
+                let pageContent = `<div class="border-b-[2.5px] border-black pb-4 mb-5">
+                    <div class="flex justify-between items-end mb-4">
+                        <div class="text-3xl font-black text-black tracking-wide relative">
+                            ${borrowBadge}
+                            ${customTitle}
+                        </div>
+                        <div class="text-base text-black font-semibold tracking-wider">${L.sheetDate}</div>
+                    </div>
+                    <div class="flex justify-between text-base text-black font-semibold tracking-wider">
+                        <div>${L.sheetName}</div>
+                        <div>${L.sheetClass}</div>
+                    </div>
+                </div>`;
+
+                for (let i = 0; i < 3; i++) {
+                    const { n1, n2, wpZh, wpEn, isBorrow } = pageProbs[i];
+                    const is3Digit = n1 >= 100;
+
+                    pageContent += `<div class="problem-container relative">
+                    `;
+                    
+                    if (isWordProblem) {
+                        const wpData = currentLang === 'zh' ? wpZh : wpEn;
+                        pageContent += `
+                        <div class="flex items-start justify-between w-full pr-4">
+                            <div class="flex-1 pr-6 flex flex-col h-full justify-between">
+                                <div class="text-[18px] font-bold text-gray-800 mb-3 leading-relaxed tracking-wide">
+                                    ${i + 1}. ${wpData.text}
+                                </div>
+                                
+                                <!-- 取代積木的情境圖案與數字提示 -->
+                                <div class="flex gap-3 items-center mb-4 mt-1 max-w-sm ml-4">
+                                    <div class="bg-indigo-50/50 border border-indigo-100 rounded-lg py-2 px-4 text-center flex-1 shadow-sm">
+                                        <div class="text-2xl mb-1">${wpData.v_icon1}</div>
+                                        <div class="text-[12px] font-bold text-indigo-700">${wpData.v_label1}</div>
+                                        <div class="text-lg font-black text-indigo-900">${wpData.v_num1}</div>
+                                    </div>
+                                    <div class="text-gray-300 font-black text-2xl">-</div>
+                                    <div class="bg-pink-50/50 border border-pink-100 rounded-lg py-2 px-4 text-center flex-1 shadow-sm">
+                                        <div class="text-2xl mb-1">${wpData.v_icon2}</div>
+                                        <div class="text-[12px] font-bold text-pink-700">${wpData.v_label2}</div>
+                                        <div class="text-lg font-black text-pink-900">${wpData.v_num2}</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="flex flex-col gap-4 mt-auto mb-1">
+                                    <div class="math-font text-3xl flex items-baseline">
+                                        ${n1} - ${n2} = <span class="inline-block w-24 border-b-[2.5px] border-black ml-2"></span>
+                                    </div>
+                                    <div class="text-xl font-bold text-gray-800 flex items-baseline mt-1">
+                                        ${L.ansPrefix} <span class="inline-block w-32 border-b-[2.5px] border-black mx-3"></span> <span class="text-lg text-gray-600">${wpData.unit}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex-shrink-0 ml-2 bg-white p-2 rounded-xl">
+                                ${createVerticalMath(n1, n2, L, is3Digit, isBgTens, isBgOnes, isHint, isGray, isAns, isBlank)}
+                            </div>
+                        </div>`;
+                    } else {
+                        pageContent += `
+                        <div class="text-2xl mb-4 text-black flex items-center gap-2">
+                            ${i + 1}. ${L.calcPrefix} 
+                            <span class="math-font text-3xl ml-2 flex items-baseline">
+                                ${n1} - ${n2} = <span class="inline-block w-24 border-b-[2.5px] border-black ml-2"></span>
+                            </span>
+                        </div>
+                        <div class="flex items-center justify-between w-full pr-8">
+                            <div class="flex-1 pl-4">
+                                <div class="text-[11px] text-gray-400 mb-2 font-bold">${L.blockHint}</div>
+                                ${createBlockHTML(n1, L, is3Digit, isBlockTotal)}
+                            </div>
+                            <div class="flex-shrink-0 ml-6 bg-white p-2 rounded-xl">
+                                ${createVerticalMath(n1, n2, L, is3Digit, isBgTens, isBgOnes, isHint, isGray, isAns, isBlank)}
+                            </div>
+                        </div>`;
+                    }
+                    
+                    pageContent += `</div>`;
+                }
+                
+                pageDiv.innerHTML = pageContent;
+                root.appendChild(pageDiv);
+            });
+        }
+
+        function generateNewWorksheet() {
+            generateData(); renderWorksheet();
+        }
+
+        // 監聽器設定
+        document.querySelectorAll('#diff-select, #page-count, #custom-min, #custom-max, #custom-borrow, #wp-type').forEach(el => {
+            el.addEventListener('change', generateNewWorksheet);
+        });
+
+        document.querySelectorAll('input[type="checkbox"], #custom-title, #block-size').forEach(el => {
+            el.addEventListener('change', renderWorksheet);
+        });
+        
+        document.getElementById('lang-select').addEventListener('change', updateLang);
+
+        window.onload = () => {
+            generateData(); updateLang(); 
+        }; 
+    </script>
+</body>
+</html>

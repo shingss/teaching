@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>數學直式減法工作紙</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Noto+Sans+TC:wght@500;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root { 
+            --ones: #eab308; 
+            --tens: #22c55e; 
+            --huns: #3b82f6; 
+        }
+        body { 
+            background: #f1f5f9; 
+            font-family: 'Noto Sans TC', sans-serif; 
+            margin: 0;
+            padding: 20px;
+        }
+        
+        .math-font { font-family: 'Poppins', sans-serif; }
+
+        /* A4 頁面模擬 */
+        .page {
+            background: white;
+            width: 210mm;
+            min-height: 297mm;
+            padding: 12mm 15mm 15mm 15mm;
+            margin: 10px auto;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            position: relative;
+            box-sizing: border-box;
+            page-break-after: always;
+        }
+
+        /* 題目容器：一頁三題 */
+        .problem-container {
+            height: calc((297mm - 30mm) / 3); 
+            border-bottom: 1px dashed #e2e8f0;
+            padding: 15px 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .problem-container:last-child { border-bottom: none; }
+
+        /* 積木樣式設計 */
+        .block-hundred { 
+            width: 48px; height: 48px; 
+            border: 1px solid rgba(0,0,0,0.15); 
+            border-radius: 4px;
+            background-image: linear-gradient(to right, rgba(255,255,255,0.3) 1px, transparent 1px), 
+                              linear-gradient(to bottom, rgba(255,255,255,0.3) 1px, transparent 1px);
+            background-size: 10% 10%;
+        }
+        .block-ten { 
+            width: 14px; height: 48px; 
+            border: 1px solid rgba(0,0,0,0.15); 
+            border-radius: 2px;
+            background-image: linear-gradient(to bottom, rgba(255,255,255,0.3) 1px, transparent 1px);
+            background-size: 100% 10%;
+        }
+        .block-unit { 
+            width: 12px; height: 12px; 
+            border: 1px solid rgba(0,0,0,0.15); 
+            border-radius: 2px; 
+        }
+
+        /* 直式表格樣式 */
+        .v-grid-3 { display: grid; grid-template-columns: 35px 55px 55px; row-gap: 4px; }
+        .v-grid-4 { display: grid; grid-template-columns: 35px 55px 55px 55px; row-gap: 4px; }
+        .v-cell { display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 600; line-height: 1; }
+        
+        /* 背景顏色選項 */
+        .bg-tens-col { background-color: rgba(34, 197, 94, 0.08); }
+        .bg-ones-col { background-color: rgba(234, 179, 8, 0.08); }
+
+        /* 列印隱藏及修復空白問題 */
+        @media print {
+            @page { margin: 0; size: A4 portrait; }
+            body { background: white; padding: 0; margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .no-print { display: none !important; }
+            .page { 
+                margin: 0; 
+                box-shadow: none; 
+                border: none; 
+                width: 210mm;
+                min-height: 297mm;
+                padding: 12mm 15mm; 
+                page-break-after: always;
+                page-break-inside: avoid;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 控制面板 -->
+    <div class="no-print max-w-5xl mx-auto bg-white p-6 rounded-xl shadow-lg mb-8 border border-blue-100">
+        <h1 id="mainTitle" class="text-2xl font-bold text-blue-800 mb-6 flex items-center gap-2">
+            🖨️ 工作紙產生器
+        </h1>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-4">
+            <div>
+                <label id="lblCustomTitle" class="block text-sm font-bold text-gray-700 mb-1">自訂標題 / Title</label>
+                <input type="text" id="custom-title" value="堂課練習" class="w-full p-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-800 font-semibold">
+            </div>
+            <div>
+                <label id="lblDiff" class="block text-sm font-bold text-gray-700 mb-1">題目難度</label>
+                <select id="diff-select" class="w-full p-2 border border-gray-300 rounded-lg bg-gray-50">
+                    <option value="no-borrow">不退位 (2位數)</option>
+                    <option value="borrow-10">退位 (2位數)</option>
+                    <option value="borrow-100" selected>退位 (3位數內)</option>
+                    <option value="double-borrow">連續退位 (3位數內)</option>
+                    <option value="across-zero">隔位退位 (例: 305-128)</option>
+                    <option value="custom">自訂範圍設定</option>
+                </select>
+            </div>
+            <div>
+                <label id="lblPages" class="block text-sm font-bold text-gray-700 mb-1">生成頁數</label>
+                <input type="number" id="page-count" value="1" min="1" max="20" class="w-full p-2 border border-gray-300 rounded-lg bg-gray-50">
+            </div>
+            <div>
+                <label id="lblLang" class="block text-sm font-bold text-gray-700 mb-1">語言 / Language</label>
+                <select id="lang-select" class="w-full p-2 border border-gray-300 rounded-lg bg-gray-50">
+                    <option value="zh" selected>中文 (Chinese)</option>
+                    <option value="en">English</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- 自訂範圍專用區塊 (選擇自訂時顯示) -->
+        <div id="custom-range-container" class="hidden mb-4 bg-blue-50/50 p-4 rounded-lg border border-blue-200 flex-wrap gap-4 items-end">
+            <div>
+                <label id="lblCustomMin" class="block text-sm font-bold text-gray-700 mb-1">被減數最小值</label>
+                <input type="number" id="custom-min" value="10" min="2" max="999" class="w-24 p-2 border border-gray-300 rounded-lg bg-white">
+            </div>
+            <div class="text-xl font-bold text-gray-400 mb-2">-</div>
+            <div>
+                <label id="lblCustomMax" class="block text-sm font-bold text-gray-700 mb-1">被減數最大值</label>
+                <input type="number" id="custom-max" value="50" min="2" max="999" class="w-24 p-2 border border-gray-300 rounded-lg bg-white">
+            </div>
+            <div class="ml-2">
+                <label id="lblCustomBorrow" class="block text-sm font-bold text-gray-700 mb-1">退位設定</label>
+                <select id="custom-borrow" class="w-36 p-2 border border-gray-300 rounded-lg bg-white">
+                    <option value="random">隨機 (皆可)</option>
+                    <option value="no-borrow">必定不退位</option>
+                    <option value="borrow">必定退位</option>
+                </select>
+            </div>
+            <div id="customHint" class="text-sm text-gray-500 mb-2 ml-2 font-semibold">
+                (減數將自動小於被減數)
+            </div>
+        </div>
+
+        <div class="mb-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
+            <label id="lblOptions" class="block text-sm font-bold text-gray-700 mb-2">版面選項 / Layout Options</label>
+            <div class="flex flex-wrap gap-6">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" id="chk-bg-tens" class="w-5 h-5 text-green-600 rounded">
+                    <span id="optBgTens" class="text-sm font-bold text-gray-700">十位背景色</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" id="chk-bg-ones" class="w-5 h-5 text-yellow-600 rounded">
+                    <span id="optBgOnes" class="text-sm font-bold text-gray-700">個位背景色</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" id="chk-hint" class="w-5 h-5 text-blue-600 rounded">
+                    <span id="optHint" class="text-sm font-bold text-gray-700">退位提示 (灰色數字)</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" id="chk-gray" class="w-5 h-5 text-blue-600 rounded">
+                    <span id="optGray" class="text-sm font-bold text-gray-700">直式灰色 (描寫)</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" id="chk-blank" class="w-5 h-5 text-purple-600 rounded">
+                    <span id="optBlank" class="text-sm font-bold text-gray-700">直式空白模式</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" id="chk-ans" class="w-5 h-5 text-red-600 rounded">
+                    <span id="optAns" class="text-sm font-bold text-gray-700">顯示答案</span>
+                </label>
+            </div>
+        </div>
+        <div class="flex gap-4 mt-6">
+            <button id="btnGen" onclick="generateNewWorksheet()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition shadow-sm">
+                🎲 重新生成題目
+            </button>
+            <button id="btnPrint" onclick="triggerPrint()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg transition shadow-sm">
+                🖨️ 另存 PDF / 列印
+            </button>
+        </div>
+        <div class="mt-3 text-right">
+            <p id="hintText" class="text-xs text-red-500 font-bold">⚠️ 若「列印按鈕」無反應，請直接按鍵盤 Ctrl + P (Mac 請按 Cmd + P) 進行列印。</p>
+            <p class="text-xs text-gray-400 italic mt-1">建議使用 A4 直向列印，列印設定中勾選「背景圖形」以獲得最佳效果。</p>
+        </div>
+    </div>
+
+    <!-- 工作紙內容 -->
+    <div id="worksheet-root"></div>
+
+    <script>
+        // 多國語言辭典
+        const i18n = {
+            zh: {
+                title: "🖨️ 工作紙產生器", lblLang: "語言 / Language", lblDiff: "題目難度", lblCustomTitle: "自訂標題 / Title", lblOptions: "版面選項", lblPages: "生成頁數",
+                optNoBorrow: "不退位 (2位數)", optBorrow10: "退位 (2位數)", optBorrow100: "退位 (3位數內)", optDoubleBorrow: "連續退位 (3位數內)", optAcrossZero: "隔位退位 (例: 305-128)", optCustom: "自訂範圍設定",
+                lblCustomMin: "被減數最小值", lblCustomMax: "被減數最大值", customHint: "(減數將自動小於被減數)", lblCustomBorrow: "退位設定", optCB_rand: "隨機 (皆可)", optCB_noborrow: "必定不退位", optCB_borrow: "必定退位",
+                optBgTens: "十位背景色", optBgOnes: "個位背景色", optHint: "退位提示 (灰色數字)", optGray: "直式灰色 (描寫)", optBlank: "直式空白模式", optAns: "顯示答案",
+                btnGen: "🎲 重新生成題目", btnPrint: "🖨️ 另存 PDF / 列印",
+                sheetName: "姓名：____________________________________", sheetClass: "班別：____________________", 
+                sheetDate: "日期：__________年________月________日",
+                sheetTool: "數學直式教學工具",
+                calcPrefix: "請計算：", blockHint: "積木輔助示意 (被減數)：",
+                hunsZone: "百位區", tensZone: "十位區", onesZone: "個位區",
+                huns: "百", tens: "十", ones: "個", empty: "無"
+            },
+            en: {
+                title: "🖨️ Worksheet Generator", lblLang: "Language", lblDiff: "Difficulty", lblCustomTitle: "Title", lblOptions: "Layout Options", lblPages: "Pages",
+                optNoBorrow: "No Borrow (2-digit)", optBorrow10: "Borrow (2-digit)", optBorrow100: "Borrow (Up to 3-digit)", optDoubleBorrow: "Double Borrow (Up to 3-digit)", optAcrossZero: "Across Zero (e.g. 305-128)", optCustom: "Custom Range Settings",
+                lblCustomMin: "Minuend Min", lblCustomMax: "Minuend Max", customHint: "(Subtrahend will be smaller)", lblCustomBorrow: "Borrowing", optCB_rand: "Random", optCB_noborrow: "No Borrow", optCB_borrow: "Must Borrow",
+                optBgTens: "Tens Color", optBgOnes: "Ones Color", optHint: "Borrow Hints (Gray)", optGray: "Gray Math (Tracing)", optBlank: "Blank Math Grid", optAns: "Show Answers",
+                btnGen: "🎲 Generate Math", btnPrint: "🖨️ Save PDF / Print",
+                sheetName: "Name: ____________________________________", sheetClass: "Class: ____________________",
+                sheetDate: "Date: __________ / ________ / __________",
+                sheetTool: "Math Vertical Tool",
+                calcPrefix: "Calculate: ", blockHint: "Base Ten Blocks (Minuend):",
+                hunsZone: "Hundreds", tensZone: "Tens", onesZone: "Ones",
+                huns: "Hundreds", tens: "Tens", ones: "Ones", empty: "None"
+            }
+        };
+
+        const root = document.getElementById('worksheet-root');
+        let currentLang = 'zh';
+        
+        // 全域題目狀態 (用以分離生成資料與顯示渲染)
+        let globalProblems = [];
+
+        function triggerPrint() {
+            try {
+                window.print();
+            } catch (e) {
+                alert("瀏覽器環境限制了列印功能，請直接使用鍵盤快捷鍵：Ctrl + P (Windows) 或 Cmd + P (Mac) 進行列印。");
+            }
+        }
+
+        function updateUIState() {
+            const type = document.getElementById('diff-select').value;
+            const customContainer = document.getElementById('custom-range-container');
+            if (type === 'custom') {
+                customContainer.classList.remove('hidden');
+                customContainer.classList.add('flex');
+            } else {
+                customContainer.classList.add('hidden');
+                customContainer.classList.remove('flex');
+            }
+        }
+
+        // 語言切換
+        function updateLang() {
+            currentLang = document.getElementById('lang-select').value;
+            const dict = i18n[currentLang];
+            
+            document.getElementById('lblLang').innerText = dict.lblLang;
+            document.getElementById('lblDiff').innerText = dict.lblDiff;
+            document.getElementById('lblCustomTitle').innerText = dict.lblCustomTitle;
+            document.getElementById('lblPages').innerText = dict.lblPages;
+            document.getElementById('lblOptions').innerText = dict.lblOptions;
+            
+            document.getElementById('optBgTens').innerText = dict.optBgTens;
+            document.getElementById('optBgOnes').innerText = dict.optBgOnes;
+            document.getElementById('optHint').innerText = dict.optHint;
+            document.getElementById('optGray').innerText = dict.optGray;
+            document.getElementById('optBlank').innerText = dict.optBlank;
+            document.getElementById('optAns').innerText = dict.optAns;
+            
+            document.getElementById('btnGen').innerText = dict.btnGen;
+            document.getElementById('btnPrint').innerText = dict.btnPrint;
+            document.getElementById('mainTitle').innerHTML = dict.title;
+            
+            document.getElementById('lblCustomMin').innerText = dict.lblCustomMin;
+            document.getElementById('lblCustomMax').innerText = dict.lblCustomMax;
+            document.getElementById('customHint').innerText = dict.customHint;
+            document.getElementById('lblCustomBorrow').innerText = dict.lblCustomBorrow;
+            
+            const cbSel = document.getElementById('custom-borrow');
+            cbSel.options[0].text = dict.optCB_rand;
+            cbSel.options[1].text = dict.optCB_noborrow;
+            cbSel.options[2].text = dict.optCB_borrow;
+            
+            const diffSel = document.getElementById('diff-select');
+            diffSel.options[0].text = dict.optNoBorrow;
+            diffSel.options[1].text = dict.optBorrow10;
+            diffSel.options[2].text = dict.optBorrow100;
+            diffSel.options[3].text = dict.optDoubleBorrow;
+            diffSel.options[4].text = dict.optAcrossZero;
+            diffSel.options[5].text = dict.optCustom;
+
+            // 切換語言時只重新渲染，不重新產生題目
+            renderWorksheet();
+        }
+
+        // 隨機數生成 (3位數限制在399以內)
+        function getRandom(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+
+        function generateNumbers(type) {
+            let n1, n2;
+            switch(type) {
+                case 'no-borrow':
+                    n1 = getRandom(21, 99); n2 = getRandom(11, n1);
+                    if ((n1 % 10) < (n2 % 10)) return generateNumbers(type); 
+                    break;
+                case 'borrow-10':
+                    n1 = getRandom(21, 99); n2 = getRandom(11, n1 - 5);
+                    if ((n1 % 10) >= (n2 % 10)) return generateNumbers(type);
+                    break;
+                case 'borrow-100':
+                    n1 = getRandom(150, 399); n2 = getRandom(60, n1 - 10);
+                    if (!((n1 % 10 < n2 % 10) || (Math.floor(n1/10)%10 < Math.floor(n2/10)%10))) return generateNumbers(type);
+                    break;
+                case 'double-borrow':
+                    n1 = getRandom(222, 399); n2 = getRandom(135, n1 - 20);
+                    if (!((n1 % 10 < n2 % 10) && (Math.floor(n1/10)%10 < Math.floor(n2/10)%10))) return generateNumbers(type);
+                    break;
+                case 'across-zero':
+                    n1 = getRandom(2, 3) * 100 + getRandom(1, 9); // 確保不超過400
+                    n2 = getRandom(110, n1 - 50);
+                    if (n1 % 10 >= n2 % 10) return generateNumbers(type);
+                    break;
+                case 'custom':
+                    let cMin = parseInt(document.getElementById('custom-min').value) || 10;
+                    let cMax = parseInt(document.getElementById('custom-max').value) || 50;
+                    let borrowType = document.getElementById('custom-borrow').value;
+                    if (cMin > cMax) { const temp = cMin; cMin = cMax; cMax = temp; }
+                    cMax = Math.min(cMax, 999); // 限制不超過3位數版面
+                    cMin = Math.max(cMin, 2);
+                    
+                    let attempts = 0;
+                    do {
+                        n1 = getRandom(cMin, cMax);
+                        n2 = getRandom(1, n1 - 1);
+                        if (n1 === 1) n2 = 1;
+                        
+                        if (borrowType === 'random') break;
+                        
+                        let isBorrow = (n1 % 10 < n2 % 10) || (Math.floor(n1/10)%10 < Math.floor(n2/10)%10);
+                        if (borrowType === 'no-borrow' && !isBorrow) break;
+                        if (borrowType === 'borrow' && isBorrow) break;
+                        
+                        attempts++;
+                    } while (attempts < 150);
+                    
+                    break;
+            }
+            return [n1, n2];
+        }
+
+        // 產生基礎資料
+        function generateData() {
+            const type = document.getElementById('diff-select').value;
+            const pages = parseInt(document.getElementById('page-count').value) || 1;
+            
+            globalProblems = [];
+            for (let p = 0; p < pages; p++) {
+                let pageProbs = [];
+                for (let i = 0; i < 3; i++) {
+                    pageProbs.push(generateNumbers(type));
+                }
+                globalProblems.push(pageProbs);
+            }
+        }
+
+        // 渲染積木圖
+        function createBlockHTML(num, L, is3Digit) {
+            const h = Math.floor(num / 100);
+            const t = Math.floor((num % 100) / 10);
+            const o = num % 10;
+            
+            let html = `<div class="flex gap-3 h-full items-stretch w-full max-w-lg">`;
+            
+            if (is3Digit) {
+                html += `
+                <div class="flex-1 border-2 border-blue-100 rounded-lg p-2 bg-blue-50/40 flex flex-col">
+                    <div class="text-center text-[11px] font-bold text-blue-700 mb-2">${L.hunsZone}</div>
+                    <div class="flex flex-wrap gap-1 justify-center items-center flex-1">`;
+                for(let i=0; i<h; i++) html += `<div class="block-hundred relative flex items-center justify-center text-lg font-bold text-white drop-shadow-md" style="background-color:var(--huns)">100</div>`;
+                if(h===0) html += `<div class="text-gray-400 text-xs">${L.empty}</div>`;
+                html += `</div></div>`;
+            }
+
+            html += `
+            <div class="flex-1 border-2 border-green-100 rounded-lg p-2 bg-green-50/40 flex flex-col">
+                <div class="text-center text-[11px] font-bold text-green-700 mb-2">${L.tensZone}</div>
+                <div class="flex flex-wrap gap-1 justify-center items-center flex-1">`;
+            for(let i=0; i<t; i++) html += `<div class="block-ten relative flex items-center justify-center text-[9px] font-bold text-white drop-shadow-md" style="background-color:var(--tens)"><span>10</span></div>`;
+            if(t===0) html += `<div class="text-gray-400 text-xs">${L.empty}</div>`;
+            html += `</div></div>`;
+
+            html += `
+            <div class="flex-1 border-2 border-yellow-100 rounded-lg p-2 bg-yellow-50/40 flex flex-col">
+                <div class="text-center text-[11px] font-bold text-yellow-700 mb-2">${L.onesZone}</div>
+                <div class="flex flex-wrap gap-1 place-content-center flex-1">`;
+            for(let i=0; i<o; i++) html += `<div class="block-unit flex items-center justify-center text-[8px] font-bold text-yellow-900" style="background-color:var(--ones)">1</div>`;
+            if(o===0) html += `<div class="text-gray-400 text-xs w-full text-center">${L.empty}</div>`;
+            html += `</div></div></div>`;
+            
+            return html;
+        }
+
+        // 計算退位並渲染直式
+        function createVerticalMath(n1, n2, L, is3Digit, isBgTens, isBgOnes, isHint, isGray, isAns, isBlank) {
+            let h1 = Math.floor(n1/100), t1 = Math.floor((n1%100)/10), o1 = n1%10;
+            let h2 = Math.floor(n2/100), t2 = Math.floor((n2%100)/10), o2 = n2%10;
+            
+            let curH = h1, curT = t1, curO = o1;
+            let topH = '', topT = '', topO = '';
+            let strikeH = false, strikeT = false, strikeO = false;
+
+            // 退位邏輯模擬
+            if (curO < o2) {
+                if (curT > 0) {
+                    curT -= 1; curO += 10;
+                    strikeT = true; topT = curT;
+                    strikeO = true; topO = curO;
+                } else if (curH > 0) {
+                    curH -= 1; curT = 9; curO += 10;
+                    strikeH = true; topH = curH;
+                    strikeT = true; topT = 9;
+                    strikeO = true; topO = curO;
+                }
+            }
+            if (curT < t2) {
+                curH -= 1; curT += 10;
+                strikeH = true; topH = curH;
+                strikeT = true; topT = curT;
+            }
+
+            const bgT = isBgTens ? 'bg-tens-col' : '';
+            const bgO = isBgOnes ? 'bg-ones-col' : '';
+            const colsClass = is3Digit ? 'v-grid-4' : 'v-grid-3';
+            const colSpan = is3Digit ? 4 : 3;
+            
+            // 基礎字體顏色 (直式灰色選項)
+            const mainTextClass = isGray ? 'text-gray-300' : 'text-black';
+
+            // 確保空白模式下，格子有足夠的高度讓學生手寫
+            const cellMinH = isBlank ? 'min-h-[50px]' : '';
+            const borrowMinH = isBlank ? 'min-h-[35px]' : '';
+
+            // 輔助函數：渲染退位數字 (直接灰色數字)
+            const renderBorrow = (val) => {
+                if (isBlank || !isHint || val === '') return '';
+                return `<div class="text-gray-400 text-lg font-bold">${val}</div>`;
+            };
+
+            // 輔助函數：渲染被借位數字的樣式 (刪除線)
+            const getDigitHTML = (digit, strike) => {
+                if (isBlank) return '';
+                let classes = mainTextClass;
+                if (isHint && strike) {
+                    classes = 'line-through text-red-500 decoration-2';
+                }
+                return `<span class="${classes}">${digit}</span>`;
+            };
+
+            // 答案邏輯
+            const ansStr = (n1 - n2).toString();
+            const aH = ansStr.length === 3 ? ansStr[0] : '';
+            const aT = ansStr.length >= 2 ? ansStr[ansStr.length - 2] : (ansStr.length === 1 && is3Digit && (h2>0 || t2>0) ? '' : '');
+            const aO = ansStr[ansStr.length - 1];
+
+            const ansColorClass = isGray ? 'text-gray-400' : 'text-red-600';
+            const renderAns = (val) => {
+                if (!isAns || val === '') return '';
+                return `<span class="${ansColorClass} font-bold">${val}</span>`;
+            };
+
+            // 針對英文版較長的字詞自動縮小字體
+            const hdrClass = currentLang === 'en' ? 'text-[11px] tracking-tighter' : 'text-sm';
+
+            let html = `<div class="${colsClass} math-font mr-4">`;
+            
+            // 1. 表頭
+            html += `<div class="v-cell"></div>`;
+            if(is3Digit) html += `<div class="v-cell rounded-t-xl ${hdrClass} font-bold text-gray-400 py-1">${L.huns}</div>`;
+            html += `<div class="v-cell ${bgT} rounded-t-xl ${hdrClass} font-bold text-gray-400 py-1">${L.tens}</div>`;
+            html += `<div class="v-cell ${bgO} rounded-t-xl ${hdrClass} font-bold text-gray-400 py-1">${L.ones}</div>`;
+
+            // 2. 退位區 (僅文字)
+            html += `<div class="v-cell ${borrowMinH}"></div>`;
+            if(is3Digit) html += `<div class="v-cell py-1 ${borrowMinH}">${renderBorrow(topH)}</div>`;
+            html += `<div class="v-cell ${bgT} py-1 ${borrowMinH}">${renderBorrow(topT)}</div>`;
+            html += `<div class="v-cell ${bgO} py-1 ${borrowMinH}">${renderBorrow(topO)}</div>`;
+
+            // 3. 被減數
+            html += `<div class="v-cell ${cellMinH}"></div>`;
+            if(is3Digit) html += `<div class="v-cell ${cellMinH}">${getDigitHTML(h1, strikeH)}</div>`;
+            html += `<div class="v-cell ${bgT} ${cellMinH}">${getDigitHTML(t1, strikeT)}</div>`;
+            html += `<div class="v-cell ${bgO} ${cellMinH}">${getDigitHTML(o1, strikeO)}</div>`;
+
+            // 4. 減數
+            html += `<div class="v-cell text-2xl font-black ${mainTextClass} ${cellMinH}">${isBlank ? '' : '-'}</div>`;
+            if(is3Digit) html += `<div class="v-cell ${mainTextClass} ${cellMinH}">${isBlank ? '' : (h2 > 0 ? h2 : '')}</div>`;
+            html += `<div class="v-cell ${bgT} ${mainTextClass} ${cellMinH}">${isBlank ? '' : ((h2 > 0 || t2 > 0) ? t2 : '')}</div>`;
+            html += `<div class="v-cell ${bgO} ${mainTextClass} ${cellMinH}">${isBlank ? '' : o2}</div>`;
+
+            // 5. 底線
+            html += `<div class="border-t-[3px] border-black my-1" style="grid-column: span ${colSpan}; height: 0;"></div>`;
+
+            // 6. 答案框 (空白模式下框框加大)
+            const ansBoxSize = isBlank ? 'w-12 h-12' : 'w-10 h-10';
+            html += `<div class="v-cell"></div>`;
+            if(is3Digit) html += `<div class="v-cell rounded-b-xl py-2"><div class="${ansBoxSize} border-2 border-gray-200 rounded flex items-center justify-center">${renderAns(aH)}</div></div>`;
+            html += `<div class="v-cell ${bgT} rounded-b-xl py-2"><div class="${ansBoxSize} border-2 border-gray-200 rounded flex items-center justify-center">${renderAns(aT)}</div></div>`;
+            html += `<div class="v-cell ${bgO} rounded-b-xl py-2"><div class="${ansBoxSize} border-2 border-gray-200 rounded flex items-center justify-center">${renderAns(aO)}</div></div>`;
+
+            html += `</div>`;
+            return html;
+        }
+
+        // 渲染整個 DOM 樹 (不改變題目)
+        function renderWorksheet() {
+            updateUIState();
+            
+            const customTitle = document.getElementById('custom-title').value || "堂課練習";
+            const isBgTens = document.getElementById('chk-bg-tens').checked;
+            const isBgOnes = document.getElementById('chk-bg-ones').checked;
+            const isHint = document.getElementById('chk-hint').checked;
+            const isGray = document.getElementById('chk-gray').checked;
+            const isBlank = document.getElementById('chk-blank').checked;
+            const isAns = document.getElementById('chk-ans').checked;
+            const L = i18n[currentLang];
+            
+            root.innerHTML = '';
+
+            globalProblems.forEach((pageProbs) => {
+                const pageDiv = document.createElement('div');
+                pageDiv.className = 'page';
+                
+                let pageContent = `<div class="border-b-[2.5px] border-black pb-4 mb-5">
+                    <div class="flex justify-between items-end mb-4">
+                        <div class="text-3xl font-black text-black tracking-wide">${customTitle}</div>
+                        <div class="text-base text-black font-semibold tracking-wider">${L.sheetDate}</div>
+                    </div>
+                    <div class="flex justify-between text-base text-black font-semibold tracking-wider">
+                        <div>${L.sheetName}</div>
+                        <div>${L.sheetClass}</div>
+                    </div>
+                </div>`;
+
+                for (let i = 0; i < 3; i++) {
+                    const [n1, n2] = pageProbs[i];
+                    const is3Digit = n1 >= 100;
+
+                    pageContent += `
+                    <div class="problem-container">
+                        <div class="text-2xl mb-4 text-black flex items-center gap-2">
+                            ${i + 1}. ${L.calcPrefix} 
+                            <span class="math-font text-3xl ml-2 flex items-baseline">
+                                ${n1} - ${n2} = <span class="inline-block w-24 border-b-[2.5px] border-black ml-2"></span>
+                            </span>
+                        </div>
+                        <div class="flex items-center justify-between w-full pr-8">
+                            <!-- 左側：積木圖 -->
+                            <div class="flex-1 pl-4">
+                                <div class="text-[11px] text-gray-400 mb-2 font-bold">${L.blockHint}</div>
+                                ${createBlockHTML(n1, L, is3Digit)}
+                            </div>
+
+                            <!-- 右側：直式區域 -->
+                            <div class="flex-shrink-0 ml-6 bg-white p-2 rounded-xl">
+                                ${createVerticalMath(n1, n2, L, is3Digit, isBgTens, isBgOnes, isHint, isGray, isAns, isBlank)}
+                            </div>
+                        </div>
+                    </div>`;
+                }
+                
+                pageDiv.innerHTML = pageContent;
+                root.appendChild(pageDiv);
+            });
+        }
+
+        // 當需要重新產生題目時呼叫
+        function generateNewWorksheet() {
+            generateData();
+            renderWorksheet();
+        }
+
+        // 初始化監聽器：會改變「資料」的輸入選項
+        document.querySelectorAll('#diff-select, #page-count, #custom-min, #custom-max, #custom-borrow').forEach(el => {
+            el.addEventListener('change', generateNewWorksheet);
+        });
+
+        // 初始化監聽器：會改變「外觀顯示」的輸入選項
+        document.querySelectorAll('input[type="checkbox"], #custom-title').forEach(el => {
+            el.addEventListener('change', renderWorksheet);
+        });
+        
+        document.getElementById('lang-select').addEventListener('change', updateLang);
+
+        window.onload = () => {
+            generateData();
+            updateLang(); // updateLang 中會包含首次 renderWorksheet
+        }; 
+    </script>
+</body>
+</html>

@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>星際探索編程任務</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
+        body { font-family: 'Noto Sans TC', sans-serif; }
+        
+        .animate-bounce { animation: bounce 1s infinite; }
+        .animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes bounce {
+            0%, 100% { transform: translateY(-10%); animation-timing-function: cubic-bezier(0.8,0,1,1); }
+            50% { transform: none; animation-timing-function: cubic-bezier(0,0,0.2,1); }
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+        .scale-active { transform: scale(0.95); transition: transform 0.1s; }
+        
+        /* 確保地圖永遠以正方形顯示且不超出邊界 */
+        .responsive-grid-box {
+            aspect-ratio: 1 / 1;
+            max-width: 100%;
+            max-height: 100%;
+            margin: 0 auto;
+            display: flex;
+        }
+
+        /* Hide scrollbar for clean look */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    </style>
+</head>
+<body class="min-h-screen bg-slate-900 flex items-center justify-center p-2 sm:p-4 text-slate-800 select-none">
+
+    <div class="w-full max-w-[1280px] aspect-[9/16] md:aspect-video bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row relative">
+        
+        <!-- 左側：遊戲地圖區 -->
+        <div class="w-full md:w-[65%] h-full bg-[#1b2030] p-3 md:p-6 lg:p-8 flex flex-col border-b md:border-b-0 md:border-r border-slate-700 relative">
+            
+            <!-- 頂部：模式與計時資訊 -->
+            <div class="w-full flex flex-col sm:flex-row justify-between items-center bg-[#23293f] p-3 rounded-2xl mb-3 border border-slate-700/50 shadow-md">
+                
+                <!-- 難度選擇與跳關 -->
+                <div class="flex items-center gap-2">
+                    <select id="modeSelect" class="bg-slate-700 text-white font-bold text-base md:text-lg px-2 md:px-3 py-2 rounded-xl outline-none border border-slate-600 cursor-pointer hover:bg-slate-600 transition-colors shadow-inner">
+                        <option value="0">極簡單模式</option>
+                        <option value="1">簡單模式</option>
+                        <option value="2">中等模式</option>
+                        <option value="3">困難模式</option>
+                    </select>
+                    <button id="btnSkip" class="p-2 bg-slate-700 text-slate-300 hover:text-white rounded-xl hover:bg-slate-600 transition-colors shadow-sm" title="略過並換一題">
+                        <i data-lucide="fast-forward" class="w-5 h-5"></i>
+                    </button>
+                </div>
+
+                <!-- 計分板 -->
+                <div class="flex items-center gap-2 bg-yellow-500/10 px-4 md:px-6 py-2 rounded-xl border border-yellow-500/30">
+                    <i data-lucide="trophy" class="w-5 h-5 text-yellow-500"></i>
+                    <span id="scoreDisplay" class="font-black text-yellow-500 text-lg md:text-xl">100</span>
+                </div>
+                
+                <!-- 控制按鈕區 -->
+                <div class="flex items-center gap-2 flex-wrap justify-end">
+                    
+                    <div id="timerContainer" class="hidden items-center">
+                        <div id="timerTextContainer" class="font-mono text-lg md:text-xl font-black flex items-center text-green-400">
+                            <i data-lucide="clock" class="w-5 h-5 mr-1"></i>
+                            <span id="timerText" class="hidden"></span>
+                            <input type="number" id="timerInput" min="5" max="999" class="w-12 md:w-14 bg-slate-800 text-green-400 border border-slate-600 rounded outline-none focus:border-green-400 text-center">
+                            <span class="ml-1">s</span>
+                        </div>
+                    </div>
+
+                    <button id="btnTimerToggle" class="p-2 rounded-xl transition-all duration-300 bg-slate-700 text-slate-400 hover:bg-slate-600" title="計時模式切換">
+                        <i data-lucide="timer" class="w-5 h-5"></i>
+                    </button>
+
+                    <div class="w-px h-6 bg-slate-600 mx-1 hidden sm:block"></div>
+
+                    <button id="btnVirtualToggle" class="p-2 rounded-xl transition-colors bg-slate-700 text-slate-300 hover:bg-slate-600" title="打開/關閉預測位置">
+                        <i id="iconVirtual" data-lucide="eye-off" class="w-5 h-5"></i>
+                    </button>
+
+                    <button id="btnHintToggle" class="p-2 rounded-xl transition-colors bg-slate-700 text-slate-300 hover:bg-slate-600" title="打開/關閉最短路線提示">
+                        <i id="iconHint" data-lucide="lightbulb-off" class="w-5 h-5"></i>
+                    </button>
+
+                    <button id="btnMuteToggle" class="p-2 rounded-xl transition-colors bg-slate-700 text-slate-300 hover:bg-slate-600" title="靜音/取消靜音">
+                        <i id="iconMute" data-lucide="volume-2" class="w-5 h-5"></i>
+                    </button>
+
+                    <button id="btnSettingsToggle" class="p-2 rounded-xl transition-colors bg-slate-700 text-slate-300 hover:bg-slate-600" title="遊戲設定 (更換圖案)">
+                        <i data-lucide="settings" class="w-5 h-5"></i>
+                    </button>
+
+                    <button id="btnResetAll" class="text-xs md:text-sm px-2 md:px-3 py-2 bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white rounded-xl transition-colors border border-red-500/30" title="重設分數與關卡">
+                        重設
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 遊戲狀態列 -->
+            <div id="statusBanner" class="mt-1 mb-2 h-12 md:h-14 flex shrink-0 items-center justify-center w-full rounded-2xl border transition-colors duration-300 bg-slate-800/50 border-slate-700 text-slate-400">
+                <div id="statusMessage" class="font-medium text-sm md:text-lg flex items-center">
+                    準備就緒，等待指令輸入...
+                </div>
+            </div>
+
+            <!-- 地圖區域 (自適應大小，絕不裁切) -->
+            <div class="flex-1 w-full flex items-center justify-center min-h-0 overflow-hidden py-2 md:py-4">
+                <div class="responsive-grid-box bg-[#2a3047] p-2 sm:p-3 md:p-4 rounded-xl sm:rounded-2xl shadow-2xl">
+                    <div id="gridContainer" class="w-full h-full grid gap-1 sm:gap-1.5 flex-1">
+                        <!-- Grid cells will be generated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右側：指令控制面板 -->
+        <div class="w-full md:w-[35%] h-full bg-slate-50 flex flex-col pt-4 md:pt-6">
+            
+            <!-- Step 2: 指令序列 (上方，佔用剩餘彈性空間) -->
+            <div class="flex-1 px-4 md:px-6 pb-2 flex flex-col overflow-hidden min-h-0 relative">
+                <h3 class="text-base md:text-lg font-bold text-slate-700 mb-3 flex items-center">
+                    <span class="bg-indigo-100 text-indigo-700 w-5 h-5 md:w-6 md:h-6 rounded-full flex items-center justify-center mr-2 text-sm">2</span>
+                    指令序列
+                </h3>
+                
+                <div class="flex-1 bg-white rounded-xl border border-slate-200 p-3 md:p-4 overflow-y-auto shadow-sm relative mb-3">
+                    <div id="emptyCommandsText" class="absolute inset-0 flex items-center justify-center text-slate-400 italic text-sm">
+                        尚未輸入任何指令
+                    </div>
+                    <div id="commandList" class="flex flex-col gap-2 relative z-10 w-full pb-2">
+                        <!-- Commands will be added here -->
+                    </div>
+                </div>
+
+                <!-- 清空按鈕 -->
+                <div class="flex justify-end mb-2">
+                    <button id="btnClear" class="text-xs md:text-sm font-bold text-slate-500 hover:text-red-500 flex items-center transition-colors bg-slate-100 px-3 py-1.5 md:px-4 md:py-2 rounded-full disabled:opacity-50 shadow-sm border border-slate-200">
+                        <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> 清空
+                    </button>
+                </div>
+            </div>
+
+            <!-- Step 1: 點擊加入指令 (移至右側中間) -->
+            <div class="px-4 md:px-6 pb-4 shrink-0">
+                <h3 class="text-base md:text-lg font-bold text-slate-700 mb-3 flex items-center">
+                    <span class="bg-indigo-100 text-indigo-700 w-5 h-5 md:w-6 md:h-6 rounded-full flex items-center justify-center mr-2 text-sm">1</span> 
+                    點擊加入指令
+                </h3>
+                <div class="flex gap-2">
+                    <button class="cmd-btn flex-1 py-3 md:py-4 bg-blue-500 hover:brightness-110 text-white rounded-xl flex items-center justify-center shadow-md active:scale-95 transition-all" data-cmd="UP">
+                        <i data-lucide="arrow-up" class="w-6 h-6 md:w-7 md:h-7 pointer-events-none"></i>
+                    </button>
+                    <button class="cmd-btn flex-1 py-3 md:py-4 bg-green-500 hover:brightness-110 text-white rounded-xl flex items-center justify-center shadow-md active:scale-95 transition-all" data-cmd="DOWN">
+                        <i data-lucide="arrow-down" class="w-6 h-6 md:w-7 md:h-7 pointer-events-none"></i>
+                    </button>
+                    <button class="cmd-btn flex-1 py-3 md:py-4 bg-yellow-500 hover:brightness-110 text-white rounded-xl flex items-center justify-center shadow-md active:scale-95 transition-all" data-cmd="LEFT">
+                        <i data-lucide="arrow-left" class="w-6 h-6 md:w-7 md:h-7 pointer-events-none"></i>
+                    </button>
+                    <button class="cmd-btn flex-1 py-3 md:py-4 bg-red-500 hover:brightness-110 text-white rounded-xl flex items-center justify-center shadow-md active:scale-95 transition-all" data-cmd="RIGHT">
+                        <i data-lucide="arrow-right" class="w-6 h-6 md:w-7 md:h-7 pointer-events-none"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Step 3: 執行 (底部) -->
+            <div class="px-4 md:px-6 py-4 md:py-6 bg-white border-t border-slate-200 shrink-0">
+                <h3 class="text-base md:text-lg font-bold text-slate-700 mb-3 flex items-center">
+                    <span class="bg-indigo-100 text-indigo-700 w-5 h-5 md:w-6 md:h-6 rounded-full flex items-center justify-center mr-2 text-sm">3</span>
+                    執行
+                </h3>
+                <div class="flex space-x-3">
+                    <button id="btnStart" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 md:py-4 px-4 rounded-xl flex items-center justify-center shadow-lg transition-colors active:scale-95 disabled:bg-slate-300 disabled:cursor-not-allowed">
+                        <i data-lucide="play" class="w-5 h-5 md:w-6 md:h-6 mr-1 md:mr-2 fill-current"></i>
+                        開始執行
+                    </button>
+                    
+                    <button id="btnRetry" class="hidden bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-3 md:py-4 px-4 md:px-5 rounded-xl flex items-center justify-center shadow-md transition-colors active:scale-95 border border-slate-200" title="重新嘗試">
+                        <i data-lucide="rotate-ccw" class="w-5 h-5 md:w-6 md:h-6"></i>
+                    </button>
+
+                    <button id="btnNext" class="hidden bg-green-500 hover:bg-green-600 text-white font-bold py-3 md:py-4 px-4 md:px-5 rounded-xl flex items-center justify-center shadow-lg transition-colors active:scale-95" title="前往下一關">
+                        <i data-lucide="chevron-right" class="w-5 h-5 md:w-6 md:h-6"></i>
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- 遮罩層，防止在動畫中亂點 -->
+    <div id="overlay" class="hidden absolute inset-0 z-50"></div>
+
+    <!-- 設定視窗 (Modal) -->
+    <div id="settingsModal" class="hidden fixed inset-0 bg-slate-900/80 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl transform transition-all">
+            <div class="p-6 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                <h2 class="text-xl font-bold text-slate-800 flex items-center">
+                    <i data-lucide="settings" class="w-6 h-6 mr-2 text-indigo-600"></i> 遊戲外觀設定
+                </h2>
+                <button id="btnCloseSettings" class="text-slate-400 hover:text-red-500 transition-colors">
+                    <i data-lucide="x" class="w-6 h-6"></i>
+                </button>
+            </div>
+            <div class="p-6 space-y-6">
+                <!-- 角色圖案設定 -->
+                <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                    <label class="block text-sm font-bold text-slate-700 mb-3">更換角色圖案 (預設: 🤖)</label>
+                    <div class="flex items-center space-x-4">
+                        <div id="charPreview" class="w-14 h-14 bg-white border-2 border-slate-200 rounded-xl flex items-center justify-center text-3xl shadow-sm shrink-0 overflow-hidden">🤖</div>
+                        <div class="flex-1">
+                            <label class="cursor-pointer bg-indigo-100 text-indigo-700 hover:bg-indigo-200 px-4 py-2 rounded-lg font-medium transition-colors text-sm inline-block mb-2">
+                                <span>上傳圖片</span>
+                                <input type="file" id="charFileInput" accept="image/*" class="hidden">
+                            </label>
+                            <br>
+                            <button id="btnResetChar" class="text-slate-500 hover:text-red-500 text-xs underline transition-colors">恢復預設圖案</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 目標圖案設定 -->
+                <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                    <label class="block text-sm font-bold text-slate-700 mb-3">更換目標圖案 (預設: ⭐️)</label>
+                    <div class="flex items-center space-x-4">
+                        <div id="goalPreview" class="w-14 h-14 bg-white border-2 border-slate-200 rounded-xl flex items-center justify-center text-3xl shadow-sm shrink-0 overflow-hidden">⭐️</div>
+                        <div class="flex-1">
+                            <label class="cursor-pointer bg-yellow-100 text-yellow-700 hover:bg-yellow-200 px-4 py-2 rounded-lg font-medium transition-colors text-sm inline-block mb-2">
+                                <span>上傳圖片</span>
+                                <input type="file" id="goalFileInput" accept="image/*" class="hidden">
+                            </label>
+                            <br>
+                            <button id="btnResetGoal" class="text-slate-500 hover:text-red-500 text-xs underline transition-colors">恢復預設圖案</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="p-6 bg-slate-50 border-t border-slate-200">
+                <button id="btnSettingsDone" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-colors shadow-lg active:scale-95">完成</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 初始化 Lucide 圖示
+        lucide.createIcons();
+
+        // --- 核心資料與狀態 ---
+        // 移除定死的尺寸 class，由 CSS grid 自適應大小
+        const MODES = [
+            { id: 0, name: "極簡單模式", size: 4, minObs: 0, maxObs: 1, time: 20 },
+            { id: 1, name: "簡單模式", size: 5, minObs: 1, maxObs: 3, time: 30 },
+            { id: 2, name: "中等模式", size: 6, minObs: 5, maxObs: 8, time: 45 },
+            { id: 3, name: "困難模式", size: 7, minObs: 10, maxObs: 14, time: 60 }
+        ];
+
+        const COMMAND_TYPES = {
+            UP: { id: 'UP', iconName: 'arrow-up', dx: 0, dy: -1, color: 'bg-blue-500' },
+            DOWN: { id: 'DOWN', iconName: 'arrow-down', dx: 0, dy: 1, color: 'bg-green-500' },
+            LEFT: { id: 'LEFT', iconName: 'arrow-left', dx: -1, dy: 0, color: 'bg-yellow-500' },
+            RIGHT: { id: 'RIGHT', iconName: 'arrow-right', dx: 1, dy: 0, color: 'bg-red-500' },
+        };
+
+        // 遊戲狀態
+        let currentModeIdx = 0;
+        let levelData = null;
+        let score = 100;
+        let charPos = {x:0, y:0};
+        let commands = [];
+        let currentStep = -1;
+        let gameStatus = 'IDLE'; // IDLE, RUNNING, WON, LOST_CRASH, LOST_INCOMPLETE, LOST_TIME
+
+        // 設定開關
+        let isMuted = false;
+        let isTimerMode = false;
+        let showVirtualPos = false;
+        let isHintMode = false;
+        
+        // 客製化圖片
+        let customCharImg = null;
+        let customGoalImg = null;
+
+        // 計時器
+        let customTimeLimit = 30;
+        let timeLeft = 0;
+        let timerInterval = null;
+        let runTimeout = null;
+        let currentTimeBonus = 0;
+
+        let solutionPath = [];
+
+        // --- DOM 元素參考 ---
+        const els = {
+            gridContainer: document.getElementById('gridContainer'),
+            commandList: document.getElementById('commandList'),
+            emptyCommandsText: document.getElementById('emptyCommandsText'),
+            scoreDisplay: document.getElementById('scoreDisplay'),
+            modeSelect: document.getElementById('modeSelect'),
+            statusMessage: document.getElementById('statusMessage'),
+            statusBanner: document.getElementById('statusBanner'),
+            
+            btnStart: document.getElementById('btnStart'),
+            btnRetry: document.getElementById('btnRetry'),
+            btnNext: document.getElementById('btnNext'),
+            btnClear: document.getElementById('btnClear'),
+            
+            timerContainer: document.getElementById('timerContainer'),
+            timerInput: document.getElementById('timerInput'),
+            timerText: document.getElementById('timerText'),
+            timerTextContainer: document.getElementById('timerTextContainer'),
+            
+            btnVirtualToggle: document.getElementById('btnVirtualToggle'),
+            btnHintToggle: document.getElementById('btnHintToggle'),
+            btnMuteToggle: document.getElementById('btnMuteToggle'),
+            btnSettingsToggle: document.getElementById('btnSettingsToggle'),
+            btnTimerToggle: document.getElementById('btnTimerToggle'),
+            
+            settingsModal: document.getElementById('settingsModal'),
+            btnCloseSettings: document.getElementById('btnCloseSettings'),
+            btnSettingsDone: document.getElementById('btnSettingsDone'),
+            charFileInput: document.getElementById('charFileInput'),
+            btnResetChar: document.getElementById('btnResetChar'),
+            charPreview: document.getElementById('charPreview'),
+            goalFileInput: document.getElementById('goalFileInput'),
+            btnResetGoal: document.getElementById('btnResetGoal'),
+            goalPreview: document.getElementById('goalPreview'),
+
+            cmdBtns: document.querySelectorAll('.cmd-btn'),
+            overlay: document.getElementById('overlay')
+        };
+
+        // --- 音效引擎 ---
+        const playSound = (type) => {
+            if (isMuted) return;
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) return;
+                const ctx = new AudioContext();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+
+                const now = ctx.currentTime;
+                
+                if (type === 'click') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(800, now);
+                    gain.gain.setValueAtTime(0.05, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+                    osc.start(now); osc.stop(now + 0.05);
+                } else if (type === 'move') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(500, now);
+                    osc.frequency.exponentialRampToValueAtTime(300, now + 0.1);
+                    gain.gain.setValueAtTime(0.1, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                    osc.start(now); osc.stop(now + 0.1);
+                } else if (type === 'win') {
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(400, now);
+                    osc.frequency.setValueAtTime(600, now + 0.1);
+                    osc.frequency.setValueAtTime(800, now + 0.2);
+                    gain.gain.setValueAtTime(0.1, now);
+                    gain.gain.linearRampToValueAtTime(0, now + 0.4);
+                    osc.start(now); osc.stop(now + 0.4);
+                } else if (type === 'crash') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(150, now);
+                    osc.frequency.exponentialRampToValueAtTime(50, now + 0.3);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.linearRampToValueAtTime(0, now + 0.3);
+                    osc.start(now); osc.stop(now + 0.3);
+                } else if (type === 'timeout') {
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(300, now);
+                    osc.frequency.exponentialRampToValueAtTime(50, now + 0.5);
+                    gain.gain.setValueAtTime(0.3, now);
+                    gain.gain.linearRampToValueAtTime(0, now + 0.5);
+                    osc.start(now); osc.stop(now + 0.5);
+                }
+            } catch (e) { console.log("Audio failed", e); }
+        };
+
+        // --- 演算法與生成 ---
+        const checkSolvable = (size, start, goal, obstacles) => {
+            const queue = [{ x: start.x, y: start.y }];
+            const visited = new Set([`${start.x},${start.y}`]);
+            const dirs = [{ dx: 0, dy: -1 }, { dx: 0, dy: 1 }, { dx: -1, dy: 0 }, { dx: 1, dy: 0 }];
+
+            while (queue.length > 0) {
+                const cur = queue.shift();
+                if (cur.x === goal.x && cur.y === goal.y) return true;
+                for (let d of dirs) {
+                    const nx = cur.x + d.dx;
+                    const ny = cur.y + d.dy;
+                    if (nx >= 0 && nx < size && ny >= 0 && ny < size) {
+                        if (!obstacles.some(o => o.x === nx && o.y === ny) && !visited.has(`${nx},${ny}`)) {
+                            visited.add(`${nx},${ny}`);
+                            queue.push({ x: nx, y: ny });
+                        }
+                    }
+                }
+            }
+            return false;
+        };
+
+        const calculateHintSolution = () => {
+            if(!levelData) return [];
+            const queue = [{ pos: levelData.start, path: [] }];
+            const visited = new Set([`${levelData.start.x},${levelData.start.y}`]);
+            let foundPath = [];
+            const dirs = [{ dx: 0, dy: -1 }, { dx: 0, dy: 1 }, { dx: -1, dy: 0 }, { dx: 1, dy: 0 }];
+
+            while (queue.length > 0) {
+                const { pos, path } = queue.shift();
+                if (pos.x === levelData.goal.x && pos.y === levelData.goal.y) {
+                    foundPath = path;
+                    break;
+                }
+                for (let d of dirs) {
+                    const nx = pos.x + d.dx;
+                    const ny = pos.y + d.dy;
+                    if (nx >= 0 && nx < levelData.size && ny >= 0 && ny < levelData.size) {
+                        if (!levelData.obstacles.some(o => o.x === nx && o.y === ny) && !visited.has(`${nx},${ny}`)) {
+                            visited.add(`${nx},${ny}`);
+                            queue.push({ pos: { x: nx, y: ny }, path: [...path, { x: nx, y: ny }] });
+                        }
+                    }
+                }
+            }
+            return foundPath;
+        };
+
+        const generateLevel = (modeIdx) => {
+            const mode = MODES[modeIdx];
+            let start, goal, obstacles;
+            let valid = false, attempts = 0;
+            const targetObs = Math.floor(Math.random() * (mode.maxObs - mode.minObs + 1)) + mode.minObs;
+
+            while (!valid && attempts < 500) {
+                attempts++;
+                start = { x: 0, y: Math.floor(Math.random() * mode.size) };
+                goal = { x: mode.size - 1, y: Math.floor(Math.random() * mode.size) };
+                obstacles = [];
+
+                while (obstacles.length < targetObs) {
+                    const ox = Math.floor(Math.random() * mode.size);
+                    const oy = Math.floor(Math.random() * mode.size);
+                    if ((ox === start.x && oy === start.y) || (ox === goal.x && oy === goal.y)) continue;
+                    if (obstacles.some(o => o.x === ox && o.y === oy)) continue;
+                    obstacles.push({ x: ox, y: oy });
+                }
+                valid = checkSolvable(mode.size, start, goal, obstacles);
+            }
+            if (!valid) obstacles = []; 
+            return { size: mode.size, start, goal, obstacles, timeLimit: mode.time };
+        };
+
+        const calculateVirtualPos = () => {
+            let pos = { ...levelData.start };
+            let isCrashed = false;
+            if (gameStatus !== 'IDLE' || commands.length === 0) return { pos, isCrashed: false, active: false };
+            
+            for (let cmdId of commands) {
+                const cmd = COMMAND_TYPES[cmdId];
+                const nx = pos.x + cmd.dx;
+                const ny = pos.y + cmd.dy;
+                if (nx < 0 || nx >= levelData.size || ny < 0 || ny >= levelData.size || levelData.obstacles.some(o => o.x === nx && o.y === ny)) {
+                    isCrashed = true;
+                    break; 
+                }
+                pos = { x: nx, y: ny };
+            }
+            return { pos, isCrashed, active: true };
+        };
+
+        // --- 渲染功能 ---
+        const renderGrid = () => {
+            if(!levelData) return;
+            els.gridContainer.innerHTML = '';
+            
+            // 使用自適應比例均分寬度與高度
+            els.gridContainer.style.gridTemplateColumns = `repeat(${levelData.size}, minmax(0, 1fr))`;
+            els.gridContainer.style.gridTemplateRows = `repeat(${levelData.size}, minmax(0, 1fr))`;
+
+            solutionPath = calculateHintSolution();
+            const virtualState = calculateVirtualPos();
+
+            for (let y = 0; y < levelData.size; y++) {
+                for (let x = 0; x < levelData.size; x++) {
+                    let isObstacle = levelData.obstacles.some(obs => obs.x === x && obs.y === y);
+                    let isGoal = levelData.goal.x === x && levelData.goal.y === y;
+                    let isChar = charPos.x === x && charPos.y === y;
+                    let isHintPath = isHintMode && solutionPath.some(pos => pos.x === x && pos.y === y);
+                    let isVirtual = virtualState.active && showVirtualPos && virtualState.pos.x === x && virtualState.pos.y === y && !isChar;
+
+                    // 採用 w-full h-full 自動延展
+                    const cell = document.createElement('div');
+                    cell.className = `w-full h-full bg-white border-2 border-slate-300 rounded-lg sm:rounded-xl flex items-center justify-center relative shadow-sm overflow-hidden`;
+
+                    // 動態調整內建字體大小
+                    let iconSizeClass = levelData.size <= 5 ? "text-[2rem] sm:text-4xl md:text-5xl lg:text-6xl" : "text-[1.5rem] sm:text-3xl lg:text-4xl";
+
+                    // 判斷角色與目標是顯示圖片還是預設 emoji
+                    let charContentHtml = customCharImg 
+                        ? `<img src="${customCharImg}" class="w-[85%] h-[85%] object-contain z-10 animate-bounce drop-shadow-md" />`
+                        : `<span class="${iconSizeClass} z-10 animate-bounce">🤖</span>`;
+                    
+                    let goalContentHtml = customGoalImg
+                        ? `<img src="${customGoalImg}" class="w-[85%] h-[85%] object-contain drop-shadow-md" />`
+                        : `<span class="${iconSizeClass}">⭐️</span>`;
+
+                    let contentHtml = '';
+                    if (isChar) {
+                        contentHtml = charContentHtml;
+                    } else if (isGoal) {
+                        contentHtml = goalContentHtml;
+                    } else if (isObstacle) {
+                        contentHtml = `<span class="${iconSizeClass} grayscale">🧱</span>`;
+                    } else if (isHintPath && !isChar) {
+                        contentHtml = `<div class="w-3 h-3 md:w-4 md:h-4 bg-yellow-400 rounded-full animate-pulse shadow-[0_0_10px_rgba(250,204,21,0.8)]"></div>`;
+                    }
+
+                    if (isVirtual) {
+                        let virtualCharHtml = customCharImg
+                            ? `<img src="${customCharImg}" class="w-[85%] h-[85%] object-contain opacity-50 drop-shadow-md brightness-150" />`
+                            : `<span class="${iconSizeClass} opacity-50 drop-shadow-md brightness-150">🤖</span>`;
+                            
+                        cell.innerHTML = `
+                            ${contentHtml}
+                            <div class="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+                                ${virtualCharHtml}
+                                ${virtualState.isCrashed ? `<i data-lucide="x-circle" class="w-5 h-5 absolute -top-1 -right-1 text-red-500 bg-white rounded-full z-30 shadow"></i>` : ''}
+                            </div>
+                        `;
+                    } else {
+                        cell.innerHTML = contentHtml;
+                    }
+                    els.gridContainer.appendChild(cell);
+                }
+            }
+            lucide.createIcons();
+        };
+
+        const renderCommands = () => {
+            els.commandList.innerHTML = '';
+            els.emptyCommandsText.style.display = commands.length === 0 ? 'flex' : 'none';
+            els.btnStart.disabled = commands.length === 0 || gameStatus === 'RUNNING';
+            els.btnClear.disabled = commands.length === 0 || gameStatus !== 'IDLE';
+
+            commands.forEach((cmdId, index) => {
+                const cmd = COMMAND_TYPES[cmdId];
+                const isActive = currentStep === index && gameStatus === 'RUNNING';
+                const div = document.createElement('div');
+                div.className = "flex items-center space-x-3 w-full";
+                
+                div.innerHTML = `
+                    <span class="text-slate-400 font-mono text-sm w-4 md:w-5 text-right">${index + 1}.</span>
+                    <div class="cmd-item flex-1 flex items-center justify-center py-3 md:py-4 rounded-xl text-white shadow-sm ${cmd.color} ${isActive ? 'ring-4 ring-indigo-300 scale-[1.02] z-10 shadow-lg' : 'hover:opacity-90 cursor-pointer'} ${gameStatus !== 'IDLE' ? 'cursor-default pointer-events-none' : 'active:scale-95 transition-all'}" data-index="${index}">
+                        <i data-lucide="${cmd.iconName}" class="w-5 h-5 md:w-6 md:h-6 pointer-events-none"></i>
+                    </div>
+                `;
+                els.commandList.appendChild(div);
+            });
+            
+            // Add event listeners to new command items
+            document.querySelectorAll('.cmd-item').forEach(item => {
+                item.addEventListener('click', (e) => {
+                    if (gameStatus !== 'IDLE') return;
+                    const idx = parseInt(e.target.closest('.cmd-item').dataset.index);
+                    removeCommand(idx);
+                });
+            });
+            
+            // Auto scroll to bottom
+            els.commandList.parentElement.scrollTop = els.commandList.parentElement.scrollHeight;
+            lucide.createIcons();
+        };
+
+        const updateStatusUI = () => {
+            els.btnStart.style.display = (gameStatus === 'IDLE' || gameStatus === 'RUNNING') ? 'flex' : 'none';
+            els.btnRetry.style.display = ['WON', 'LOST_CRASH', 'LOST_INCOMPLETE', 'LOST_TIME'].includes(gameStatus) ? 'flex' : 'none';
+            els.btnNext.style.display = gameStatus === 'WON' ? 'flex' : 'none';
+            els.scoreDisplay.innerText = score;
+            
+            // Overlay during animation to prevent clicks
+            els.overlay.style.display = gameStatus === 'RUNNING' ? 'block' : 'none';
+            
+            // Mode select
+            els.modeSelect.disabled = gameStatus === 'RUNNING';
+            
+            let bannerHtml = '';
+            let bannerClasses = "mt-1 mb-2 h-12 md:h-14 flex shrink-0 items-center justify-center w-full rounded-2xl border transition-colors duration-300 ";
+
+            if (gameStatus === 'WON') {
+                bannerClasses += "bg-green-500/10 border-green-500/30 text-green-400";
+                bannerHtml = `<div class="flex items-center font-bold text-base md:text-lg animate-pulse"><i data-lucide="check-circle-2" class="w-5 h-5 md:w-6 md:h-6 mr-2"></i>順利抵達終點！(+${100 + currentTimeBonus}分)</div>`;
+            } else if (gameStatus === 'LOST_CRASH') {
+                bannerClasses += "bg-red-500/10 border-red-500/30 text-red-400";
+                bannerHtml = `<div class="flex items-center font-bold text-base md:text-lg animate-bounce"><i data-lucide="x-circle" class="w-5 h-5 md:w-6 md:h-6 mr-2"></i>糟糕，撞到障礙物了！</div>`;
+            } else if (gameStatus === 'LOST_TIME') {
+                bannerClasses += "bg-red-500/10 border-red-500/30 text-red-400";
+                bannerHtml = `<div class="flex items-center font-bold text-base md:text-lg animate-bounce"><i data-lucide="timer" class="w-5 h-5 md:w-6 md:h-6 mr-2"></i>時間到！任務失敗！</div>`;
+            } else if (gameStatus === 'LOST_INCOMPLETE') {
+                bannerClasses += "bg-yellow-500/10 border-yellow-500/30 text-yellow-400";
+                bannerHtml = `<div class="flex items-center font-bold text-base md:text-lg"><i data-lucide="x-circle" class="w-5 h-5 md:w-6 md:h-6 mr-2"></i>指令結束，尚未抵達終點。</div>`;
+            } else if (gameStatus === 'IDLE') {
+                bannerClasses += "bg-[#1c2135] border-slate-700/50 text-slate-400 opacity-0"; // Idle時隱藏或弱化背景
+                bannerHtml = `<div class="font-medium text-sm md:text-lg flex items-center">準備就緒，等待指令輸入...</div>`;
+            } else if (gameStatus === 'RUNNING') {
+                bannerClasses += "bg-blue-500/10 border-blue-500/30 text-blue-400";
+                bannerHtml = `<div class="font-bold text-sm md:text-lg animate-pulse flex items-center">機器人移動中...</div>`;
+            }
+
+            els.statusBanner.className = bannerClasses;
+            els.statusMessage.innerHTML = bannerHtml;
+            
+            // Update Timer UI based on state
+            if(isTimerMode) {
+                if(gameStatus === 'IDLE') {
+                    els.timerInput.classList.remove('hidden');
+                    els.timerText.classList.add('hidden');
+                    els.timerInput.value = customTimeLimit;
+                    els.timerTextContainer.className = 'font-mono text-lg md:text-xl font-black flex items-center text-green-400';
+                } else {
+                    els.timerInput.classList.add('hidden');
+                    els.timerText.classList.remove('hidden');
+                    els.timerText.innerText = timeLeft;
+                    if(timeLeft <= 10 && gameStatus === 'RUNNING') {
+                        els.timerTextContainer.className = 'font-mono text-lg md:text-xl font-black flex items-center text-red-400 animate-pulse';
+                    } else {
+                        els.timerTextContainer.className = 'font-mono text-lg md:text-xl font-black flex items-center text-green-400';
+                    }
+                }
+            }
+            
+            // Toggle classes
+            els.btnTimerToggle.className = `p-2 rounded-xl transition-all duration-300 ${isTimerMode ? 'bg-indigo-600 text-white shadow-[0_0_10px_rgba(79,70,229,0.5)]' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'}`;
+            els.btnVirtualToggle.className = `p-2 rounded-xl transition-colors ${showVirtualPos ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`;
+            els.btnHintToggle.className = `p-2 rounded-xl transition-colors ${isHintMode ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/50' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`;
+            els.btnMuteToggle.className = `p-2 rounded-xl transition-colors ${isMuted ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`;
+
+            // Update icons inside the buttons
+            els.btnVirtualToggle.innerHTML = `<i data-lucide="${showVirtualPos ? 'eye' : 'eye-off'}" class="w-5 h-5"></i>`;
+            els.btnHintToggle.innerHTML = `<i data-lucide="${isHintMode ? 'lightbulb' : 'lightbulb-off'}" class="w-5 h-5"></i>`;
+            els.btnMuteToggle.innerHTML = `<i data-lucide="${isMuted ? 'volume-x' : 'volume-2'}" class="w-5 h-5"></i>`;
+
+            lucide.createIcons();
+        };
+
+        // --- 遊戲邏輯 ---
+        const initLevel = () => {
+            levelData = generateLevel(currentModeIdx);
+            charPos = { ...levelData.start };
+            commands = [];
+            currentStep = -1;
+            gameStatus = 'IDLE';
+            customTimeLimit = levelData.timeLimit;
+            els.timerInput.value = customTimeLimit;
+            if(isTimerMode) timeLeft = customTimeLimit;
+            stopTimer();
+            renderAll();
+        };
+
+        const renderAll = () => {
+            renderGrid();
+            renderCommands();
+            updateStatusUI();
+        };
+
+        const startTimer = () => {
+            stopTimer();
+            if(!isTimerMode) return;
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                if(timeLeft <= 0) {
+                    timeLeft = 0;
+                    gameStatus = 'LOST_TIME';
+                    playSound('timeout');
+                    stopTimer();
+                    clearTimeout(runTimeout);
+                    renderAll();
+                } else {
+                    updateStatusUI(); // Just update timer UI
+                }
+            }, 1000);
+        };
+
+        const stopTimer = () => {
+            if(timerInterval) clearInterval(timerInterval);
+            timerInterval = null;
+        };
+
+        const executeStepLogic = () => {
+            if (currentStep >= commands.length) {
+                if (charPos.x === levelData.goal.x && charPos.y === levelData.goal.y) {
+                    gameStatus = 'WON';
+                    currentTimeBonus = isTimerMode ? timeLeft * 2 : 0;
+                    score += 100 + currentTimeBonus;
+                    playSound('win');
+                } else {
+                    gameStatus = 'LOST_INCOMPLETE';
+                }
+                stopTimer();
+                renderAll();
+                return;
+            }
+
+            const cmd = COMMAND_TYPES[commands[currentStep]];
+            const newX = charPos.x + cmd.dx;
+            const newY = charPos.y + cmd.dy;
+
+            if (newX < 0 || newX >= levelData.size || newY < 0 || newY >= levelData.size || levelData.obstacles.some(obs => obs.x === newX && obs.y === newY)) {
+                gameStatus = 'LOST_CRASH';
+                playSound('crash');
+                stopTimer();
+                renderAll();
+                return;
+            }
+
+            charPos = { x: newX, y: newY };
+
+            if (newX === levelData.goal.x && newY === levelData.goal.y) {
+                gameStatus = 'WON';
+                currentTimeBonus = isTimerMode ? timeLeft * 2 : 0;
+                score += 100 + currentTimeBonus;
+                playSound('win');
+                stopTimer();
+                renderAll();
+                return;
+            } else {
+                playSound('move');
+            }
+
+            currentStep++;
+            renderAll();
+            
+            if(gameStatus === 'RUNNING') {
+                runTimeout = setTimeout(executeStepLogic, 400);
+            }
+        };
+
+        const addCommand = (cmdId) => {
+            if (gameStatus !== 'IDLE') return;
+            playSound('click');
+            commands.push(cmdId);
+            renderAll();
+        };
+
+        const removeCommand = (index) => {
+            if (gameStatus !== 'IDLE') return;
+            playSound('click');
+            commands.splice(index, 1);
+            renderAll();
+        };
+
+        // --- 事件監聽 ---
+        els.modeSelect.addEventListener('change', (e) => {
+            playSound('click');
+            currentModeIdx = parseInt(e.target.value);
+            initLevel();
+        });
+
+        document.getElementById('btnSkip').addEventListener('click', () => {
+            playSound('click');
+            initLevel();
+        });
+
+        els.cmdBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const target = e.currentTarget;
+                target.classList.add('scale-active');
+                setTimeout(() => target.classList.remove('scale-active'), 100);
+                addCommand(target.dataset.cmd);
+            });
+        });
+
+        els.btnClear.addEventListener('click', () => {
+            if (gameStatus !== 'IDLE' || commands.length === 0) return;
+            playSound('click');
+            commands = [];
+            renderAll();
+        });
+
+        els.btnStart.addEventListener('click', () => {
+            if (commands.length === 0 || gameStatus === 'RUNNING') return;
+            playSound('click');
+            charPos = { ...levelData.start };
+            currentStep = 0;
+            gameStatus = 'RUNNING';
+            if(isTimerMode) startTimer();
+            renderAll();
+            runTimeout = setTimeout(executeStepLogic, 400);
+        });
+
+        els.btnRetry.addEventListener('click', () => {
+            playSound('click');
+            charPos = { ...levelData.start };
+            currentStep = -1;
+            gameStatus = 'IDLE';
+            if (isTimerMode) timeLeft = customTimeLimit;
+            renderAll();
+        });
+
+        els.btnNext.addEventListener('click', () => {
+            playSound('click');
+            initLevel();
+        });
+
+        // Toggles
+        els.btnTimerToggle.addEventListener('click', () => {
+            playSound('click');
+            isTimerMode = !isTimerMode;
+            els.timerContainer.style.display = isTimerMode ? 'flex' : 'none';
+            if(isTimerMode && gameStatus === 'IDLE') timeLeft = customTimeLimit;
+            renderAll();
+        });
+
+        els.btnVirtualToggle.addEventListener('click', () => {
+            playSound('click');
+            showVirtualPos = !showVirtualPos;
+            renderAll();
+        });
+
+        els.btnHintToggle.addEventListener('click', () => {
+            playSound('click');
+            isHintMode = !isHintMode;
+            renderAll();
+        });
+
+        els.btnMuteToggle.addEventListener('click', () => {
+            isMuted = !isMuted;
+            renderAll();
+        });
+
+        // --- 設定視窗事件 ---
+        const toggleSettings = () => {
+            playSound('click');
+            els.settingsModal.classList.toggle('hidden');
+        };
+        
+        els.btnSettingsToggle.addEventListener('click', toggleSettings);
+        els.btnCloseSettings.addEventListener('click', toggleSettings);
+        els.btnSettingsDone.addEventListener('click', toggleSettings);
+
+        els.settingsModal.addEventListener('click', (e) => {
+            if (e.target === els.settingsModal) toggleSettings();
+        });
+
+        els.charFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    customCharImg = event.target.result;
+                    els.charPreview.innerHTML = `<img src="${customCharImg}" class="w-full h-full object-contain p-1">`;
+                    renderAll();
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        els.btnResetChar.addEventListener('click', () => {
+            playSound('click');
+            customCharImg = null;
+            els.charFileInput.value = '';
+            els.charPreview.innerHTML = `🤖`;
+            renderAll();
+        });
+
+        els.goalFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    customGoalImg = event.target.result;
+                    els.goalPreview.innerHTML = `<img src="${customGoalImg}" class="w-full h-full object-contain p-1">`;
+                    renderAll();
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        els.btnResetGoal.addEventListener('click', () => {
+            playSound('click');
+            customGoalImg = null;
+            els.goalFileInput.value = '';
+            els.goalPreview.innerHTML = `⭐️`;
+            renderAll();
+        });
+
+        document.getElementById('btnResetAll').addEventListener('click', () => {
+            playSound('click');
+            score = 0;
+            currentModeIdx = 0;
+            els.modeSelect.value = "0";
+            isTimerMode = false;
+            els.timerContainer.style.display = 'none';
+            initLevel();
+        });
+
+        els.timerInput.addEventListener('change', (e) => {
+            let val = parseInt(e.target.value);
+            if(isNaN(val) || val < 5) val = 5;
+            if(val > 999) val = 999;
+            customTimeLimit = val;
+            timeLeft = val;
+            e.target.value = val;
+        });
+
+        // --- 初始化 ---
+        initLevel();
+
+    </script>
+</body>
+</html>
