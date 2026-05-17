@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小冒險家：數學大冒險</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Microsoft JhengHei', 'PingFang TC', system-ui, sans-serif;
+            background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
+            min-height: 100vh;
+            display: flex;
+            padding: 2rem 0;
+            box-sizing: border-box;
+        }
+
+        .game-card {
+            background: white;
+            border-radius: 2rem;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.1);
+            width: 95%;
+            max-width: 900px;
+            padding: 1.5rem;
+            text-align: center;
+            position: relative;
+            margin: auto;
+        }
+
+        .difficulty-btn {
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+        .difficulty-btn.active {
+            border-color: #4299E1;
+            background-color: #EBF8FF;
+            font-weight: bold;
+        }
+
+        /* 運算符號選擇按鈕 */
+        .op-btn {
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 1rem;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+            font-weight: bold;
+            color: #4A5568;
+        }
+        .op-btn.active.op-add { border-color: #48BB78; background-color: #F0FFF4; color: #2F855A; }
+        .op-btn.active.op-sub { border-color: #F56565; background-color: #FFF5F5; color: #C53030; }
+        .op-btn.active.op-mul { border-color: #9F7AEA; background-color: #FAF5FF; color: #6B46C1; }
+        .op-btn.active.op-div { border-color: #ED8936; background-color: #FFFAF0; color: #C05621; }
+
+        .item-wrapper {
+            position: relative;
+            display: inline-block;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+
+        .item-icon {
+            display: block;
+            filter: drop-shadow(2px 4px 6px rgba(0,0,0,0.1));
+            transition: opacity 0.3s, filter 0.3s;
+        }
+
+        .cross-mark {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #E53E3E;
+            font-weight: bold;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            text-shadow: 1px 1px 0px white;
+        }
+
+        .item-wrapper.removed .item-icon {
+            opacity: 0.25;
+            filter: grayscale(1);
+        }
+
+        .item-wrapper.removed .cross-mark {
+            opacity: 0.9;
+        }
+
+        .custom-img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
+            filter: drop-shadow(2px 4px 6px rgba(0,0,0,0.1));
+            transition: opacity 0.3s, filter 0.3s;
+        }
+
+        .keypad-btn {
+            background: #EDF2F7;
+            border: 2px solid #E2E8F0;
+            color: #2D3748;
+            font-size: 1.5rem;
+            font-weight: bold;
+            border-radius: 0.5rem;
+            padding: 0.5rem;
+            cursor: pointer;
+            transition: all 0.1s;
+            box-shadow: 0 4px 0 #CBD5E0;
+        }
+        .keypad-btn:active {
+            transform: translateY(4px);
+            box-shadow: 0 0 0 #CBD5E0;
+        }
+        .keypad-btn.action-btn {
+            background: #FEFCBF;
+            border-color: #F6E05E;
+            box-shadow: 0 4px 0 #D69E2E;
+        }
+
+        .vertical-math-box {
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: bold;
+            background: #fdfdfd;
+            border: 2px solid #cbd5e0;
+            padding: 15px 25px;
+            border-radius: 1rem;
+            position: relative;
+            min-width: 250px;
+            min-height: 220px; /* 給草稿保留高度 */
+            display: none; 
+        }
+
+        .v-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 2.5rem;
+            text-align: center;
+            position: relative;
+            z-index: 2;
+        }
+
+        .v-table th {
+            font-size: 1rem;
+            padding-bottom: 5px;
+        }
+
+        .v-table td {
+            padding: 2px 0;
+            width: 20%;
+        }
+
+        .col-ones { background-color: rgba(72, 187, 120, 0.15); }
+
+        .v-operator {
+            text-align: left;
+            font-weight: bold;
+        }
+
+        .v-line td {
+            border-bottom: 3px solid #2d3748;
+        }
+
+        #sketch-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            cursor: crosshair;
+            z-index: 10; 
+            border-radius: 1rem;
+            touch-action: none;
+        }
+
+        .equation-box {
+            font-size: 2.2rem;
+            margin: 1rem 0;
+            color: #2D3748;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .btn-gray {
+            background-color: #EDF2F7;
+            color: #4A5568;
+            border: 1px solid #CBD5E0;
+            font-size: 0.9rem;
+            padding: 4px 12px;
+            transition: all 0.2s;
+        }
+        .btn-gray:hover { background-color: #E2E8F0; }
+
+        .top-badges {
+            position: absolute;
+            top: -15px;
+            right: 15px;
+            display: flex;
+            gap: 10px;
+            z-index: 20;
+        }
+
+        .badge {
+            color: white;
+            padding: 5px 15px;
+            border-radius: 50px;
+            font-size: 1.1rem;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            font-weight: bold;
+        }
+        .score-badge-bg { background: #ED8936; }
+        .timer-badge-bg { background: #4299E1; }
+
+        .size-lg { font-size: 3.5rem; margin: 8px; }
+        .size-md { font-size: 2.2rem; margin: 5px; }
+        .size-sm { font-size: 1.4rem; margin: 3px; }
+        .size-xs { font-size: 1rem; margin: 2px; }
+
+        .group-box {
+            border: 2px dashed #A0AEC0;
+            border-radius: 1rem;
+            padding: 0.5rem;
+            margin: 0.5rem;
+            background-color: rgba(255,255,255,0.5);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 60px;
+        }
+
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="game-card">
+        <div class="top-badges">
+            <div id="timer-badge" class="badge timer-badge-bg hidden">⏳ 00:00</div>
+            <div id="score" class="badge score-badge-bg">得分: 0</div>
+        </div>
+        
+        <div class="flex justify-between items-center mb-2 gap-2">
+            <h1 id="game-title" class="text-2xl font-bold text-red-500">數學大冒險</h1>
+            <button onclick="toggleSettings()" id="btn-toggle-settings" class="text-sm font-bold text-gray-500 hover:text-gray-700 bg-gray-100 px-3 py-1 rounded-full transition-colors border border-gray-200">⚙️ 隱藏設定</button>
+        </div>
+
+        <div id="settings-area" class="transition-all duration-300">
+            <!-- 工具列與計時器 -->
+            <div class="flex flex-wrap justify-center items-center gap-2 mb-3">
+                <button onclick="toggleIcons()" id="btn-toggle-icon" class="btn-gray rounded-full whitespace-nowrap">👁️ 隱藏圖示</button>
+                <button onclick="toggleVoice()" id="btn-toggle-voice" class="btn-gray rounded-full whitespace-nowrap">🔊 廣東話(開)</button>
+                <label class="btn-gray rounded-full cursor-pointer whitespace-nowrap flex items-center" title="上傳圖片當角色">
+                    <span>📁 換角色</span>
+                    <input type="file" id="image-upload" multiple accept="image/*" class="hidden">
+                </label>
+                <select id="timer-select" onchange="startTimer(this.value)" class="btn-gray rounded-full cursor-pointer outline-none font-bold text-blue-600">
+                    <option value="0">⏳ 不計時</option>
+                    <option value="5">⏳ 5 分鐘</option>
+                    <option value="10">⏳ 10 分鐘</option>
+                    <option value="15">⏳ 15 分鐘</option>
+                </select>
+                <button onclick="manualRestart()" class="btn-gray rounded-full whitespace-nowrap">🔄 重新出題</button>
+            </div>
+
+            <!-- 運算選擇與難度 -->
+            <div class="flex flex-col gap-2 mb-3">
+                <div class="flex flex-wrap gap-1 bg-gray-50 p-1 rounded-2xl justify-center shadow-inner">
+                    <button onclick="setOperation('add')" id="btn-op-add" class="op-btn op-add">加法 ＋</button>
+                    <button onclick="setOperation('sub')" id="btn-op-sub" class="op-btn op-sub active">減法 －</button>
+                    <button onclick="setOperation('mul')" id="btn-op-mul" class="op-btn op-mul">乘法 ×</button>
+                    <button onclick="setOperation('div')" id="btn-op-div" class="op-btn op-div">除法 ÷</button>
+                </div>
+                <div class="flex flex-wrap gap-1 bg-gray-100 p-1 rounded-2xl justify-center">
+                    <button onclick="setDifficulty('easy')" id="btn-easy" class="difficulty-btn active">簡單</button>
+                    <button onclick="setDifficulty('medium')" id="btn-medium" class="difficulty-btn">中等</button>
+                    <button onclick="setDifficulty('hard')" id="btn-hard" class="difficulty-btn">困難</button>
+                    <button onclick="setDifficulty('super_hard')" id="btn-super_hard" class="difficulty-btn">超困難</button>
+                    <button onclick="setDifficulty('super_super_hard')" id="btn-super_super_hard" class="difficulty-btn">大師</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="word-problem" class="bg-yellow-50 text-yellow-800 border-2 border-yellow-200 p-3 rounded-xl mb-3 text-lg font-bold">
+            <!-- 故事文字將會顯示在這裡 -->
+        </div>
+
+        <div class="flex flex-col lg:flex-row gap-4 items-center justify-center">
+            <!-- 圖像區域 -->
+            <div id="visual-area" class="flex-grow flex flex-wrap justify-center content-start min-h-[150px] max-h-[300px] overflow-y-auto border-4 border-blue-100 rounded-3xl p-4 bg-blue-50/10 w-full relative">
+                <div id="visual-message" class="hidden absolute inset-0 flex items-center justify-center text-xl text-gray-500 font-bold bg-white/90 rounded-2xl z-10">
+                    訊息提示
+                </div>
+            </div>
+
+            <!-- 直式草稿手寫區域 (僅在困難以上模式顯示) -->
+            <div id="sketch-area-container" class="flex flex-col items-center hidden">
+                <div id="vertical-box" class="vertical-math-box">
+                    <canvas id="sketch-canvas"></canvas>
+                    <table class="v-table" id="vertical-table">
+                        <colgroup>
+                            <col>
+                            <col id="col-th">
+                            <col id="col-h">
+                            <col id="col-t">
+                            <col class="col-ones"> <!-- 個位底色 -->
+                        </colgroup>
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th id="label-th" class="text-orange-600">千</th>
+                                <th id="label-h" class="text-blue-600">百</th>
+                                <th id="label-t" class="text-purple-600">十</th>
+                                <th id="label-o" class="text-green-600">個</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td></td>
+                                <td id="v-n1-th"></td>
+                                <td id="v-n1-h"></td>
+                                <td id="v-n1-t"></td>
+                                <td id="v-n1-o"></td>
+                            </tr>
+                            <tr class="v-line">
+                                <td id="v-operator-sign" class="v-operator text-red-500">－</td>
+                                <td id="v-n2-th"></td>
+                                <td id="v-n2-h"></td>
+                                <td id="v-n2-t"></td>
+                                <td id="v-n2-o"></td>
+                            </tr>
+                            <tr class="text-transparent h-12">
+                                <td colspan="5">8</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <button onclick="clearCanvas()" class="mt-2 text-xs text-gray-500 underline">🧹 清除草稿</button>
+            </div>
+        </div>
+
+        <div class="equation-box">
+            <span id="num1" class="text-blue-600"></span>
+            <span id="eq-op" class="text-red-500 font-bold">－</span>
+            <span id="num2" class="text-orange-500"></span>
+            <span class="font-bold">＝</span>
+            <input type="number" id="answer-input" class="w-24 h-14 border-b-4 border-blue-400 text-center focus:outline-none bg-transparent text-3xl font-bold" placeholder="?">
+        </div>
+
+        <!-- 數字鍵盤 -->
+        <div class="grid grid-cols-3 gap-2 max-w-[250px] mx-auto mb-4">
+            <button class="keypad-btn" onclick="inputNum(1)">1</button>
+            <button class="keypad-btn" onclick="inputNum(2)">2</button>
+            <button class="keypad-btn" onclick="inputNum(3)">3</button>
+            <button class="keypad-btn" onclick="inputNum(4)">4</button>
+            <button class="keypad-btn" onclick="inputNum(5)">5</button>
+            <button class="keypad-btn" onclick="inputNum(6)">6</button>
+            <button class="keypad-btn" onclick="inputNum(7)">7</button>
+            <button class="keypad-btn" onclick="inputNum(8)">8</button>
+            <button class="keypad-btn" onclick="inputNum(9)">9</button>
+            <button class="keypad-btn action-btn text-red-500" onclick="deleteNum()">⌫</button>
+            <button class="keypad-btn" onclick="inputNum(0)">0</button>
+            <button class="keypad-btn action-btn text-green-600" onclick="checkAnswer()">確認</button>
+        </div>
+
+        <div id="feedback" class="mt-2 text-xl font-bold h-8"></div>
+    </div>
+
+    <script>
+        // 音效系統
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            osc.connect(g); g.connect(audioCtx.destination);
+            const now = audioCtx.currentTime;
+            if (type === 'click') {
+                osc.frequency.setValueAtTime(400, now); osc.frequency.exponentialRampToValueAtTime(10, now + 0.1);
+                g.gain.setValueAtTime(0.1, now); osc.start(); osc.stop(now + 0.1);
+            } else if (type === 'correct') {
+                [523, 659, 783].forEach((f, i) => osc.frequency.setValueAtTime(f, now + i * 0.1));
+                g.gain.setValueAtTime(0.1, now); osc.start(); osc.stop(now + 0.4);
+            } else if (type === 'wrong') {
+                osc.frequency.setValueAtTime(150, now); osc.frequency.linearRampToValueAtTime(100, now + 0.3);
+                g.gain.setValueAtTime(0.1, now); osc.start(); osc.stop(now + 0.3);
+            }
+        }
+
+        // 畫布系統
+        const canvas = document.getElementById('sketch-canvas');
+        const ctx = canvas.getContext('2d');
+        const vBox = document.getElementById('vertical-box');
+        let drawing = false;
+
+        function resizeCanvas() {
+            if (!sketchArea.classList.contains('hidden')) {
+                canvas.width = vBox.offsetWidth;
+                canvas.height = vBox.offsetHeight;
+                ctx.strokeStyle = 'rgba(74, 85, 104, 0.8)';
+                ctx.lineWidth = 3;
+                ctx.lineCap = 'round';
+            }
+        }
+
+        function clearCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            playSound('click');
+        }
+
+        function startDrawing(e) { drawing = true; draw(e); }
+        function stopDrawing() { drawing = false; ctx.beginPath(); }
+        function draw(e) {
+            if (!drawing) return;
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX || e.touches[0].clientX) - rect.left;
+            const y = (e.clientY || e.touches[0].clientY) - rect.top;
+            ctx.lineTo(x, y);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+        }
+
+        canvas.addEventListener('mousedown', startDrawing);
+        canvas.addEventListener('mousemove', draw);
+        window.addEventListener('mouseup', stopDrawing);
+        canvas.addEventListener('touchstart', (e) => { e.preventDefault(); startDrawing(e); }, {passive: false});
+        canvas.addEventListener('touchmove', (e) => { e.preventDefault(); draw(e); }, {passive: false});
+        window.addEventListener('touchend', stopDrawing);
+
+        // 遊戲狀態與常數
+        let operation = 'sub'; // 'add', 'sub', 'mul', 'div'
+        let difficulty = 'easy';
+        let score = 0;
+        let isIconHidden = false;
+        let currentLevel = { n1: 0, n2: 0, ans: 0, item: '', isImage: false, removedCount: 0 };
+        
+        let countdownInterval = null;
+        let timeRemaining = 0;
+
+        const itemsPool = ['🍎', '🍓', '⭐', '🎈', '🍦', '🍩', '🦁', '🚗', '🐱', '🦋', '⚽', '🎨'];
+        const subActionsPool = ['拿走了', '吃掉了', '送給朋友', '丟掉了', '弄不見了'];
+        let customImagesPool = [];
+        
+        // 廣東話語音系統
+        let isVoiceEnabled = true;
+        let cantoneseVoice = null;
+
+        function initVoices() {
+            const voices = speechSynthesis.getVoices();
+            // 嘗試尋找廣東話或香港的語音包
+            cantoneseVoice = voices.find(v => v.lang === 'zh-HK' || v.name.toLowerCase().includes('hk') || v.name.toLowerCase().includes('cantonese')) 
+                             || voices.find(v => v.lang.startsWith('zh'));
+        }
+        if (speechSynthesis.onvoiceschanged !== undefined) {
+            speechSynthesis.onvoiceschanged = initVoices;
+        }
+
+        function toggleVoice() {
+            isVoiceEnabled = !isVoiceEnabled;
+            const btn = document.getElementById('btn-toggle-voice');
+            if (isVoiceEnabled) {
+                btn.classList.remove('bg-gray-300', 'text-gray-600');
+                btn.innerHTML = '🔊 廣東話(開)';
+                speakCantonese("廣東話配音已開啟");
+            } else {
+                btn.classList.add('bg-gray-300', 'text-gray-600');
+                btn.innerHTML = '🔇 廣東話(關)';
+                speechSynthesis.cancel();
+            }
+            playSound('click');
+        }
+
+        function speakCantonese(text) {
+            if (!isVoiceEnabled) return;
+            const utterance = new SpeechSynthesisUtterance(text);
+            if (!cantoneseVoice) initVoices();
+            if (cantoneseVoice) utterance.voice = cantoneseVoice;
+            utterance.lang = 'zh-HK';
+            utterance.rate = 1.0;
+            speechSynthesis.speak(utterance);
+        }
+        
+        const visualArea = document.getElementById('visual-area');
+        const visualMessage = document.getElementById('visual-message');
+        const num1El = document.getElementById('num1');
+        const num2El = document.getElementById('num2');
+        const eqOp = document.getElementById('eq-op');
+        const answerInput = document.getElementById('answer-input');
+        const feedbackEl = document.getElementById('feedback');
+        const scoreEl = document.getElementById('score');
+        const sketchArea = document.getElementById('sketch-area-container');
+        const wordProblemEl = document.getElementById('word-problem');
+        const verticalTable = document.getElementById('vertical-table');
+        const vOpSign = document.getElementById('v-operator-sign');
+        const gameTitle = document.getElementById('game-title');
+        const imageUpload = document.getElementById('image-upload');
+
+        // 圖片上傳邏輯
+        if (imageUpload) {
+            imageUpload.addEventListener('change', (e) => {
+                const files = e.target.files;
+                if (files.length > 0) {
+                    customImagesPool = [];
+                    let loadedCount = 0;
+                    for (let file of files) {
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                            customImagesPool.push(event.target.result);
+                            loadedCount++;
+                            if (loadedCount === files.length) initGame();
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                }
+            });
+        }
+
+        // 數字鍵盤
+        function inputNum(num) {
+            playSound('click');
+            answerInput.value = answerInput.value + num;
+        }
+        function deleteNum() {
+            playSound('click');
+            answerInput.value = answerInput.value.slice(0, -1);
+        }
+
+        // 計時器與設定功能
+        function toggleSettings() {
+            playSound('click');
+            const area = document.getElementById('settings-area');
+            const btn = document.getElementById('btn-toggle-settings');
+            if (area.classList.contains('hidden')) {
+                area.classList.remove('hidden');
+                btn.innerText = '⚙️ 隱藏設定';
+            } else {
+                area.classList.add('hidden');
+                btn.innerText = '⚙️ 顯示設定';
+            }
+        }
+
+        function startTimer(minutes) {
+            playSound('click');
+            clearInterval(countdownInterval);
+            const timerBadge = document.getElementById('timer-badge');
+            
+            score = 0; // 開始新計時，重置分數
+            scoreEl.innerText = `得分: ${score}`;
+
+            if (minutes == "0") {
+                timerBadge.classList.add('hidden');
+                initGame();
+                return;
+            }
+
+            timeRemaining = parseInt(minutes) * 60;
+            timerBadge.classList.remove('hidden');
+            updateTimerDisplay();
+
+            countdownInterval = setInterval(() => {
+                timeRemaining--;
+                updateTimerDisplay();
+                if (timeRemaining <= 0) {
+                    clearInterval(countdownInterval);
+                    handleTimeUp();
+                }
+            }, 1000);
+
+            initGame();
+        }
+
+        function updateTimerDisplay() {
+            const m = Math.floor(timeRemaining / 60).toString().padStart(2, '0');
+            const s = (timeRemaining % 60).toString().padStart(2, '0');
+            document.getElementById('timer-badge').innerText = `⏳ ${m}:${s}`;
+        }
+
+        function handleTimeUp() {
+            document.getElementById('answer-input').disabled = true;
+            document.getElementById('feedback').innerText = `⏰ 時間到！你總共獲得了 ${score} 分！`;
+            document.getElementById('feedback').className = "mt-2 text-xl font-bold h-8 text-blue-600";
+            
+            visualMessage.innerText = `⏰ 時間到！總得分：${score}`;
+            visualMessage.classList.remove('hidden');
+            document.getElementById('visual-area').classList.remove('hidden');
+            
+            speakCantonese(`時間到！好叻仔，你今次挑戰總共攞到 ${score} 分！`);
+            createConfetti();
+        }
+
+        function manualRestart() {
+            playSound('click');
+            const timerVal = document.getElementById('timer-select').value;
+            if (timerVal !== "0" && timeRemaining <= 0 && countdownInterval !== null) {
+                // 如果時間已經到了，點擊重新出題就直接重新開始這一局的計時
+                startTimer(timerVal);
+            } else {
+                initGame(); // 當作跳過題目，不重置時間分數
+            }
+        }
+
+        // UI 切換
+        function toggleIcons() {
+            isIconHidden = !isIconHidden;
+            const btn = document.getElementById('btn-toggle-icon');
+            if (isIconHidden) {
+                btn.classList.add('bg-gray-300', 'text-gray-600');
+                btn.innerHTML = '🙈 顯示圖示';
+            } else {
+                btn.classList.remove('bg-gray-300', 'text-gray-600');
+                btn.innerHTML = '👁️ 隱藏圖示';
+            }
+            playSound('click');
+            renderItems();
+        }
+
+        function setOperation(op) {
+            operation = op;
+            document.querySelectorAll('.op-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`btn-op-${op}`).classList.add('active');
+            
+            // 更新標題顏色
+            const colors = { 'add': 'text-green-600', 'sub': 'text-red-500', 'mul': 'text-purple-600', 'div': 'text-orange-500' };
+            gameTitle.className = `text-2xl font-bold ${colors[op]}`;
+            
+            playSound('click');
+            initGame();
+        }
+
+        function setDifficulty(level) {
+            difficulty = level;
+            document.querySelectorAll('.difficulty-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`btn-${level}`).classList.add('active');
+            
+            if (['hard', 'super_hard', 'super_super_hard'].includes(difficulty)) {
+                sketchArea.classList.remove('hidden');
+                vBox.style.display = 'block';
+                setTimeout(resizeCanvas, 50); 
+            } else {
+                sketchArea.classList.add('hidden');
+                vBox.style.display = 'none';
+            }
+            
+            playSound('click');
+            initGame();
+        }
+
+        function rnd(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+
+        function generateNumbers() {
+            let n1, n2, ans;
+            if (operation === 'add') {
+                if (difficulty === 'easy') { n1 = rnd(1, 9); n2 = rnd(1, 9); }
+                else if (difficulty === 'medium') { n1 = rnd(10, 50); n2 = rnd(10, 50); }
+                else if (difficulty === 'hard') { n1 = rnd(10, 99); n2 = rnd(10, 99); }
+                else if (difficulty === 'super_hard') { n1 = rnd(100, 999); n2 = rnd(10, 999); }
+                else { n1 = rnd(1000, 9999); n2 = rnd(1000, 9999); }
+                ans = n1 + n2;
+            } else if (operation === 'sub') {
+                let min, max;
+                if (difficulty === 'easy') { min = 3; max = 10; }
+                else if (difficulty === 'medium') { min = 11; max = 30; }
+                else if (difficulty === 'hard') { min = 31; max = 99; }
+                else if (difficulty === 'super_hard') { min = 100; max = 999; }
+                else { min = 1000; max = 9999; }
+                n1 = rnd(min, max);
+                n2 = rnd(1, n1 - 1);
+                ans = n1 - n2;
+            } else if (operation === 'mul') {
+                if (difficulty === 'easy') { n1 = rnd(2, 9); n2 = rnd(2, 9); }
+                else if (difficulty === 'medium') { n1 = rnd(10, 50); n2 = rnd(2, 9); }
+                else if (difficulty === 'hard') { n1 = rnd(11, 99); n2 = rnd(11, 99); }
+                else if (difficulty === 'super_hard') { n1 = rnd(100, 999); n2 = rnd(11, 99); }
+                else { n1 = rnd(100, 999); n2 = rnd(100, 999); }
+                ans = n1 * n2;
+            } else if (operation === 'div') {
+                // 除法為了確保能整除，先生成答案跟除數，再反推被除數
+                if (difficulty === 'easy') { ans = rnd(2, 9); n2 = rnd(2, 9); }
+                else if (difficulty === 'medium') { ans = rnd(10, 50); n2 = rnd(2, 9); }
+                else if (difficulty === 'hard') { ans = rnd(11, 99); n2 = rnd(11, 50); }
+                else if (difficulty === 'super_hard') { ans = rnd(100, 999); n2 = rnd(11, 99); }
+                else { ans = rnd(100, 999); n2 = rnd(100, 999); }
+                n1 = ans * n2;
+            }
+            return { n1, n2, ans };
+        }
+
+        function initGame() {
+            const timerVal = document.getElementById('timer-select')?.value || "0";
+            if (timerVal !== "0" && timeRemaining <= 0 && countdownInterval !== null) {
+                return; // 時間到了就不要自動出題，鎖定畫面
+            }
+
+            const { n1, n2, ans } = generateNumbers();
+            
+            let itemStr, isCustomImage = false;
+            if (customImagesPool.length > 0) {
+                itemStr = customImagesPool[Math.floor(Math.random() * customImagesPool.length)];
+                isCustomImage = true;
+            } else {
+                itemStr = itemsPool[Math.floor(Math.random() * itemsPool.length)];
+            }
+
+            currentLevel = { n1, n2, ans, item: itemStr, isImage: isCustomImage, removedCount: 0 };
+
+            // 故事題幹
+            let charHtml = isCustomImage ? `<img src="${itemStr}" style="height: 1.5em; display: inline-block; vertical-align: middle;">` : `<span class="text-2xl">${itemStr}</span>`;
+            let storyHTML = '';
+            let storyText = '';
+            let textItem = isCustomImage ? "圖案" : itemStr;
+
+            if (operation === 'add') {
+                storyHTML = `原本有 <b class="text-green-600 text-2xl">${n1}</b> 個 ${charHtml}，又得到了 <b class="text-green-600 text-2xl">${n2}</b> 個，現在總共有幾個？`;
+                storyText = `原本有 ${n1} 個 ${textItem}，又得到了 ${n2} 個，現在總共有幾個？`;
+            } else if (operation === 'sub') {
+                const act = subActionsPool[Math.floor(Math.random() * subActionsPool.length)];
+                storyHTML = `原本有 <b class="text-blue-600 text-2xl">${n1}</b> 個 ${charHtml}，${act} <b class="text-red-500 text-2xl">${n2}</b> 個，還剩下幾個？`;
+                storyText = `原本有 ${n1} 個 ${textItem}，${act} ${n2} 個，還剩下幾個？`;
+            } else if (operation === 'mul') {
+                storyHTML = `有 <b class="text-purple-600 text-2xl">${n1}</b> 盒 ${charHtml}，每盒裝了 <b class="text-purple-600 text-2xl">${n2}</b> 個，總共有幾個？`;
+                storyText = `有 ${n1} 盒 ${textItem}，每盒裝了 ${n2} 個，總共有幾個？`;
+            } else if (operation === 'div') {
+                storyHTML = `有 <b class="text-orange-600 text-2xl">${n1}</b> 個 ${charHtml}，平分給 <b class="text-orange-600 text-2xl">${n2}</b> 個小朋友，每個人可以拿到幾個？`;
+                storyText = `有 ${n1} 個 ${textItem}，平分給 ${n2} 個小朋友，每個人可以拿到幾個？`;
+            }
+            if(wordProblemEl) wordProblemEl.innerHTML = storyHTML;
+
+            // 語音朗讀題目
+            speechSynthesis.cancel();
+            setTimeout(() => speakCantonese(storyText), 100);
+
+            // 方程式區更新
+            num1El.innerText = n1;
+            num2El.innerText = n2;
+            const opData = { 
+                'add': { sign: '＋', color: 'text-green-500' }, 
+                'sub': { sign: '－', color: 'text-red-500' }, 
+                'mul': { sign: '×', color: 'text-purple-500' }, 
+                'div': { sign: '÷', color: 'text-orange-500' } 
+            };
+            eqOp.innerText = opData[operation].sign;
+            eqOp.className = `${opData[operation].color} font-bold`;
+
+            // 直式表格更新 (乘法、除法隱藏表格數字，只留草稿)
+            if (operation === 'add' || operation === 'sub') {
+                verticalTable.style.display = 'table';
+                visualMessage.innerText = "數量太大了！請使用右邊的直式算算看吧 📝";
+                
+                vOpSign.innerText = opData[operation].sign;
+                vOpSign.className = `v-operator ${opData[operation].color}`;
+                
+                const s1 = n1.toString().padStart(4, ' ');
+                const s2 = n2.toString().padStart(4, ' ');
+                ['th', 'h', 't', 'o'].forEach((place, i) => {
+                    if(document.getElementById(`v-n1-${place}`)) document.getElementById(`v-n1-${place}`).innerText = s1[i] !== ' ' ? s1[i] : '';
+                    if(document.getElementById(`v-n2-${place}`)) document.getElementById(`v-n2-${place}`).innerText = s2[i] !== ' ' ? s2[i] : '';
+                });
+
+                const maxLen = Math.max(n1.toString().length, n2.toString().length);
+                document.getElementById('col-th').style.display = maxLen < 4 ? 'none' : 'table-column';
+                document.getElementById('label-th').style.display = maxLen < 4 ? 'none' : 'table-cell';
+                document.getElementById('v-n1-th').style.display = maxLen < 4 ? 'none' : 'table-cell';
+                document.getElementById('v-n2-th').style.display = maxLen < 4 ? 'none' : 'table-cell';
+
+                document.getElementById('col-h').style.display = maxLen < 3 ? 'none' : 'table-column';
+                document.getElementById('label-h').style.display = maxLen < 3 ? 'none' : 'table-cell';
+                document.getElementById('v-n1-h').style.display = maxLen < 3 ? 'none' : 'table-cell';
+                document.getElementById('v-n2-h').style.display = maxLen < 3 ? 'none' : 'table-cell';
+            } else {
+                // 乘除法較難用簡單表格排版，隱藏表格，留下純淨畫布給孩子寫直式
+                verticalTable.style.display = 'none';
+                visualMessage.innerText = "請利用算式或右側的草稿紙計算唷！ 📝";
+            }
+
+            answerInput.value = '';
+            feedbackEl.innerText = '';
+            if (['hard', 'super_hard', 'super_super_hard'].includes(difficulty)) clearCanvas();
+            
+            answerInput.disabled = false; // 確保出新題目時輸入框是可用的
+            
+            renderItems();
+        }
+
+        function createItemElement(sizeClass) {
+            const wrapper = document.createElement('div');
+            wrapper.className = `item-wrapper ${sizeClass}`;
+            let iconHtml = currentLevel.isImage 
+                ? `<img src="${currentLevel.item}" class="custom-img">`
+                : `<span class="item-icon">${currentLevel.item}</span>`;
+            return { wrapper, iconHtml };
+        }
+
+        function renderItems() {
+            Array.from(visualArea.children).forEach(child => {
+                if(child.id !== 'visual-message') child.remove();
+            });
+
+            if (isIconHidden) {
+                visualArea.classList.add('hidden');
+                return;
+            } else {
+                visualArea.classList.remove('hidden');
+            }
+
+            // 判斷是否顯示圖示 (放寬至 82 個以內，以支援九九乘法表)
+            let totalItems = 0;
+            if (operation === 'add') totalItems = currentLevel.n1 + currentLevel.n2;
+            else if (operation === 'sub') totalItems = currentLevel.n1;
+            else if (operation === 'mul') totalItems = currentLevel.n1 * currentLevel.n2;
+            else if (operation === 'div') totalItems = currentLevel.n1;
+            
+            if (totalItems > 82) {
+                visualMessage.classList.remove('hidden');
+                visualMessage.innerText = "數量太大啦！請使用算式或草稿計算唷 📝";
+                return;
+            } else {
+                visualMessage.classList.add('hidden');
+            }
+
+            let sizeClass = totalItems > 50 ? 'size-xs' : (totalItems > 25 ? 'size-sm' : (totalItems > 12 ? 'size-md' : 'size-lg'));
+            
+            if (operation === 'sub') {
+                for (let i = 0; i < currentLevel.n1; i++) {
+                    const { wrapper, iconHtml } = createItemElement(sizeClass);
+                    wrapper.innerHTML = `${iconHtml}<div class="cross-mark">✕</div>`;
+                    wrapper.onclick = () => {
+                        playSound('click');
+                        wrapper.classList.toggle('removed');
+                        currentLevel.removedCount = document.querySelectorAll('.item-wrapper.removed').length;
+                        feedbackEl.innerText = (currentLevel.removedCount === currentLevel.n2) ? "好棒！數數看剩下的？" : "";
+                    };
+                    visualArea.appendChild(wrapper);
+                }
+            } else if (operation === 'add') {
+                // 加法顯示兩群物品
+                const group1 = document.createElement('div'); group1.className = "flex flex-wrap justify-center border-b-2 border-dashed border-gray-300 pb-2 w-full";
+                const group2 = document.createElement('div'); group2.className = "flex flex-wrap justify-center pt-2 w-full";
+                
+                for(let i=0; i<currentLevel.n1; i++) {
+                    const { wrapper, iconHtml } = createItemElement(sizeClass);
+                    wrapper.innerHTML = iconHtml; group1.appendChild(wrapper);
+                }
+                for(let i=0; i<currentLevel.n2; i++) {
+                    const { wrapper, iconHtml } = createItemElement(sizeClass);
+                    wrapper.innerHTML = iconHtml; group2.appendChild(wrapper);
+                }
+                
+                visualArea.appendChild(group1);
+                
+                const plusSign = document.createElement('div');
+                plusSign.className = "w-full text-center text-3xl font-bold text-green-500 my-1";
+                plusSign.innerText = "＋";
+                visualArea.appendChild(plusSign);
+                
+                visualArea.appendChild(group2);
+            } else if (operation === 'mul') {
+                for (let i = 0; i < currentLevel.n1; i++) {
+                    const groupBox = document.createElement('div');
+                    groupBox.className = "group-box";
+                    
+                    const itemsContainer = document.createElement('div');
+                    itemsContainer.className = "flex flex-wrap justify-center";
+                    for (let j = 0; j < currentLevel.n2; j++) {
+                        const { wrapper, iconHtml } = createItemElement(sizeClass);
+                        wrapper.innerHTML = iconHtml;
+                        itemsContainer.appendChild(wrapper);
+                    }
+                    groupBox.appendChild(itemsContainer);
+                    visualArea.appendChild(groupBox);
+                }
+            } else if (operation === 'div') {
+                for (let i = 0; i < currentLevel.n2; i++) {
+                    const groupBox = document.createElement('div');
+                    groupBox.className = "group-box relative";
+                    
+                    const groupLabel = document.createElement('div');
+                    groupLabel.className = "text-xs text-blue-600 mb-1 font-bold w-full text-center border-b border-blue-200 pb-1";
+                    groupLabel.innerText = `小朋友 ${i + 1}`;
+                    groupBox.appendChild(groupLabel);
+
+                    const itemsContainer = document.createElement('div');
+                    itemsContainer.className = "flex flex-wrap justify-center mt-1";
+                    for (let j = 0; j < currentLevel.ans; j++) {
+                        const { wrapper, iconHtml } = createItemElement(sizeClass);
+                        wrapper.innerHTML = iconHtml;
+                        itemsContainer.appendChild(wrapper);
+                    }
+                    groupBox.appendChild(itemsContainer);
+                    visualArea.appendChild(groupBox);
+                }
+            }
+        }
+
+        function checkAnswer() {
+            const userVal = parseInt(answerInput.value);
+            if (isNaN(userVal)) return;
+
+            if (userVal === currentLevel.ans) {
+                playSound('correct');
+                let pts = 10;
+                if(difficulty === 'medium') pts = 20;
+                if(difficulty === 'hard') pts = 30;
+                if(difficulty === 'super_hard') pts = 40;
+                if(difficulty === 'super_super_hard') pts = 50;
+                
+                let oldScore = score;
+                score += pts;
+                
+                // 判斷是否跨越了 100 分的門檻
+                let oldHundreds = Math.floor(oldScore / 100);
+                let newHundreds = Math.floor(score / 100);
+                
+                if (newHundreds > oldHundreds && newHundreds > 0) {
+                    const praises = ['好叻仔呀！', '好犀利呀！', '做得好靚呀！', '太勁啦！'];
+                    const praise = praises[Math.floor(Math.random() * praises.length)];
+                    speakCantonese(`${praise}你而家有 ${score} 分啦！`);
+                }
+                
+                scoreEl.innerText = `得分: ${score}`;
+                feedbackEl.innerText = `太棒了！答案是 ${currentLevel.ans} 🌟`;
+                feedbackEl.className = "mt-2 text-xl font-bold h-8 text-green-500";
+                createConfetti();
+                setTimeout(initGame, 2000);
+            } else {
+                playSound('wrong');
+                feedbackEl.innerText = ['hard', 'super_hard', 'super_super_hard'].includes(difficulty) || isIconHidden ? "再算一次看看，或在草稿檢查！" : "再數一次看看唷！";
+                feedbackEl.className = "mt-2 text-xl font-bold h-8 text-red-500";
+                answerInput.focus();
+            }
+        }
+
+        function createConfetti() {
+            for (let i = 0; i < 40; i++) {
+                const c = document.createElement('div');
+                c.className = 'fixed w-2 h-2 pointer-events-none z-[1000]';
+                c.style.left = Math.random() * 100 + '%'; c.style.top = '-10px';
+                c.style.backgroundColor = `hsl(${Math.random() * 360}, 80%, 60%)`;
+                document.body.appendChild(c);
+                c.animate([{ transform: 'translate3d(0,0,0) rotate(0)', opacity: 1 }, { transform: `translate3d(${(Math.random() - 0.5) * 400}px, ${window.innerHeight}px, 0) rotate(${Math.random() * 1000}deg)`, opacity: 0 }], { duration: 2000, easing: 'ease-out' }).onfinish = () => c.remove();
+            }
+        }
+
+        answerInput.onkeypress = (e) => { if (e.key === 'Enter') checkAnswer(); };
+
+        window.onload = () => {
+            setOperation('sub'); // 預設減法
+            setDifficulty('easy');
+        };
+        window.onresize = resizeCanvas;
+    </script>
+</body>
+</html>
