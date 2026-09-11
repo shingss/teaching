@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>趣味數數遊戲</title>
+    
+    <!-- 載入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 載入 React 和 ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- 載入 Babel 以便在瀏覽器中編譯 JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- 載入 Lucide 圖標 -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        @keyframes bounce-in {
+            0% { transform: scale(0); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+        .animate-bounce-in {
+            animation: bounce-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+        
+        /* 寫字板背景紋理 */
+        .lined-paper-bg {
+            background-color: white;
+            background-image: 
+                linear-gradient(90deg, transparent 79px, #abced4 79px, #abced4 81px, transparent 81px),
+                linear-gradient(#eee .1em, transparent .1em);
+            background-size: 100% 1.2em;
+        }
+
+        /* 隱藏捲動條但保留功能 */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="bg-sky-100 font-sans selection:bg-none touch-manipulation">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useCallback } = React;
+
+        const Icon = ({ name, className = "w-6 h-6", ...props }) => {
+            const icons = {
+                Settings2: <path d="M20 7h-9m14 0h-1M20 17h-9m14 0h-1M11 7H3M11 17H3M14 4v6M14 14v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>,
+                Volume2: <path d="M11 5L6 9H2v6h4l5 4V5z M15.54 8.46a5 5 0 0 1 0 7.07 M19.07 4.93a10 10 0 0 1 0 14.14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>,
+                VolumeX: <path d="M11 5L6 9H2v6h4l5 4V5z M23 9l-6 6 M17 9l6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>,
+                Eye: <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>,
+                EyeOff: <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24M1 1l22 22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>,
+                CheckCircle2: <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z M9 12l2 2 4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>,
+                PlayCircle: <><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none"/><polygon points="10 8 16 12 10 16 10 8" stroke="currentColor" strokeWidth="2" fill="currentColor"/></>,
+                CheckSquare: <><polyline points="9 11 12 14 22 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></>,
+                Square: <rect x="3" y="3" width="18" height="18" rx="2" ry="2" stroke="currentColor" strokeWidth="2" fill="none"/>,
+                PenTool: <path d="M12 19l7-7 3 3-7 7-3-3z M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z M2 2l7.586 7.586" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>,
+                X: <><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></>,
+                Eraser: <><path d="M20 20H7L3 16C2.5 15.5 2.5 14.5 3 14L13 4C13.5 3.5 14.5 3.5 15 4L20 9C20.5 9.5 20.5 10.5 20 11L11 20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/><path d="M17 14L10 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></>
+            };
+            return (
+                <svg className={className} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" {...props}>
+                    {icons[name]}
+                </svg>
+            );
+        };
+
+        const LEVELS = [
+            { id: '5', label: '5 以內', max: 5, min: 2 },
+            { id: '10', label: '10 以內', max: 10, min: 3 },
+            { id: '20', label: '20 以內', max: 20, min: 10 },
+            { id: '50', label: '50 以內', max: 50, min: 25 },
+            { id: '100', label: '100 以內', max: 100, min: 50 },
+            { id: '300', label: '300 以內', max: 300, min: 100 },
+            { id: '500', label: '500 以內', max: 500, min: 250 },
+        ];
+
+        const EMOJIS = ['🍎', '⭐️', '🎈', '🚗', '🐶', '⚽️', '🧸', '🌸', '🍓', '🦋', '🐟', '🐢', '🍉', '🍦', '🍩'];
+
+        function App() {
+            const [level, setLevel] = useState(LEVELS[0]);
+            const [targetCount, setTargetCount] = useState(0);
+            const [currentEmoji, setCurrentEmoji] = useState('🍎');
+            
+            const [clickedItems, setClickedItems] = useState([]);
+            const [layoutMode, setLayoutMode] = useState('auto'); // 'auto', '5', '10'
+            
+            const [circleMode, setCircleMode] = useState(true); // 預設圈起模式，可取消
+            const [isHandDrawMode, setIsHandDrawMode] = useState(false); // 數完後自動/手動轉為手繪圈起模式
+            const [showNumbers, setShowNumbers] = useState(true);
+            const [useCantonese, setUseCantonese] = useState(true);
+            const [enableWriting, setEnableWriting] = useState(true); 
+            const [countWhileClicking, setCountWhileClicking] = useState(false);
+            
+            const [isTotalRevealed, setIsTotalRevealed] = useState(false);
+            const [isSubmitted, setIsSubmitted] = useState(false); // 控制提交狀態
+
+            const audioCtxRef = useRef(null);
+            
+            const canvasRef = useRef(null); // 右側寫字板
+            const itemCanvasRef = useRef(null); // 圖案區手繪圈起 Canvas
+            const itemContainerRef = useRef(null); // 圖案容器 Ref
+            const [isDrawing, setIsDrawing] = useState(false);
+            const [isItemDrawing, setIsItemDrawing] = useState(false);
+
+            // 寫字板繪圖位置計算
+            const getCanvasPos = (e, canvas) => {
+                if (!canvas) return { x: 0, y: 0 };
+                const rect = canvas.getBoundingClientRect();
+                const clientX = e.touches && e.touches.length > 0 ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches && e.touches.length > 0 ? e.touches[0].clientY : e.clientY;
+                return {
+                    x: (clientX - rect.left) * (canvas.width / rect.width),
+                    y: (clientY - rect.top) * (canvas.height / rect.height)
+                };
+            };
+
+            const startDrawing = (e) => {
+                if (!enableWriting || !canvasRef.current) return;
+                e.preventDefault();
+                setIsDrawing(true);
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+                const pos = getCanvasPos(e, canvas);
+                ctx.beginPath();
+                ctx.moveTo(pos.x, pos.y);
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.lineWidth = 10;
+                ctx.strokeStyle = '#2563EB'; // 藍色寫字筆跡
+            };
+
+            const draw = (e) => {
+                if (!isDrawing || !enableWriting || !canvasRef.current) return;
+                e.preventDefault();
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+                const pos = getCanvasPos(e, canvas);
+                ctx.lineTo(pos.x, pos.y);
+                ctx.stroke();
+            };
+
+            const stopDrawing = (e) => {
+                if (e && e.preventDefault && isDrawing) e.preventDefault();
+                setIsDrawing(false);
+            };
+
+            const clearCanvas = () => {
+                if (!canvasRef.current) return;
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            };
+
+            // 初始化與縮放寫字板 Canvas
+            useEffect(() => {
+                if (!enableWriting || !canvasRef.current) return;
+                const initCanvas = () => {
+                    const canvas = canvasRef.current;
+                    if (!canvas) return;
+                    const parent = canvas.parentElement;
+                    if (!parent) return;
+                    canvas.width = parent.clientWidth || 300;
+                    canvas.height = parent.clientHeight || 300;
+                };
+                initCanvas();
+                window.addEventListener('resize', initCanvas);
+                return () => window.removeEventListener('resize', initCanvas);
+            }, [enableWriting]);
+
+            const generateNewRound = useCallback(() => {
+                const min = level.min;
+                const max = level.max;
+                const count = Math.floor(Math.random() * (max - min + 1)) + min;
+                const emoji = EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
+                
+                setTargetCount(count);
+                setCurrentEmoji(emoji);
+                setClickedItems([]);
+                setIsTotalRevealed(false);
+                setIsSubmitted(false);
+                setLayoutMode('auto');
+                setIsHandDrawMode(false);
+                
+                // 清空寫字板與圖案畫布
+                if (canvasRef.current) {
+                    const ctx = canvasRef.current.getContext('2d');
+                    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+                }
+                if (itemCanvasRef.current) {
+                    const ctx = itemCanvasRef.current.getContext('2d');
+                    ctx.clearRect(0, 0, itemCanvasRef.current.width, itemCanvasRef.current.height);
+                }
+            }, [level]);
+
+            useEffect(() => {
+                generateNewRound();
+            }, [generateNewRound]);
+
+            const playPopSound = () => {
+                try {
+                    if (!audioCtxRef.current) {
+                        audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+                    }
+                    const ctx = audioCtxRef.current;
+                    if (ctx.state === 'suspended') ctx.resume();
+
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(800, ctx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(300, ctx.currentTime + 0.1);
+
+                    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+
+                    osc.start(ctx.currentTime);
+                    osc.stop(ctx.currentTime + 0.1);
+                } catch (err) {
+                    console.error("Audio playback failed:", err);
+                }
+            };
+
+            const speakCantonese = (text) => {
+                if (!window.speechSynthesis) return;
+                
+                window.speechSynthesis.cancel(); 
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'zh-HK'; 
+                utterance.rate = 0.9; 
+                
+                const voices = window.speechSynthesis.getVoices();
+                const hkVoice = voices.find(v => v.lang === 'zh-HK' || v.lang.includes('HK'));
+                if (hkVoice) {
+                    utterance.voice = hkVoice;
+                }
+                
+                window.speechSynthesis.speak(utterance);
+            };
+
+            const handleItemClick = (index) => {
+                if (isHandDrawMode) return; // 手繪模式時不觸發點擊數數
+                playPopSound();
+                if (!circleMode) return;
+                setClickedItems(prev => {
+                    const isAlreadyClicked = prev.includes(index);
+                    if (isAlreadyClicked) {
+                        return prev.filter(item => item !== index);
+                    }
+                    const newCount = prev.length + 1;
+                    if (countWhileClicking) {
+                        speakCantonese(newCount.toString());
+                    }
+                    // 數到最後一個，直接切換至手繪圈起模式
+                    if (newCount === targetCount) {
+                        setIsHandDrawMode(true);
+                    }
+                    return [...prev, index];
+                });
+            };
+
+            const handleSubmit = () => {
+                setIsSubmitted(true);
+                setIsTotalRevealed(true);
+                if (useCantonese) {
+                    speakCantonese(`總共係 ${targetCount} 個`);
+                }
+            };
+
+            // 初始化與動態更新圖案區手繪畫布尺寸（確保不清除已有筆跡）
+            const syncItemCanvasSize = useCallback(() => {
+                if (!itemCanvasRef.current || !itemContainerRef.current) return;
+                const canvas = itemCanvasRef.current;
+                const container = itemContainerRef.current;
+                
+                const newWidth = Math.max(container.scrollWidth, container.clientWidth);
+                const newHeight = Math.max(container.scrollHeight, container.clientHeight);
+                
+                // 只有尺寸發生改變時才重新設定畫布大小，並先暫存原本的畫筆筆跡
+                if (canvas.width !== newWidth || canvas.height !== newHeight) {
+                    const ctx = canvas.getContext('2d');
+                    let tempCanvas = null;
+                    if (canvas.width > 0 && canvas.height > 0) {
+                        tempCanvas = document.createElement('canvas');
+                        tempCanvas.width = canvas.width;
+                        tempCanvas.height = canvas.height;
+                        tempCanvas.getContext('2d').drawImage(canvas, 0, 0);
+                    }
+
+                    canvas.width = newWidth;
+                    canvas.height = newHeight;
+                    
+                    ctx.lineCap = 'round';
+                    ctx.lineJoin = 'round';
+                    ctx.lineWidth = 6;
+                    ctx.strokeStyle = '#DC2626'; // 紅色筆跡圈起
+
+                    if (tempCanvas) {
+                        ctx.drawImage(tempCanvas, 0, 0);
+                    }
+                } else {
+                    const ctx = canvas.getContext('2d');
+                    ctx.lineCap = 'round';
+                    ctx.lineJoin = 'round';
+                    ctx.lineWidth = 6;
+                    ctx.strokeStyle = '#DC2626';
+                }
+            }, []);
+
+            useEffect(() => {
+                syncItemCanvasSize();
+                window.addEventListener('resize', syncItemCanvasSize);
+                return () => window.removeEventListener('resize', syncItemCanvasSize);
+            }, [targetCount, layoutMode, syncItemCanvasSize]);
+
+            const clearItemCanvas = () => {
+                if (!itemCanvasRef.current) return;
+                const canvas = itemCanvasRef.current;
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            };
+
+            const startItemDrawing = (e) => {
+                if (!isHandDrawMode || !itemCanvasRef.current) return;
+                e.preventDefault();
+                setIsItemDrawing(true);
+                const canvas = itemCanvasRef.current;
+                const pos = getCanvasPos(e, canvas);
+                const ctx = canvas.getContext('2d');
+                ctx.beginPath();
+                ctx.moveTo(pos.x, pos.y);
+            };
+
+            const drawItem = (e) => {
+                if (!isItemDrawing || !isHandDrawMode || !itemCanvasRef.current) return;
+                e.preventDefault();
+                const canvas = itemCanvasRef.current;
+                const pos = getCanvasPos(e, canvas);
+                const ctx = canvas.getContext('2d');
+                ctx.lineTo(pos.x, pos.y);
+                ctx.stroke();
+            };
+
+            const stopItemDrawing = (e) => {
+                if (e && e.preventDefault) e.preventDefault();
+                setIsItemDrawing(false);
+            };
+
+            const getItemSizeClass = () => {
+                if (layoutMode === '10') return "text-xs w-5 h-5 md:text-sm md:w-6 md:h-6";
+                if (layoutMode === '5') return "text-sm w-7 h-7 md:text-xl md:w-9 md:h-9";
+                
+                if (targetCount > 300) return "text-[12px] w-4 h-4 md:text-xs md:w-5 md:h-5 p-0";
+                if (targetCount > 100) return "text-xs w-5 h-5 md:text-sm md:w-6 md:h-6 p-0.5";
+                if (targetCount > 50) return "text-sm w-6 h-6 md:text-lg md:w-8 md:h-8";
+                if (targetCount > 20) return "text-lg w-8 h-8 md:text-xl md:w-10 md:h-10";
+                return "text-4xl w-14 h-14 md:text-5xl md:w-20 md:h-20"; 
+            };
+
+            const getBadgeSizeClass = () => {
+                if (layoutMode === '10' || targetCount > 300) return "w-3 h-3 text-[7px] -top-0.5 -right-0.5";
+                if (layoutMode === '5' || targetCount > 100) return "w-4 h-4 text-[9px] -top-0.5 -right-0.5";
+                return "w-5 h-5 text-xs md:w-6 md:h-6 md:text-sm -top-1 -right-1 md:-top-2 md:-right-2 border-2";
+            };
+
+            let containerStyle = "flex flex-wrap justify-center gap-1 md:gap-2 items-center content-start min-w-full pb-6";
+            if (layoutMode === '5') {
+                containerStyle = "grid grid-cols-5 gap-1 md:gap-3 justify-items-center w-fit mx-auto min-w-full pb-6";
+            } else if (layoutMode === '10') {
+                containerStyle = "grid grid-cols-10 gap-1 md:gap-2 justify-items-center w-fit mx-auto min-w-full pb-6";
+            }
+
+            return (
+                <div className="min-h-screen flex flex-col pb-10">
+                    <header className="bg-white shadow-md p-4 sticky top-0 z-40">
+                        <div className="max-w-7xl mx-auto flex flex-col xl:flex-row items-center justify-between gap-4">
+                            
+                            {/* 難度選項 & 上方下一條按鈕 */}
+                            <div className="flex flex-wrap items-center justify-between w-full xl:w-auto gap-2">
+                                <div className="flex flex-wrap justify-center items-center gap-1.5 md:gap-2">
+                                    {LEVELS.map(lvl => (
+                                        <button
+                                            key={lvl.id}
+                                            onClick={() => setLevel(lvl)}
+                                            className={`px-2.5 py-1.5 md:px-4 md:py-2 rounded-full font-bold text-xs md:text-base transition-all transform active:scale-95 ${
+                                                level.id === lvl.id 
+                                                    ? 'bg-blue-500 text-white shadow-lg scale-105' 
+                                                    : 'bg-white border-2 border-blue-200 text-blue-600 hover:bg-blue-50'
+                                            }`}
+                                        >
+                                            {lvl.label}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {/* 上方固定可按下一條按鈕 */}
+                                <button 
+                                    onClick={generateNewRound}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 md:px-4 md:py-2 rounded-full font-black text-xs md:text-sm bg-gradient-to-r from-amber-400 to-orange-500 text-white shadow hover:from-amber-500 hover:to-orange-600 active:scale-95 transition-all ml-auto xl:ml-2"
+                                >
+                                    <Icon name="PlayCircle" className="w-4 h-4 md:w-5 md:h-5" />
+                                    下一條
+                                </button>
+                            </div>
+
+                            {/* 功能控制項 */}
+                            <div className="flex flex-wrap justify-center items-center gap-2 md:gap-3 bg-gray-100 p-2 rounded-2xl md:rounded-full px-3 md:px-5">
+                                <button 
+                                    onClick={() => {
+                                        setCircleMode(!circleMode);
+                                        if (circleMode) {
+                                            setClickedItems([]);
+                                            setIsHandDrawMode(false);
+                                        }
+                                    }}
+                                    className={`flex items-center gap-1 font-bold transition-colors text-xs md:text-sm ${circleMode ? 'text-purple-600' : 'text-gray-500'}`}
+                                >
+                                    <Icon name={circleMode ? "CheckSquare" : "Square"} className="w-4 h-4 md:w-5 md:h-5" />
+                                    圈起模式
+                                </button>
+
+                                <div className="w-px h-5 bg-gray-300 hidden sm:block"></div>
+
+                                <button 
+                                    onClick={() => setIsHandDrawMode(!isHandDrawMode)}
+                                    className={`flex items-center gap-1 font-bold transition-colors text-xs md:text-sm ${isHandDrawMode ? 'text-red-600 animate-pulse' : 'text-gray-500'}`}
+                                    title="數完後可以用手劃圈圈"
+                                >
+                                    <Icon name="PenTool" className="w-4 h-4 md:w-5 md:h-5" />
+                                    手繪圈起 {isHandDrawMode && " (開啟中)"}
+                                </button>
+                                
+                                <div className="w-px h-5 bg-gray-300 hidden sm:block"></div>
+                                
+                                <button 
+                                    onClick={() => setShowNumbers(!showNumbers)}
+                                    disabled={!circleMode}
+                                    className={`flex items-center gap-1 font-bold transition-colors text-xs md:text-sm
+                                        ${!circleMode ? 'text-gray-300 cursor-not-allowed' : showNumbers ? 'text-green-600' : 'text-gray-500'}`}
+                                >
+                                    <Icon name={showNumbers ? "Eye" : "EyeOff"} className="w-4 h-4 md:w-5 md:h-5" />
+                                    顯示數字
+                                </button>
+
+                                <div className="w-px h-5 bg-gray-300 hidden sm:block"></div>
+
+                                <button 
+                                    onClick={() => {
+                                        setEnableWriting(!enableWriting);
+                                        if (enableWriting) clearCanvas();
+                                    }}
+                                    className={`flex items-center gap-1 font-bold transition-colors text-xs md:text-sm
+                                        ${enableWriting ? 'text-orange-600' : 'text-gray-500'}`}
+                                >
+                                    <Icon name={enableWriting ? "CheckSquare" : "Square"} className="w-4 h-4 md:w-5 md:h-5" />
+                                    <Icon name="PenTool" className="w-3 h-3 md:w-4 md:h-4 -ml-0.5" />
+                                    內嵌寫字
+                                </button>
+                                
+                                <div className="w-px h-5 bg-gray-300 hidden sm:block"></div>
+                                
+                                <button 
+                                    onClick={() => setUseCantonese(!useCantonese)}
+                                    className={`flex items-center gap-1 font-bold transition-colors text-xs md:text-sm ${useCantonese ? 'text-blue-600' : 'text-gray-500'}`}
+                                >
+                                    <Icon name={useCantonese ? "Volume2" : "VolumeX"} className="w-4 h-4 md:w-5 md:h-5" />
+                                    廣東話
+                                </button>
+
+                                <div className="w-px h-5 bg-gray-300 hidden sm:block"></div>
+
+                                <button 
+                                    onClick={() => setCountWhileClicking(!countWhileClicking)}
+                                    className={`flex items-center gap-1 font-bold transition-colors text-xs md:text-sm ${countWhileClicking ? 'text-pink-600' : 'text-gray-500'}`}
+                                >
+                                    <Icon name={countWhileClicking ? "CheckSquare" : "Square"} className="w-4 h-4 md:w-5 md:h-5" />
+                                    邊點邊數
+                                </button>
+                            </div>
+                        </div>
+                    </header>
+
+                    <main className="flex-1 w-full max-w-7xl mx-auto mt-6 px-2 md:px-4 flex flex-col items-center relative">
+                        
+                        {/* 數量大於 20 時顯示排列選擇 */}
+                        {targetCount > 20 && (
+                            <div className="w-full flex justify-center gap-2 mb-3 relative z-10 px-2">
+                                <div className="bg-white/80 backdrop-blur-sm shadow border border-gray-100 p-1.5 md:p-2 rounded-full flex items-center gap-1 md:gap-2">
+                                    <span className="text-gray-600 font-bold text-xs md:text-sm pl-2 pr-1">排列方式:</span>
+                                    <button 
+                                        onClick={() => setLayoutMode('auto')}
+                                        className={`px-3 py-1.5 rounded-full text-xs md:text-sm font-bold transition-colors ${layoutMode === 'auto' ? 'bg-indigo-500 text-white shadow' : 'text-gray-600 hover:bg-white'}`}
+                                    >自動</button>
+                                    <button 
+                                        onClick={() => setLayoutMode('5')}
+                                        className={`px-3 py-1.5 rounded-full text-xs md:text-sm font-bold transition-colors ${layoutMode === '5' ? 'bg-indigo-500 text-white shadow' : 'text-gray-600 hover:bg-white'}`}
+                                    >5個一行</button>
+                                    <button 
+                                        onClick={() => setLayoutMode('10')}
+                                        className={`px-3 py-1.5 rounded-full text-xs md:text-sm font-bold transition-colors ${layoutMode === '10' ? 'bg-indigo-500 text-white shadow' : 'text-gray-600 hover:bg-white'}`}
+                                    >10個一行</button>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="flex flex-col lg:flex-row w-full gap-4 lg:gap-6 items-start justify-center">
+                            
+                            {/* 左側：圖案區 (大量圖案時完全可滾動並完整顯示) */}
+                            <div 
+                                ref={itemContainerRef}
+                                className={`bg-white/90 backdrop-blur-sm shadow-xl rounded-2xl md:rounded-3xl w-full p-3 md:p-6 border-4 border-white relative z-10 overflow-y-auto max-h-[70vh] min-h-[320px] ${enableWriting ? 'lg:flex-1' : 'max-w-5xl'}`}
+                            >
+                                {/* 手繪圈起畫布 Overlay - 加入 touch-none 防止圈選時畫面動晃 */}
+                                <canvas
+                                    ref={itemCanvasRef}
+                                    className={`absolute inset-0 z-30 touch-none ${isHandDrawMode ? 'pointer-events-auto cursor-crosshair' : 'pointer-events-none'}`}
+                                    onMouseDown={startItemDrawing}
+                                    onMouseMove={drawItem}
+                                    onMouseUp={stopItemDrawing}
+                                    onMouseOut={stopItemDrawing}
+                                    onTouchStart={startItemDrawing}
+                                    onTouchMove={drawItem}
+                                    onTouchEnd={stopItemDrawing}
+                                    onTouchCancel={stopItemDrawing}
+                                />
+
+                                {isHandDrawMode && (
+                                    <div className="sticky top-2 right-2 z-40 flex items-center justify-end gap-2 mb-2 max-w-fit ml-auto">
+                                        <button 
+                                            onClick={clearItemCanvas} 
+                                            className="flex items-center gap-1 bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1.5 rounded-full text-xs md:text-sm font-bold border border-red-300 shadow backdrop-blur transition-all active:scale-95" 
+                                            title="擦拭圖案圈圈"
+                                        >
+                                            <Icon name="Eraser" className="w-4 h-4"/>
+                                            <span>清除畫筆</span>
+                                        </button>
+                                    </div>
+                                )}
+
+                                <div className={containerStyle}>
+                                    {Array.from({ length: targetCount }).map((_, index) => {
+                                        const clickOrderIndex = clickedItems.indexOf(index);
+                                        const isClicked = clickOrderIndex !== -1 && circleMode;
+
+                                        return (
+                                            <div 
+                                                key={index} 
+                                                onClick={() => handleItemClick(index)}
+                                                className={`
+                                                    relative flex items-center justify-center select-none transition-all duration-200 my-0.5
+                                                    ${circleMode && !isHandDrawMode ? 'cursor-pointer' : 'cursor-default'}
+                                                    ${getItemSizeClass()}
+                                                    ${isClicked ? 'opacity-90' : circleMode ? 'hover:scale-110 hover:-translate-y-1' : ''}
+                                                    ${isClicked && circleMode ? 'border-2 border-red-500 rounded-full p-0.5' : ''}
+                                                `}
+                                            >
+                                                <span className="block drop-shadow-md leading-none">{currentEmoji}</span>
+
+                                                {isClicked && showNumbers && (
+                                                    <div className={`
+                                                        absolute bg-red-500 text-white rounded-full flex items-center justify-center font-bold border-white shadow-sm z-10 animate-bounce-in
+                                                        ${getBadgeSizeClass()}
+                                                    `}>
+                                                        {clickOrderIndex + 1}
+                                                    </div>
+                                                )}
+                                                
+                                                {isClicked && !showNumbers && (
+                                                    <div className="absolute inset-0 bg-black/10 rounded-full border border-dashed border-gray-400"></div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* 右側：寫字板 */}
+                            {enableWriting && (
+                                <div className="w-full lg:w-80 xl:w-96 shrink-0 flex flex-col items-center">
+                                    <p className="text-lg md:text-xl text-gray-600 font-bold mb-2">
+                                        {isTotalRevealed ? "總共是" : "寫下你的答案"}
+                                    </p>
+                                    <div className="relative w-full max-w-[320px] lg:max-w-none lg:w-full aspect-square border-2 border-gray-200 shadow-lg rounded-2xl overflow-hidden bg-white mb-2 mx-auto">
+                                        <div className={`absolute inset-0 flex items-center justify-center transition-opacity duration-700 pointer-events-none ${isTotalRevealed ? 'opacity-100' : 'opacity-0'}`}>
+                                            <span className="text-[120px] md:text-[150px] font-black text-gray-200 select-none leading-none">
+                                                {targetCount}
+                                            </span>
+                                        </div>
+                                        <canvas 
+                                            ref={canvasRef}
+                                            className="absolute inset-0 w-full h-full touch-none z-10 cursor-crosshair"
+                                            onMouseDown={startDrawing}
+                                            onMouseMove={draw}
+                                            onMouseUp={stopDrawing}
+                                            onMouseOut={stopDrawing}
+                                            onTouchStart={startDrawing}
+                                            onTouchMove={draw}
+                                            onTouchEnd={stopDrawing}
+                                            onTouchCancel={stopDrawing}
+                                        />
+                                        <button 
+                                            onClick={clearCanvas} 
+                                            className="absolute top-2 right-2 z-20 p-2 bg-gray-100/90 rounded-full text-red-500 shadow-sm hover:bg-red-50 transition-all active:scale-95"
+                                            title="擦走重新寫"
+                                        >
+                                            <Icon name="Eraser" className="w-5 h-5"/>
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* 底部區域：預設只有提交按鈕 */}
+                        <div className="mt-6 flex flex-col items-center justify-center gap-4 w-full max-w-md z-10">
+                            
+                            {isTotalRevealed && (
+                                <div className="transition-all duration-500 flex flex-col items-center animate-bounce-in">
+                                    <p className="text-lg md:text-2xl text-gray-600 font-bold mb-1">總共是</p>
+                                    <div className="text-5xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 drop-shadow-sm leading-none py-2">
+                                        {targetCount}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="flex flex-col w-full gap-3 px-2 justify-center">
+                                {/* 預設下方只有「提交」按鈕 */}
+                                {!isSubmitted ? (
+                                    <button 
+                                        onClick={handleSubmit}
+                                        className="w-full flex items-center justify-center gap-2 py-3.5 md:py-4 rounded-xl md:rounded-2xl text-lg md:text-2xl font-black bg-gradient-to-b from-green-400 to-green-600 text-white hover:from-green-500 hover:to-green-700 active:scale-95 shadow-lg transition-all hover:shadow-xl"
+                                    >
+                                        <Icon name="CheckCircle2" className="w-6 h-6 md:w-8 md:h-8" />
+                                        提交
+                                    </button>
+                                ) : (
+                                    /* 提交後下方才顯示「下一條」 */
+                                    <button 
+                                        onClick={generateNewRound}
+                                        className="w-full flex items-center justify-center gap-2 py-3.5 md:py-4 rounded-xl md:rounded-2xl text-lg md:text-2xl font-black bg-gradient-to-b from-orange-400 to-red-500 text-white hover:from-orange-500 hover:to-red-600 shadow-lg active:scale-95 transition-all hover:shadow-xl animate-bounce-in"
+                                    >
+                                        <Icon name="PlayCircle" className="w-6 h-6 md:w-8 md:h-8" />
+                                        下一條
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                    </main>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
