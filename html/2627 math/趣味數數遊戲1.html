@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>趣味數數遊戲</title>
+    
+    <!-- 載入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 載入 React 和 ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- 載入 Babel 以便在瀏覽器中編譯 JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- 載入 Lucide 圖標 -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        @keyframes bounce-in {
+            0% { transform: scale(0); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+        .animate-bounce-in {
+            animation: bounce-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+        
+        /* 寫字板背景紋理 */
+        .lined-paper-bg {
+            background-color: white;
+            background-image: 
+                linear-gradient(90deg, transparent 79px, #abced4 79px, #abced4 81px, transparent 81px),
+                linear-gradient(#eee .1em, transparent .1em);
+            background-size: 100% 1.2em;
+        }
+
+        /* 隱藏捲動條但保留功能 */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="bg-sky-100 font-sans selection:bg-none touch-manipulation">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useCallback } = React;
+
+        // 簡化版的 Lucide 圖標 SVG 組件
+        const Icon = ({ name, className = "w-6 h-6", ...props }) => {
+            const icons = {
+                Settings2: <path d="M20 7h-9m14 0h-1M20 17h-9m14 0h-1M11 7H3M11 17H3M14 4v6M14 14v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>,
+                Volume2: <path d="M11 5L6 9H2v6h4l5 4V5z M15.54 8.46a5 5 0 0 1 0 7.07 M19.07 4.93a10 10 0 0 1 0 14.14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>,
+                VolumeX: <path d="M11 5L6 9H2v6h4l5 4V5z M23 9l-6 6 M17 9l6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>,
+                Eye: <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>,
+                EyeOff: <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24M1 1l22 22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>,
+                CheckCircle2: <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z M9 12l2 2 4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>,
+                PlayCircle: <><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none"/><polygon points="10 8 16 12 10 16 10 8" stroke="currentColor" strokeWidth="2" fill="currentColor"/></>,
+                CheckSquare: <><polyline points="9 11 12 14 22 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></>,
+                Square: <rect x="3" y="3" width="18" height="18" rx="2" ry="2" stroke="currentColor" strokeWidth="2" fill="none"/>,
+                PenTool: <path d="M12 19l7-7 3 3-7 7-3-3z M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z M2 2l7.586 7.586" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>,
+                X: <><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></>,
+                Eraser: <><path d="M20 20H7L3 16C2.5 15.5 2.5 14.5 3 14L13 4C13.5 3.5 14.5 3.5 15 4L20 9C20.5 9.5 20.5 10.5 20 11L11 20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/><path d="M17 14L10 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></>
+            };
+            return (
+                <svg className={className} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" {...props}>
+                    {icons[name]}
+                </svg>
+            );
+        };
+
+        const LEVELS = [
+            { id: '5', label: '5 以內', max: 5, min: 2 },
+            { id: '10', label: '10 以內', max: 10, min: 3 },
+            { id: '20', label: '20 以內', max: 20, min: 10 },
+            { id: '50', label: '50 以內', max: 50, min: 25 },
+            { id: '100', label: '100 以內', max: 100, min: 50 },
+            { id: '300', label: '300 以內', max: 300, min: 100 },
+            { id: '500', label: '500 以內', max: 500, min: 250 },
+        ];
+
+        const EMOJIS = ['🍎', '⭐️', '🎈', '🚗', '🐶', '⚽️', '🧸', '🌸', '🍓', '🦋', '🐟', '🐢', '🍉', '🍦', '🍩'];
+
+        function App() {
+            const [level, setLevel] = useState(LEVELS[0]);
+            const [targetCount, setTargetCount] = useState(0);
+            const [currentEmoji, setCurrentEmoji] = useState('🍎');
+            
+            const [clickedItems, setClickedItems] = useState([]);
+            
+            const [visualHints, setVisualHints] = useState(true); 
+            const [showNumbers, setShowNumbers] = useState(true);
+            const [useCantonese, setUseCantonese] = useState(true);
+            const [enableWriting, setEnableWriting] = useState(false); 
+            const [countWhileClicking, setCountWhileClicking] = useState(false);
+            
+            const [isTotalRevealed, setIsTotalRevealed] = useState(false);
+            const [showWritingModal, setShowWritingModal] = useState(false);
+
+            // 新增：寫字板拖曳狀態
+            const [modalPos, setModalPos] = useState({ x: 0, y: 0 });
+            const isDraggingModalRef = useRef(false);
+            const dragStartPosRef = useRef({ x: 0, y: 0 });
+
+            const audioCtxRef = useRef(null);
+            
+            const canvasRef = useRef(null);
+            const [isDrawing, setIsDrawing] = useState(false);
+            const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+
+            const generateNewRound = useCallback(() => {
+                const min = level.min;
+                const max = level.max;
+                const count = Math.floor(Math.random() * (max - min + 1)) + min;
+                const emoji = EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
+                
+                setTargetCount(count);
+                setCurrentEmoji(emoji);
+                setClickedItems([]);
+                setIsTotalRevealed(false);
+                setShowWritingModal(false);
+                setModalPos({ x: 0, y: 0 }); // 重置寫字板位置
+            }, [level]);
+
+            useEffect(() => {
+                generateNewRound();
+            }, [generateNewRound]);
+
+            const playPopSound = () => {
+                try {
+                    if (!audioCtxRef.current) {
+                        audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+                    }
+                    const ctx = audioCtxRef.current;
+                    if (ctx.state === 'suspended') ctx.resume();
+
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(800, ctx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(300, ctx.currentTime + 0.1);
+
+                    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+
+                    osc.start(ctx.currentTime);
+                    osc.stop(ctx.currentTime + 0.1);
+                } catch (err) {
+                    console.error("Audio playback failed:", err);
+                }
+            };
+
+            const speakCantonese = (text) => {
+                if (!window.speechSynthesis) return;
+                
+                window.speechSynthesis.cancel(); 
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'zh-HK'; 
+                utterance.rate = 0.9; 
+                
+                const voices = window.speechSynthesis.getVoices();
+                const hkVoice = voices.find(v => v.lang === 'zh-HK' || v.lang.includes('HK'));
+                if (hkVoice) {
+                    utterance.voice = hkVoice;
+                }
+                
+                window.speechSynthesis.speak(utterance);
+            };
+
+            const handleItemClick = (index) => {
+                playPopSound();
+                
+                if (!visualHints) return;
+                
+                setClickedItems(prev => {
+                    const isAlreadyClicked = prev.includes(index);
+                    if (isAlreadyClicked) {
+                        return prev.filter(item => item !== index);
+                    }
+                    const newCount = prev.length + 1;
+                    if (countWhileClicking) {
+                        speakCantonese(newCount.toString());
+                    }
+                    return [...prev, index];
+                });
+            };
+
+            const handleShowTotal = () => {
+                setIsTotalRevealed(true);
+                if (useCantonese) {
+                    speakCantonese(`總共係 ${targetCount} 個`);
+                }
+                
+                if (enableWriting) {
+                    setTimeout(() => {
+                        setShowWritingModal(true);
+                    }, 800);
+                }
+            };
+
+            const drawBackgroundNumber = useCallback(() => {
+                const canvas = canvasRef.current;
+                if (!canvas) return;
+                
+                const ctx = canvas.getContext('2d');
+                const width = canvas.width;
+                const height = canvas.height;
+                
+                ctx.clearRect(0, 0, width, height);
+                
+                // 動態調整字體大小以適應畫布
+                const fontSize = Math.min(width, height) * 0.6;
+                // 使用適合特教的字體：Verdana, Century Gothic, 或 Calibri
+                ctx.font = `bold ${fontSize}px Verdana, "Century Gothic", Calibri, sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                
+                // 改為實心淺灰色字體，取消虛線
+                ctx.fillStyle = '#D1D5DB'; // 淺灰色
+                ctx.fillText(targetCount.toString(), width / 2, height / 2);
+                
+                ctx.setLineDash([]);
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.lineWidth = 16;
+                ctx.strokeStyle = '#EF4444'; 
+            }, [targetCount]);
+
+            // Resize observer for canvas container
+            useEffect(() => {
+                if (showWritingModal && canvasRef.current) {
+                    const canvas = canvasRef.current;
+                    const container = canvas.parentElement;
+                    
+                    const updateSize = () => {
+                        // Limit maximum size to 700x700
+                        const maxWidth = Math.min(container.clientWidth, 700);
+                        const maxHeight = Math.min(container.clientHeight, 700);
+                        
+                        // Make it square based on the smallest dimension, up to 700
+                        const size = Math.min(maxWidth, maxHeight);
+                        
+                        canvas.width = size;
+                        canvas.height = size;
+                        setCanvasSize({ width: size, height: size });
+                        drawBackgroundNumber();
+                    };
+
+                    updateSize();
+                    window.addEventListener('resize', updateSize);
+                    return () => window.removeEventListener('resize', updateSize);
+                }
+            }, [showWritingModal, drawBackgroundNumber]);
+
+            const startDrawing = (e) => {
+                if (!canvasRef.current) return;
+                e.preventDefault();
+                setIsDrawing(true);
+                const ctx = canvasRef.current.getContext('2d');
+                const pos = getPointerPos(e);
+                ctx.beginPath();
+                ctx.moveTo(pos.x, pos.y);
+            };
+
+            const draw = (e) => {
+                if (!isDrawing || !canvasRef.current) return;
+                e.preventDefault();
+                const ctx = canvasRef.current.getContext('2d');
+                const pos = getPointerPos(e);
+                ctx.lineTo(pos.x, pos.y);
+                ctx.stroke();
+            };
+
+            const stopDrawing = (e) => {
+                if(e) e.preventDefault();
+                setIsDrawing(false);
+            };
+
+            const getPointerPos = (e) => {
+                const canvas = canvasRef.current;
+                const rect = canvas.getBoundingClientRect();
+                let clientX, clientY;
+
+                if (e.touches && e.touches.length > 0) {
+                    clientX = e.touches[0].clientX;
+                    clientY = e.touches[0].clientY;
+                } else {
+                    clientX = e.clientX;
+                    clientY = e.clientY;
+                }
+
+                // Adjust for actual canvas rendering size vs CSS size if they differ
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+
+                return {
+                    x: (clientX - rect.left) * scaleX,
+                    y: (clientY - rect.top) * scaleY
+                };
+            };
+
+            const clearCanvas = () => {
+                drawBackgroundNumber();
+            };
+
+            // 處理寫字板的拖曳邏輯
+            const handleModalDragStart = (e) => {
+                if (e.target.closest('button')) return; 
+                isDraggingModalRef.current = true;
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                dragStartPosRef.current = {
+                    x: clientX - modalPos.x,
+                    y: clientY - modalPos.y
+                };
+            };
+
+            const handleModalDragMove = useCallback((e) => {
+                if (!isDraggingModalRef.current) return;
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                setModalPos({
+                    x: clientX - dragStartPosRef.current.x,
+                    y: clientY - dragStartPosRef.current.y
+                });
+            }, [modalPos]);
+
+            const handleModalDragEnd = useCallback(() => {
+                isDraggingModalRef.current = false;
+            }, []);
+
+            // 監聽全局拖曳事件
+            useEffect(() => {
+                if (showWritingModal) {
+                    window.addEventListener('mousemove', handleModalDragMove);
+                    window.addEventListener('mouseup', handleModalDragEnd);
+                    window.addEventListener('touchmove', handleModalDragMove, { passive: false });
+                    window.addEventListener('touchend', handleModalDragEnd);
+                    return () => {
+                        window.removeEventListener('mousemove', handleModalDragMove);
+                        window.removeEventListener('mouseup', handleModalDragEnd);
+                        window.removeEventListener('touchmove', handleModalDragMove);
+                        window.removeEventListener('touchend', handleModalDragEnd);
+                    };
+                }
+            }, [showWritingModal, handleModalDragMove, handleModalDragEnd]);
+
+            const getItemSizeClass = () => {
+                if (targetCount > 300) return "text-lg w-6 h-6 md:text-xl md:w-8 md:h-8";
+                if (targetCount > 100) return "text-xl w-8 h-8 md:text-2xl md:w-10 md:h-10";
+                if (targetCount > 50) return "text-2xl w-10 h-10 md:text-3xl md:w-14 md:h-14";
+                if (targetCount > 20) return "text-3xl w-12 h-12 md:text-4xl md:w-16 md:h-16";
+                return "text-4xl w-14 h-14 md:text-5xl md:w-20 md:h-20"; 
+            };
+
+            const getBadgeSizeClass = () => {
+                if (targetCount > 300) return "w-3 h-3 text-[8px] -top-0.5 -right-0.5";
+                if (targetCount > 100) return "w-4 h-4 text-[10px] -top-1 -right-1";
+                return "w-5 h-5 text-xs md:w-6 md:h-6 md:text-sm -top-1 -right-1 md:-top-2 md:-right-2 border-2";
+            };
+
+            return (
+                <div className="min-h-screen flex flex-col pb-10">
+                    <header className="bg-white shadow-md p-4 sticky top-0 z-40">
+                        <div className="max-w-7xl mx-auto flex flex-col xl:flex-row items-center justify-between gap-4">
+                            
+                            {/* 難度選項 (替換了原本的標題) */}
+                            <div className="flex flex-wrap justify-center items-center gap-1.5 md:gap-2">
+                                {LEVELS.map(lvl => (
+                                    <button
+                                        key={lvl.id}
+                                        onClick={() => setLevel(lvl)}
+                                        className={`px-2.5 py-1.5 md:px-4 md:py-2 rounded-full font-bold text-xs md:text-base transition-all transform active:scale-95 ${
+                                            level.id === lvl.id 
+                                                ? 'bg-blue-500 text-white shadow-lg scale-105' 
+                                                : 'bg-white border-2 border-blue-200 text-blue-600 hover:bg-blue-50'
+                                        }`}
+                                    >
+                                        {lvl.label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            <div className="flex flex-wrap justify-center items-center gap-2 md:gap-3 bg-gray-100 p-2 rounded-2xl md:rounded-full px-3 md:px-5">
+                                <button 
+                                    onClick={() => {
+                                        setVisualHints(!visualHints);
+                                        if (visualHints) setClickedItems([]);
+                                    }}
+                                    className={`flex items-center gap-1 font-bold transition-colors text-xs md:text-sm ${visualHints ? 'text-purple-600' : 'text-gray-500'}`}
+                                >
+                                    <Icon name={visualHints ? "CheckSquare" : "Square"} className="w-4 h-4 md:w-5 md:h-5" />
+                                    視覺標記
+                                </button>
+                                
+                                <div className="w-px h-5 bg-gray-300 hidden sm:block"></div>
+                                
+                                <button 
+                                    onClick={() => setShowNumbers(!showNumbers)}
+                                    disabled={!visualHints}
+                                    className={`flex items-center gap-1 font-bold transition-colors text-xs md:text-sm
+                                        ${!visualHints ? 'text-gray-300 cursor-not-allowed' : showNumbers ? 'text-green-600' : 'text-gray-500'}`}
+                                >
+                                    <Icon name={showNumbers ? "Eye" : "EyeOff"} className="w-4 h-4 md:w-5 md:h-5" />
+                                    顯示數字
+                                </button>
+
+                                <div className="w-px h-5 bg-gray-300 hidden sm:block"></div>
+
+                                <button 
+                                    onClick={() => setEnableWriting(!enableWriting)}
+                                    className={`flex items-center gap-1 font-bold transition-colors text-xs md:text-sm
+                                        ${enableWriting ? 'text-orange-600' : 'text-gray-500'}`}
+                                >
+                                    <Icon name={enableWriting ? "CheckSquare" : "Square"} className="w-4 h-4 md:w-5 md:h-5" />
+                                    <Icon name="PenTool" className="w-3 h-3 md:w-4 md:h-4 -ml-0.5" />
+                                    寫字板
+                                </button>
+                                
+                                <div className="w-px h-5 bg-gray-300 hidden sm:block"></div>
+                                
+                                <button 
+                                    onClick={() => setUseCantonese(!useCantonese)}
+                                    className={`flex items-center gap-1 font-bold transition-colors text-xs md:text-sm ${useCantonese ? 'text-blue-600' : 'text-gray-500'}`}
+                                >
+                                    <Icon name={useCantonese ? "Volume2" : "VolumeX"} className="w-4 h-4 md:w-5 md:h-5" />
+                                    廣東話
+                                </button>
+
+                                <div className="w-px h-5 bg-gray-300 hidden sm:block"></div>
+
+                                <button 
+                                    onClick={() => setCountWhileClicking(!countWhileClicking)}
+                                    className={`flex items-center gap-1 font-bold transition-colors text-xs md:text-sm ${countWhileClicking ? 'text-pink-600' : 'text-gray-500'}`}
+                                >
+                                    <Icon name={countWhileClicking ? "CheckSquare" : "Square"} className="w-4 h-4 md:w-5 md:h-5" />
+                                    邊點邊數
+                                </button>
+                            </div>
+                        </div>
+                    </header>
+
+                    {}
+                    <main className="flex-1 w-full max-w-7xl mx-auto mt-6 px-2 md:px-4 flex flex-col items-center relative">
+                        
+                        <div className="bg-white/80 backdrop-blur-sm shadow-xl rounded-2xl md:rounded-3xl w-full min-h-[300px] md:min-h-[400px] p-2 md:p-6 border-4 border-white relative z-10 overflow-y-auto no-scrollbar max-h-[50vh]">
+                            
+                            <div className="flex flex-wrap justify-center gap-1 md:gap-2 items-center content-start">
+                                {Array.from({ length: targetCount }).map((_, index) => {
+                                    const clickOrderIndex = clickedItems.indexOf(index);
+                                    const isClicked = clickOrderIndex !== -1 && visualHints;
+                                    
+                                    return (
+                                        <div 
+                                            key={index} 
+                                            onClick={() => handleItemClick(index)}
+                                            className={`
+                                                relative flex items-center justify-center select-none transition-all duration-200
+                                                ${visualHints ? 'cursor-pointer' : 'cursor-default'}
+                                                ${getItemSizeClass()}
+                                                ${isClicked ? 'opacity-50 scale-90' : visualHints ? 'hover:scale-110 hover:-translate-y-1' : ''}
+                                            `}
+                                        >
+                                            <span className="block drop-shadow-md leading-none">{currentEmoji}</span>
+                                            
+                                            {isClicked && showNumbers && (
+                                                <div className={`
+                                                    absolute bg-red-500 text-white rounded-full flex items-center justify-center font-bold border-white shadow-sm z-10 animate-bounce-in
+                                                    ${getBadgeSizeClass()}
+                                                `}>
+                                                    {clickOrderIndex + 1}
+                                                </div>
+                                            )}
+                                            
+                                            {isClicked && !showNumbers && (
+                                                <div className="absolute inset-0 bg-black/10 rounded-full border border-dashed border-gray-400"></div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {}
+                        <div className="mt-6 flex flex-col items-center gap-4 md:gap-6 w-full max-w-2xl z-10">
+                            
+                            <div className={`
+                                transition-all duration-500 overflow-hidden flex flex-col items-center
+                                ${isTotalRevealed ? 'h-24 md:h-32 opacity-100' : 'h-0 opacity-0'}
+                            `}>
+                                <p className="text-lg md:text-2xl text-gray-600 font-bold mb-1 md:mb-2">總共是</p>
+                                <div className="text-5xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 drop-shadow-sm animate-pulse leading-none">
+                                    {targetCount}
+                                </div>
+                            </div>
+
+                            <div className="flex w-full gap-2 md:gap-4 px-2">
+                                <button 
+                                    onClick={handleShowTotal}
+                                    disabled={isTotalRevealed}
+                                    className={`
+                                        flex-1 flex items-center justify-center gap-1 md:gap-2 py-3 md:py-4 rounded-xl md:rounded-2xl text-base md:text-2xl font-black shadow-lg transition-all
+                                        ${isTotalRevealed 
+                                            ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                                            : 'bg-gradient-to-b from-green-400 to-green-600 text-white hover:from-green-500 hover:to-green-700 active:scale-95 hover:shadow-xl'}
+                                    `}
+                                >
+                                    <Icon name="CheckCircle2" className="w-5 h-5 md:w-8 md:h-8" />
+                                    顯示總數
+                                </button>
+
+                                <button 
+                                    onClick={generateNewRound}
+                                    className="flex-1 flex items-center justify-center gap-1 md:gap-2 py-3 md:py-4 rounded-xl md:rounded-2xl text-base md:text-2xl font-black bg-gradient-to-b from-orange-400 to-red-500 text-white hover:from-orange-500 hover:to-red-600 shadow-lg active:scale-95 transition-all hover:shadow-xl"
+                                >
+                                    <Icon name="PlayCircle" className="w-5 h-5 md:w-8 md:h-8" />
+                                    下一條
+                                </button>
+                            </div>
+                        </div>
+
+                        {}
+                        {showWritingModal && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+                                {/* 背景半透明遮罩，保留點擊阻擋但變淺 */}
+                                <div className="absolute inset-0 bg-black/20 backdrop-blur-[2px] pointer-events-auto"></div>
+                                
+                                <div 
+                                    className="bg-white w-full max-w-3xl rounded-2xl md:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh] pointer-events-auto relative z-10"
+                                    style={{ transform: `translate(${modalPos.x}px, ${modalPos.y}px)` }}
+                                >
+                                    
+                                    <div 
+                                        className="bg-orange-100 p-3 md:p-4 flex justify-between items-center border-b-4 border-orange-200 cursor-move touch-none select-none"
+                                        onMouseDown={handleModalDragStart}
+                                        onTouchStart={handleModalDragStart}
+                                    >
+                                        <h2 className="text-lg md:text-2xl font-black text-orange-700 flex items-center gap-2 pointer-events-none">
+                                            <Icon name="PenTool" className="w-5 h-5 md:w-6 md:h-6" /> 
+                                            <span>沿練寫字 (拖曳此處移動)</span>
+                                        </h2>
+                                        <div className="flex gap-2">
+                                            <button 
+                                                onClick={clearCanvas}
+                                                className="p-1.5 md:p-2 bg-white rounded-full text-gray-600 hover:text-red-500 hover:bg-red-50 transition-colors shadow-sm"
+                                                title="重寫"
+                                            >
+                                                <Icon name="Eraser" className="w-5 h-5 md:w-6 md:h-6" />
+                                            </button>
+                                            <button 
+                                                onClick={() => {
+                                                    setShowWritingModal(false);
+                                                    setModalPos({ x: 0, y: 0 });
+                                                }}
+                                                className="p-1.5 md:p-2 bg-white rounded-full text-gray-600 hover:bg-gray-100 transition-colors shadow-sm"
+                                            >
+                                                <Icon name="X" className="w-5 h-5 md:w-6 md:h-6" />
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* 繪圖區容器，確保置中與尺寸限制 */}
+                                    <div className="relative w-full flex-1 flex items-center justify-center bg-gray-50 overflow-hidden py-4">
+                                        <div 
+                                            className="lined-paper-bg cursor-crosshair shadow-inner border border-gray-200 bg-white"
+                                            style={{ 
+                                                width: canvasSize.width ? `${canvasSize.width}px` : '100%', 
+                                                height: canvasSize.height ? `${canvasSize.height}px` : '100%',
+                                                maxWidth: '700px',
+                                                maxHeight: '700px'
+                                            }}
+                                        >
+                                            <canvas
+                                                ref={canvasRef}
+                                                className="w-full h-full touch-none block"
+                                                onMouseDown={startDrawing}
+                                                onMouseMove={draw}
+                                                onMouseUp={stopDrawing}
+                                                onMouseOut={stopDrawing}
+                                                onTouchStart={startDrawing}
+                                                onTouchMove={draw}
+                                                onTouchEnd={stopDrawing}
+                                                onTouchCancel={stopDrawing}
+                                            />
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="p-3 md:p-4 bg-gray-50 flex justify-center border-t border-gray-200">
+                                        <button 
+                                            onClick={() => {
+                                                setShowWritingModal(false);
+                                                setModalPos({ x: 0, y: 0 });
+                                            }}
+                                            className="px-6 md:px-8 py-2 md:py-3 bg-blue-500 text-white font-bold rounded-xl text-lg md:text-xl hover:bg-blue-600 active:scale-95 transition-all shadow-md"
+                                        >
+                                            完成
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                    </main>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
