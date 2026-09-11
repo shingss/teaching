@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>快樂動物園 - 順數及倒數遊戲</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Nunito"', 'sans-serif', '"Microsoft JhengHei"'],
+                    },
+                    colors: {
+                        zoo: {
+                            light: '#e0f2e9',
+                            base: '#a3d9b1',
+                            dark: '#4c9a62',
+                            text: '#2d5a39',
+                            yellow: '#fcd34d',
+                            orange: '#fb923c'
+                        }
+                    },
+                    keyframes: {
+                        wiggle: {
+                            '0%, 100%': { transform: 'rotate(-2deg)' },
+                            '50%': { transform: 'rotate(2deg)' },
+                        },
+                        shake: {
+                            '0%, 100%': { transform: 'translateX(0)' },
+                            '20%': { transform: 'translateX(-5px)' },
+                            '40%': { transform: 'translateX(5px)' },
+                            '60%': { transform: 'translateX(-5px)' },
+                            '80%': { transform: 'translateX(5px)' }
+                        },
+                        bounce_small: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-15%)' },
+                        },
+                        popIn: {
+                            '0%': { transform: 'scale(0.5)', opacity: '0' },
+                            '100%': { transform: 'scale(1)', opacity: '1' }
+                        }
+                    },
+                    animation: {
+                        wiggle: 'wiggle 1.5s ease-in-out infinite',
+                        shake: 'shake 0.4s ease-in-out',
+                        bounce_small: 'bounce_small 1s ease-in-out infinite',
+                        popIn: 'popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&display=swap');
+        body {
+            background-color: #e0f2e9;
+            background-image: radial-gradient(#a3d9b1 20%, transparent 20%), radial-gradient(#a3d9b1 20%, transparent 20%);
+            background-size: 40px 40px;
+            background-position: 0 0, 20px 20px;
+            margin: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        /* Custom scrollbar for options */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #4c9a62; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useCallback } = React;
+
+        const IconHome = () => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        );
+        const IconRefresh = () => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+        );
+        const IconNext = () => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        );
+
+        const ZOO_ANIMALS = ['🦁', '🐯', '🦒', '🐘', '🦓', '🐒', '🐼', '🦊', '🐸', '🐨'];
+
+        const Toggle = ({ label, enabled, onChange }) => (
+            <div className="flex items-center space-x-3 bg-white/70 px-4 py-2 rounded-full shadow-sm backdrop-blur-sm">
+                <span className="font-bold text-zoo-text text-base md:text-lg">{label}</span>
+                <button 
+                    onClick={() => onChange(!enabled)}
+                    className={`w-12 md:w-14 h-7 md:h-8 flex items-center rounded-full p-1 transition-colors duration-300 ${enabled ? 'bg-green-500' : 'bg-gray-300'}`}
+                >
+                    <div className={`bg-white w-5 md:w-6 h-5 md:h-6 rounded-full shadow-md transform transition-transform duration-300 ${enabled ? 'translate-x-5 md:translate-x-6' : ''}`}></div>
+                </button>
+            </div>
+        );
+
+        // Updated TopBar with persistent "Next" button
+        const TopBar = ({ onHome, title, onNext }) => (
+            <div className="flex justify-between items-center mb-6 w-full max-w-5xl mx-auto px-4 pt-4">
+                <button onClick={onHome} className="flex items-center justify-center gap-1 md:gap-2 bg-white text-zoo-text px-3 py-2 md:px-4 md:py-2 rounded-xl shadow-[0_4px_0_rgb(163,217,177)] hover:translate-y-1 hover:shadow-[0_0px_0_rgb(163,217,177)] transition-all font-bold text-sm md:text-lg active:scale-95 whitespace-nowrap">
+                    <IconHome /> <span className="hidden sm:inline">主頁</span>
+                </button>
+                <h2 className="text-lg sm:text-2xl md:text-3xl font-black text-zoo-dark drop-shadow-sm text-center flex-1 mx-2">{title}</h2>
+                {onNext ? (
+                    <button onClick={onNext} className="flex items-center justify-center gap-1 md:gap-2 bg-zoo-yellow text-amber-800 px-3 py-2 md:px-4 md:py-2 rounded-xl shadow-[0_4px_0_rgb(217,119,6)] hover:translate-y-1 hover:shadow-none transition-all font-bold text-sm md:text-lg active:scale-95 whitespace-nowrap">
+                        下一題 <IconNext />
+                    </button>
+                ) : (
+                    <div className="w-[80px] sm:w-[120px]"></div>
+                )}
+            </div>
+        );
+
+        const DrawingBoard = ({ expectedNumber }) => {
+            const canvasRef = React.useRef(null);
+            const [isDrawing, setIsDrawing] = React.useState(false);
+            const [hasDrawn, setHasDrawn] = React.useState(false);
+
+            useEffect(() => {
+                const canvas = canvasRef.current;
+                const rect = canvas.getBoundingClientRect();
+                canvas.width = rect.width;
+                canvas.height = rect.height;
+                const ctx = canvas.getContext('2d');
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.strokeStyle = '#2d5a39';
+                ctx.lineWidth = 8;
+            }, [expectedNumber]);
+
+            const startDrawing = (e) => {
+                const { offsetX, offsetY } = getCoordinates(e);
+                const ctx = canvasRef.current.getContext('2d');
+                ctx.beginPath();
+                ctx.moveTo(offsetX, offsetY);
+                setIsDrawing(true);
+                setHasDrawn(true);
+                
+                // Prevent scrolling on mobile while drawing
+                if (e.cancelable) e.preventDefault(); 
+            };
+
+            const finishDrawing = () => {
+                setIsDrawing(false);
+            };
+
+            const draw = (e) => {
+                if (!isDrawing) return;
+                const { offsetX, offsetY } = getCoordinates(e);
+                const ctx = canvasRef.current.getContext('2d');
+                ctx.lineTo(offsetX, offsetY);
+                ctx.stroke();
+            };
+
+            const getCoordinates = (e) => {
+                const canvas = canvasRef.current;
+                const rect = canvas.getBoundingClientRect();
+                if (e.touches && e.touches.length > 0) {
+                    return {
+                        offsetX: e.touches[0].clientX - rect.left,
+                        offsetY: e.touches[0].clientY - rect.top
+                    };
+                }
+                return {
+                    offsetX: e.nativeEvent.offsetX,
+                    offsetY: e.nativeEvent.offsetY
+                };
+            };
+
+            const clearCanvas = () => {
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                setHasDrawn(false);
+            };
+
+            return (
+                <div className="flex flex-col items-center mt-6 w-full max-w-md mx-auto animate-popIn">
+                    <h4 className="text-xl md:text-2xl font-black text-zoo-text mb-4">請在寫字板寫出「{expectedNumber}」：</h4>
+                    <div className="relative w-full h-48 bg-white border-4 border-dashed border-gray-400 rounded-2xl shadow-inner cursor-crosshair">
+                        <canvas
+                            ref={canvasRef}
+                            style={{ touchAction: 'none' }}
+                            className="w-full h-full rounded-xl"
+                            onMouseDown={startDrawing}
+                            onMouseUp={finishDrawing}
+                            onMouseMove={draw}
+                            onMouseLeave={finishDrawing}
+                            onTouchStart={startDrawing}
+                            onTouchEnd={finishDrawing}
+                            onTouchMove={draw}
+                        />
+                    </div>
+                    {hasDrawn && (
+                        <button onClick={clearCanvas} className="mt-4 text-gray-500 hover:text-red-500 font-bold underline px-4 py-2">
+                            清除重寫
+                        </button>
+                    )}
+                </div>
+            );
+        };
+
+        const GameCount = ({ direction = 'forward', onHome }) => {
+            const [total, setTotal] = useState(5);
+            const [count, setCount] = useState(0); 
+            const [animal, setAnimal] = useState('🦁');
+            const [showHint, setShowHint] = useState(true);
+            const [hasStarted, setHasStarted] = useState(false);
+            const [isFinished, setIsFinished] = useState(false);
+
+            const initGame = useCallback(() => {
+                const newTotal = Math.floor(Math.random() * 8) + 5; // 5 to 12
+                setTotal(newTotal);
+                setCount(direction === 'forward' ? 0 : newTotal);
+                setAnimal(ZOO_ANIMALS[Math.floor(Math.random() * ZOO_ANIMALS.length)]);
+                setHasStarted(false);
+                setIsFinished(false);
+            }, [direction]);
+
+            useEffect(() => { initGame(); }, [initGame]);
+
+            const handleAnimalClick = () => {
+                if (direction === 'forward') {
+                    if (count < total) {
+                        setHasStarted(true);
+                        setCount(prev => {
+                            const next = prev + 1;
+                            if (next === total) setIsFinished(true);
+                            return next;
+                        });
+                    }
+                } else {
+                    if (count > 0) {
+                        setHasStarted(true);
+                        setCount(prev => {
+                            const next = prev - 1;
+                            if (next === 0) setIsFinished(true);
+                            return next;
+                        });
+                    }
+                }
+            };
+
+            const isInitialState = direction === 'forward' ? count === 0 : count === total && !hasStarted;
+
+            return (
+                <div className="flex flex-col items-center min-h-screen pb-10">
+                    {/* TopBar with 'onNext' passed in */}
+                    <TopBar onHome={onHome} title={direction === 'forward' ? "動物點點數 (順數)" : "動物躲貓貓 (倒數)"} onNext={initGame} />
+                    
+                    <div className="mb-6 flex flex-col sm:flex-row items-center justify-center gap-4 w-full">
+                        <Toggle label="視覺提示" enabled={showHint} onChange={setShowHint} />
+                        <button onClick={initGame} className="flex items-center gap-2 bg-white text-gray-700 border-2 border-gray-300 px-4 py-2 rounded-xl shadow-sm hover:bg-gray-50 transition-all font-bold">
+                            <IconRefresh /> 重新開始
+                        </button>
+                    </div>
+
+                    <div className="bg-white/90 p-6 md:p-8 rounded-3xl shadow-xl border-4 border-zoo-base max-w-4xl w-[95%] text-center relative overflow-hidden backdrop-blur-sm">
+                        {/* Status Text */}
+                        <h3 className="text-2xl md:text-3xl lg:text-4xl font-black text-zoo-text mb-6">
+                            {isInitialState 
+                                ? (direction === 'forward' ? "這裡共有幾多隻小動物？點擊數數看！" : `總共有 ${total} 隻動物！點擊讓牠們回家。`) 
+                                : isFinished 
+                                    ? `好叻！總共有 ${total} 隻小動物！` 
+                                    : (direction === 'forward' ? `目前數了： ${count} 個` : `還剩下： ${count} 個`)
+                            }
+                        </h3>
+
+                        {/* Playground Area - Structured to prevent jumping */}
+                        <div className="flex flex-wrap items-center justify-center gap-1 md:gap-2 min-h-[220px] w-full p-2">
+                            {direction === 'forward' ? (
+                                <div className={`flex flex-wrap justify-center items-center w-full p-4 md:p-6 transition-all duration-300 rounded-3xl border-4 ${isInitialState ? 'border-dashed border-zoo-orange bg-zoo-yellow/20 cursor-pointer animate-wiggle' : 'border-transparent bg-white/50'}`}
+                                     onClick={isInitialState ? handleAnimalClick : undefined}>
+                                    
+                                    <div className="flex flex-wrap justify-center items-center w-full gap-0">
+                                        {Array.from({length: total}).map((_, i) => {
+                                            const isCounted = i < count;
+                                            let borderClasses = 'border-4 border-transparent';
+                                            let bgClass = 'bg-transparent';
+                                            let radiusClass = 'rounded-none';
+
+                                            // 創造連續框框的效果 (不改變實體寬度)
+                                            if (isCounted) {
+                                                bgClass = 'bg-blue-50';
+                                                if (count === 1) {
+                                                    borderClasses = 'border-4 border-dashed border-blue-500';
+                                                    radiusClass = 'rounded-3xl';
+                                                } else if (i === 0) {
+                                                    borderClasses = 'border-4 border-dashed border-blue-500 border-r-transparent';
+                                                    radiusClass = 'rounded-l-3xl';
+                                                } else if (i === count - 1) {
+                                                    borderClasses = 'border-4 border-dashed border-blue-500 border-l-transparent';
+                                                    radiusClass = 'rounded-r-3xl';
+                                                } else {
+                                                    borderClasses = 'border-4 border-dashed border-blue-500 border-l-transparent border-r-transparent';
+                                                }
+                                            }
+
+                                            const isNext = !isCounted && i === count && showHint && !isInitialState;
+
+                                            return (
+                                                <div key={`fwd-${i}`} 
+                                                     className={`relative flex items-center justify-center w-14 h-14 md:w-20 md:h-20 transition-all duration-300 ${bgClass} ${borderClasses} ${radiusClass}`}
+                                                     onClick={!isInitialState && !isCounted ? handleAnimalClick : undefined}
+                                                >
+                                                     <span className={`text-4xl md:text-5xl select-none transition-transform 
+                                                         ${isNext ? 'animate-bounce drop-shadow-xl hover:scale-110' : ''}
+                                                         ${!isCounted && !isNext ? 'hover:scale-110 cursor-pointer active:scale-90 opacity-80 hover:opacity-100' : ''}
+                                                         ${isCounted ? 'scale-100 opacity-100' : ''}`}>
+                                                         {animal}
+                                                     </span>
+                                                     {isCounted && showHint && (
+                                                         <span className="absolute -bottom-2 -right-2 bg-blue-500 text-white text-sm md:text-base font-bold rounded-full w-6 h-6 md:w-8 md:h-8 flex items-center justify-center border-2 border-white shadow-sm z-10 animate-popIn">
+                                                             {i + 1}
+                                                         </span>
+                                                     )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            ) : (
+                                // BACKWARD COUNTING VISUALS
+                                <div className={`flex flex-wrap justify-center items-center w-full p-4 md:p-6 rounded-3xl border-4 transition-all duration-300 ${isInitialState ? 'border-dashed border-red-400 bg-red-50 animate-wiggle cursor-pointer' : 'border-transparent bg-red-50/30'}`}
+                                     onClick={isInitialState ? handleAnimalClick : undefined}>
+                                    
+                                    <div className="flex flex-wrap justify-center items-center w-full gap-2 md:gap-4">
+                                        {Array.from({length: total}).map((_, i) => {
+                                            const isPresent = i < count;
+                                            const isNextToGo = isPresent && i === count - 1 && showHint && !isInitialState;
+                                            return (
+                                                <div key={`back-${i}`} 
+                                                     className={`relative flex items-center justify-center w-14 h-14 md:w-20 md:h-20 transition-all duration-500 ${isPresent ? 'opacity-100 scale-100' : 'opacity-0 scale-50 pointer-events-none'}`} 
+                                                     onClick={!isInitialState && isPresent ? handleAnimalClick : undefined}>
+                                                     
+                                                    <span className={`text-4xl md:text-5xl select-none transition-transform cursor-pointer 
+                                                        ${isNextToGo ? 'animate-bounce drop-shadow-xl hover:scale-110' : ''}
+                                                        ${isPresent && !isNextToGo ? 'hover:scale-105 active:scale-90' : ''}`}>
+                                                        {animal}
+                                                    </span>
+                                                    {isPresent && showHint && (
+                                                        <span className={`absolute -bottom-2 -right-2 text-white text-sm md:text-base font-bold rounded-full w-6 h-6 md:w-8 md:h-8 flex items-center justify-center border-2 border-white shadow-sm z-10 animate-popIn ${i === count - 1 ? 'bg-red-500' : 'bg-gray-400'}`}>
+                                                            {i + 1}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    {count === 0 && (
+                                        <div className="text-3xl md:text-4xl font-bold text-red-500 animate-popIn w-full text-center mt-4">全部動物都回家啦！🏠</div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Success Overlay Button & Drawing Board */}
+                        {isFinished && (
+                            <div className="mt-4 w-full flex flex-col items-center">
+                                <DrawingBoard expectedNumber={total} />
+                                <div className="mt-8">
+                                    <button onClick={initGame} className="flex items-center gap-2 bg-zoo-dark text-white text-xl md:text-2xl font-black px-8 py-3 md:px-10 md:py-4 rounded-full shadow-[0_6px_0_rgb(45,90,57)] hover:translate-y-1 hover:shadow-[0_2px_0_rgb(45,90,57)] transition-all animate-bounce_small">
+                                        <IconNext /> 再玩一次！
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const GameSequence = ({ direction = 'forward', onHome }) => {
+            const [sequence, setSequence] = useState([]);
+            const [options, setOptions] = useState([]);
+            const [selectedOption, setSelectedOption] = useState(null);
+            const [errorSlot, setErrorSlot] = useState(null);
+            const [isWon, setIsWon] = useState(false);
+
+            const initGame = useCallback(() => {
+                const length = 5;
+                // Forward: sequence within 20
+                let start = direction === 'forward' 
+                    ? Math.floor(Math.random() * 11) + 1  // 1 to 11 (max num 15)
+                    : Math.floor(Math.random() * 8) + 10; // 10 to 17 (max down to 6)
+                
+                let seq = [];
+                for (let i = 0; i < length; i++) {
+                    seq.push({
+                        id: i,
+                        value: direction === 'forward' ? start + i : start - i,
+                        isHidden: false
+                    });
+                }
+
+                // Hide 2 spots
+                let hidden = [];
+                while(hidden.length < 2) {
+                    let r = Math.floor(Math.random() * length);
+                    if(!hidden.includes(r)) hidden.push(r);
+                }
+                hidden.forEach(idx => seq[idx].isHidden = true);
+
+                // Generate options (correct ones + 2 distractors)
+                let opts = hidden.map(idx => seq[idx].value);
+                let attempts = 0;
+                while(opts.length < 4 && attempts < 50) {
+                    let dist = direction === 'forward' 
+                        ? start + Math.floor(Math.random() * 8) - 2
+                        : start - Math.floor(Math.random() * 8) + 2;
+                    if (dist > 0 && dist <= 20 && !opts.includes(dist)) {
+                        opts.push(dist);
+                    }
+                    attempts++;
+                }
+                opts.sort(() => Math.random() - 0.5);
+
+                setSequence(seq);
+                setOptions(opts.map((val, i) => ({ id: i, value: val, used: false })));
+                setSelectedOption(null);
+                setIsWon(false);
+                setErrorSlot(null);
+            }, [direction]);
+
+            useEffect(() => { initGame(); }, [initGame]);
+
+            const handleOptionClick = (optId) => {
+                if(options.find(o => o.id === optId).used) return;
+                setSelectedOption(optId === selectedOption ? null : optId);
+            };
+
+            const handleSlotClick = (index) => {
+                if (selectedOption === null || !sequence[index].isHidden) return;
+                
+                const opt = options.find(o => o.id === selectedOption);
+                if (sequence[index].value === opt.value) {
+                    // Correct Match
+                    const newSeq = [...sequence];
+                    newSeq[index].isHidden = false;
+                    setSequence(newSeq);
+                    
+                    const newOpts = [...options];
+                    newOpts.find(o => o.id === selectedOption).used = true;
+                    setOptions(newOpts);
+                    
+                    setSelectedOption(null);
+
+                    if (newSeq.every(item => !item.isHidden)) {
+                        setIsWon(true);
+                    }
+                } else {
+                    // Wrong Match
+                    setErrorSlot(index);
+                    setTimeout(() => setErrorSlot(null), 400);
+                }
+            };
+
+            return (
+                <div className="flex flex-col items-center min-h-screen pb-10">
+                    <TopBar onHome={onHome} title={direction === 'forward' ? "動物火車填空 (順數)" : "動物火車填空 (倒數)"} onNext={initGame} />
+
+                    <div className="mb-4">
+                        <button onClick={initGame} className="flex items-center gap-2 bg-white text-gray-700 border-2 border-gray-300 px-4 py-2 rounded-xl shadow-sm hover:bg-gray-50 transition-all font-bold">
+                            <IconRefresh /> 重新開始
+                        </button>
+                    </div>
+
+                    <div className="bg-white/90 p-6 md:p-10 rounded-3xl shadow-xl border-4 border-zoo-base max-w-4xl w-[95%] text-center flex flex-col items-center backdrop-blur-sm">
+                        <h3 className="text-xl md:text-3xl font-black text-zoo-text mb-2">
+                            {isWon ? "太棒了！你完成了數字序列！" : "請選擇下方的數字，填入中間空出的位置！"}
+                        </h3>
+                        <p className="text-gray-500 font-bold mb-8">({direction === 'forward' ? '順數' : '倒數'})</p>
+
+                        {/* Train Sequence Layout */}
+                        <div className="flex flex-wrap justify-center items-center gap-1 md:gap-4 mb-12">
+                            {sequence.map((item, index) => (
+                                <div key={item.id} className="flex items-center">
+                                    <div 
+                                        onClick={() => handleSlotClick(index)}
+                                        className={`
+                                            relative flex flex-col items-center justify-center w-16 h-20 md:w-28 md:h-32 rounded-2xl border-4 
+                                            transition-all duration-200 shadow-md select-none
+                                            ${item.isHidden 
+                                                ? 'bg-gray-100 border-dashed border-gray-400 cursor-pointer hover:bg-gray-200' 
+                                                : 'bg-gradient-to-b from-blue-300 to-blue-400 border-blue-600'}
+                                            ${errorSlot === index ? 'animate-shake bg-red-100 border-red-500' : ''}
+                                            ${selectedOption !== null && item.isHidden ? 'ring-4 ring-yellow-400 ring-opacity-50' : ''}
+                                        `}
+                                    >
+                                        {!item.isHidden && (
+                                            <>
+                                                <div className="absolute top-[-20px] md:top-[-25px] text-2xl md:text-4xl animate-wiggle">
+                                                    {ZOO_ANIMALS[index % ZOO_ANIMALS.length]}
+                                                </div>
+                                                <span className="text-3xl md:text-5xl font-black text-white drop-shadow-md">
+                                                    {item.value}
+                                                </span>
+                                            </>
+                                        )}
+                                        {item.isHidden && (
+                                            <span className="text-3xl md:text-4xl text-gray-300 font-black">?</span>
+                                        )}
+                                    </div>
+                                    {index < sequence.length - 1 && (
+                                        <div className="w-2 md:w-8 h-2 md:h-3 bg-gray-400 rounded-full mx-1"></div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Options to Drag/Click */}
+                        {!isWon ? (
+                            <div className="flex flex-wrap justify-center gap-3 md:gap-4 p-4 md:p-6 bg-zoo-light/50 rounded-2xl border-2 border-zoo-base border-dashed w-full">
+                                <h4 className="w-full text-lg md:text-xl font-bold text-zoo-text mb-2">數字選擇區：</h4>
+                                {options.map(opt => (
+                                    <button
+                                        key={opt.id}
+                                        onClick={() => handleOptionClick(opt.id)}
+                                        disabled={opt.used}
+                                        className={`
+                                            w-14 h-14 md:w-20 md:h-20 rounded-xl text-2xl md:text-4xl font-black transition-all shadow-[0_4px_0_rgba(0,0,0,0.2)]
+                                            ${opt.used ? 'opacity-0 pointer-events-none' : 'bg-white border-2 border-gray-300 hover:-translate-y-1 active:translate-y-1 active:shadow-none'}
+                                            ${selectedOption === opt.id ? 'ring-4 ring-yellow-500 border-yellow-500 bg-yellow-50 transform -translate-y-2' : 'text-gray-700'}
+                                        `}
+                                    >
+                                        {opt.value}
+                                    </button>
+                                ))}
+                            </div>
+                        ) : (
+                            <button onClick={initGame} className="bg-zoo-dark text-white text-xl md:text-2xl font-black px-8 py-3 md:px-10 md:py-4 rounded-full shadow-[0_6px_0_rgb(45,90,57)] hover:translate-y-1 hover:shadow-[0_2px_0_rgb(45,90,57)] transition-all animate-bounce_small mt-4">
+                                玩下一關！
+                            </button>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [view, setView] = useState('menu'); 
+
+            const renderView = () => {
+                switch(view) {
+                    case 'count-fwd': return <GameCount direction="forward" onHome={() => setView('menu')} />;
+                    case 'count-bwd': return <GameCount direction="backward" onHome={() => setView('menu')} />;
+                    case 'seq-fwd': return <GameSequence direction="forward" onHome={() => setView('menu')} />;
+                    case 'seq-bwd': return <GameSequence direction="backward" onHome={() => setView('menu')} />;
+                    default: return (
+                        <div className="flex flex-col items-center justify-center min-h-screen px-4 pb-12">
+                            <div className="text-center mb-10 mt-10">
+                                <h1 className="text-4xl md:text-6xl font-black text-zoo-text drop-shadow-md mb-4 flex items-center justify-center gap-2 md:gap-4">
+                                    <span className="animate-bounce_small">🦁</span>
+                                    快樂動物園
+                                    <span className="animate-bounce_small" style={{animationDelay: '0.2s'}}>🐒</span>
+                                </h1>
+                                <p className="text-xl md:text-2xl font-bold text-zoo-dark bg-white/70 inline-block px-6 py-2 rounded-full shadow-sm">一起來學習順數和倒數！</p>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl">
+                                {/* Button 1: Count Forward */}
+                                <button onClick={() => setView('count-fwd')} className="group flex flex-col items-center justify-center bg-white p-6 md:p-8 rounded-3xl shadow-[0_8px_0_rgb(163,217,177)] hover:-translate-y-2 hover:shadow-[0_12px_0_rgb(163,217,177)] active:translate-y-2 active:shadow-[0_0px_0_rgb(163,217,177)] transition-all border-4 border-zoo-base">
+                                    <div className="text-5xl md:text-6xl mb-4 group-hover:animate-wiggle">🐘</div>
+                                    <h2 className="text-2xl md:text-3xl font-black text-zoo-text mb-2">動物點點數</h2>
+                                    <p className="text-lg md:text-xl font-bold text-gray-500 bg-gray-100 px-4 py-1 rounded-full">順數 (1, 2, 3...)</p>
+                                </button>
+
+                                {/* Button 2: Sequence Forward */}
+                                <button onClick={() => setView('seq-fwd')} className="group flex flex-col items-center justify-center bg-white p-6 md:p-8 rounded-3xl shadow-[0_8px_0_rgb(163,217,177)] hover:-translate-y-2 hover:shadow-[0_12px_0_rgb(163,217,177)] active:translate-y-2 active:shadow-[0_0px_0_rgb(163,217,177)] transition-all border-4 border-zoo-base">
+                                    <div className="text-5xl md:text-6xl mb-4 group-hover:animate-wiggle">🚂</div>
+                                    <h2 className="text-2xl md:text-3xl font-black text-zoo-text mb-2">動物火車填空</h2>
+                                    <p className="text-lg md:text-xl font-bold text-gray-500 bg-gray-100 px-4 py-1 rounded-full">順數 (5, _, 7, _)</p>
+                                </button>
+
+                                {/* Button 3: Count Backward */}
+                                <button onClick={() => setView('count-bwd')} className="group flex flex-col items-center justify-center bg-white p-6 md:p-8 rounded-3xl shadow-[0_8px_0_rgb(252,211,77)] hover:-translate-y-2 hover:shadow-[0_12px_0_rgb(252,211,77)] active:translate-y-2 active:shadow-[0_0px_0_rgb(252,211,77)] transition-all border-4 border-yellow-300">
+                                    <div className="text-5xl md:text-6xl mb-4 group-hover:animate-wiggle">🦊</div>
+                                    <h2 className="text-2xl md:text-3xl font-black text-amber-800 mb-2">動物躲貓貓</h2>
+                                    <p className="text-lg md:text-xl font-bold text-gray-500 bg-yellow-100 px-4 py-1 rounded-full text-amber-700">倒數 (3, 2, 1...)</p>
+                                </button>
+
+                                {/* Button 4: Sequence Backward */}
+                                <button onClick={() => setView('seq-bwd')} className="group flex flex-col items-center justify-center bg-white p-6 md:p-8 rounded-3xl shadow-[0_8px_0_rgb(252,211,77)] hover:-translate-y-2 hover:shadow-[0_12px_0_rgb(252,211,77)] active:translate-y-2 active:shadow-[0_0px_0_rgb(252,211,77)] transition-all border-4 border-yellow-300">
+                                    <div className="text-5xl md:text-6xl mb-4 group-hover:animate-wiggle">🛤️</div>
+                                    <h2 className="text-2xl md:text-3xl font-black text-amber-800 mb-2">倒車填空</h2>
+                                    <p className="text-lg md:text-xl font-bold text-gray-500 bg-yellow-100 px-4 py-1 rounded-full text-amber-700">倒數 (10, _, 8, _)</p>
+                                </button>
+                            </div>
+                        </div>
+                    );
+                }
+            };
+
+            return (
+                <div className="w-full min-h-screen">
+                    {renderView()}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
