@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>快樂動物園 - 順數及倒數學習遊戲</title>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM UMD CDNs -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel standalone for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Nunito"', 'sans-serif', '"Microsoft JhengHei"'],
+                    },
+                    colors: {
+                        zoo: {
+                            light: '#e0f2e9',
+                            base: '#a3d9b1',
+                            dark: '#4c9a62',
+                            text: '#2d5a39',
+                            yellow: '#fcd34d',
+                            orange: '#fb923c'
+                        }
+                    },
+                    keyframes: {
+                        wiggle: {
+                            '0%, 100%': { transform: 'rotate(-2deg)' },
+                            '50%': { transform: 'rotate(2deg)' },
+                        },
+                        shake: {
+                            '0%, 100%': { transform: 'translateX(0)' },
+                            '20%': { transform: 'translateX(-5px)' },
+                            '40%': { transform: 'translateX(5px)' },
+                            '60%': { transform: 'translateX(-5px)' },
+                            '80%': { transform: 'translateX(5px)' }
+                        },
+                        bounce_small: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-12%)' },
+                        },
+                        popIn: {
+                            '0%': { transform: 'scale(0.5)', opacity: '0' },
+                            '100%': { transform: 'scale(1)', opacity: '1' }
+                        }
+                    },
+                    animation: {
+                        wiggle: 'wiggle 1.5s ease-in-out infinite',
+                        shake: 'shake 0.4s ease-in-out',
+                        bounce_small: 'bounce_small 1s ease-in-out infinite',
+                        popIn: 'popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&display=swap');
+        body {
+            background-color: #e0f2e9;
+            background-image: radial-gradient(#a3d9b1 20%, transparent 20%), radial-gradient(#a3d9b1 20%, transparent 20%);
+            background-size: 40px 40px;
+            background-position: 0 0, 20px 20px;
+            margin: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            height: 6px;
+        }
+        .no-scrollbar::-webkit-scrollbar-thumb {
+            background: #a3d9b1;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useCallback, createContext, useContext } = React;
+
+        // --- Sound System ---
+        const SoundContext = createContext();
+        
+        let audioCtx = null;
+        const playSoundEffect = (type, isEnabled) => {
+            if (!isEnabled) return;
+            try {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                
+                const osc = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                osc.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                
+                if (type === 'pop') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.1);
+                    gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.1);
+                } else if (type === 'success') {
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(440, audioCtx.currentTime); // A4
+                    osc.frequency.setValueAtTime(554.37, audioCtx.currentTime + 0.1); // C#5
+                    osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.2); // E5
+                    gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                    gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.4);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.4);
+                } else if (type === 'error') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+                    gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                    gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.2);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.2);
+                }
+            } catch(e) { console.error("Audio play failed", e); }
+        };
+
+        // --- Icons ---
+        const IconHome = () => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        );
+        const IconRefresh = () => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+        );
+        const IconNext = () => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        );
+        const IconSettings = () => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
+        );
+
+        const ZOO_ANIMALS = ['🦁', '🐯', '🦒', '🐘', '🦓', '🐒', '🐼', '🦊', '🐸', '🐨'];
+
+        // Header Navigation Bar
+        const TopBar = ({ onHome, title, onNext, onOpenSettings }) => (
+            <div className="flex justify-between items-center mb-6 w-full max-w-5xl mx-auto px-4 pt-4">
+                <button onClick={onHome} className="flex items-center justify-center gap-1 md:gap-2 bg-white text-zoo-text px-3 py-2 md:px-4 md:py-2 rounded-xl shadow-[0_4px_0_rgb(163,217,177)] hover:translate-y-1 hover:shadow-none transition-all font-bold text-sm md:text-lg active:scale-95 whitespace-nowrap">
+                    <IconHome /> <span className="hidden sm:inline">主頁</span>
+                </button>
+                <h2 className="text-lg sm:text-2xl md:text-3xl font-black text-zoo-dark drop-shadow-sm text-center flex-1 mx-2">{title}</h2>
+                <div className="flex items-center gap-2">
+                    {onOpenSettings && (
+                        <button onClick={onOpenSettings} className="flex items-center justify-center p-2 bg-white text-zoo-dark rounded-xl shadow-[0_4px_0_rgb(163,217,177)] hover:translate-y-1 hover:shadow-none transition-all font-bold text-sm md:text-lg active:scale-95" title="設定">
+                            <IconSettings />
+                        </button>
+                    )}
+                    {onNext && (
+                        <button onClick={onNext} className="flex items-center justify-center gap-1 md:gap-2 bg-zoo-yellow text-amber-800 px-3 py-2 md:px-4 md:py-2 rounded-xl shadow-[0_4px_0_rgb(217,119,6)] hover:translate-y-1 hover:shadow-none transition-all font-bold text-sm md:text-lg active:scale-95 whitespace-nowrap">
+                            下一題 <IconNext />
+                        </button>
+                    )}
+                </div>
+            </div>
+        );
+
+        const Toggle = ({ label, enabled, onChange }) => (
+            <div className="flex items-center space-x-3 bg-white/80 px-4 py-2 rounded-full shadow-sm backdrop-blur-sm cursor-pointer" onClick={() => onChange(!enabled)}>
+                <span className="font-bold text-zoo-text text-base md:text-lg">{label}</span>
+                <button 
+                    className={`w-12 md:w-14 h-7 md:h-8 flex items-center rounded-full p-1 transition-colors duration-300 ${enabled ? 'bg-green-500' : 'bg-gray-300'}`}
+                >
+                    <div className={`bg-white w-5 md:w-6 h-5 md:h-6 rounded-full shadow-md transform transition-transform duration-300 ${enabled ? 'translate-x-5 md:translate-x-6' : ''}`}></div>
+                </button>
+            </div>
+        );
+
+        // High Precision Slot Canvas for Handwriting
+        const SlotCanvas = ({ slotIndex, expectedValue, onDrawnChange }) => {
+            const canvasRef = useRef(null);
+            const [isDrawing, setIsDrawing] = useState(false);
+            const [hasDrawn, setHasDrawn] = useState(false);
+
+            // Set fixed logical size to avoid clearing on re-render
+            useEffect(() => {
+                const canvas = canvasRef.current;
+                if (!canvas) return;
+                // Fixed logical resolution for smooth drawing
+                canvas.width = 300; 
+                canvas.height = 300;
+            }, []);
+
+            const getPreciseCoordinates = (e) => {
+                const canvas = canvasRef.current;
+                const rect = canvas.getBoundingClientRect();
+                let clientX = e.clientX;
+                let clientY = e.clientY;
+                if (e.touches && e.touches.length > 0) {
+                    clientX = e.touches[0].clientX;
+                    clientY = e.touches[0].clientY;
+                }
+                // Map screen coordinates to internal canvas logical size (300x300)
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                return {
+                    x: (clientX - rect.left) * scaleX,
+                    y: (clientY - rect.top) * scaleY
+                };
+            };
+
+            const startDrawing = (e) => {
+                if (e.cancelable) e.preventDefault();
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+                const pos = getPreciseCoordinates(e);
+                
+                ctx.beginPath();
+                ctx.moveTo(pos.x, pos.y);
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.strokeStyle = '#1d4ed8';
+                ctx.lineWidth = 18; // Thicker line for fixed 300px resolution
+                
+                setIsDrawing(true);
+                
+                if (!hasDrawn) {
+                    setHasDrawn(true);
+                    if (onDrawnChange) onDrawnChange(slotIndex, true);
+                }
+            };
+
+            const draw = (e) => {
+                if (!isDrawing) return;
+                if (e.cancelable) e.preventDefault();
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+                const pos = getPreciseCoordinates(e);
+                ctx.lineTo(pos.x, pos.y);
+                ctx.stroke();
+            };
+
+            const stopDrawing = () => setIsDrawing(false);
+
+            const clearCanvas = (e) => {
+                e.stopPropagation();
+                const canvas = canvasRef.current;
+                if (!canvas) return;
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                setHasDrawn(false);
+                if (onDrawnChange) onDrawnChange(slotIndex, false);
+            };
+
+            return (
+                <div className="relative shrink-0 w-20 h-24 sm:w-24 sm:h-28 md:w-32 md:h-36 bg-amber-50/50 rounded-2xl flex items-center justify-center cursor-crosshair">
+                    {/* Visual dashed box */}
+                    <div className="absolute inset-0 border-4 border-dashed border-amber-400 rounded-2xl pointer-events-none"></div>
+                    
+                    {!hasDrawn && (
+                        <span className="absolute text-gray-300 text-3xl sm:text-4xl md:text-5xl font-black pointer-events-none select-none z-0">
+                            ?
+                        </span>
+                    )}
+                    
+                    {/* Canvas overlaps container slightly to allow out-of-bounds drawing */}
+                    <canvas
+                        ref={canvasRef}
+                        style={{ touchAction: 'none' }}
+                        className="absolute -inset-4 z-10 w-[calc(100%+32px)] h-[calc(100%+32px)]"
+                        onMouseDown={startDrawing}
+                        onMouseMove={draw}
+                        onMouseUp={stopDrawing}
+                        onMouseLeave={stopDrawing}
+                        onTouchStart={startDrawing}
+                        onTouchMove={draw}
+                        onTouchEnd={stopDrawing}
+                    />
+                    
+                    {hasDrawn && (
+                        <button 
+                            onClick={clearCanvas} 
+                            className="absolute -top-3 -right-3 z-20 bg-red-500 text-white rounded-full w-7 h-7 flex items-center justify-center text-xs font-bold shadow-md hover:bg-red-600 transition-all border-2 border-white"
+                            title="清除重寫"
+                        >
+                            ✕
+                        </button>
+                    )}
+                </div>
+            );
+        };
+
+        // Fullscreen/Modal Drawing Board for Game End
+        const DrawingBoard = ({ expectedNumber }) => {
+            const canvasRef = useRef(null);
+            const [isDrawing, setIsDrawing] = useState(false);
+            const [hasDrawn, setHasDrawn] = useState(false);
+
+            useEffect(() => {
+                const canvas = canvasRef.current;
+                if (!canvas) return;
+                canvas.width = 400;
+                canvas.height = 300;
+                const ctx = canvas.getContext('2d');
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.strokeStyle = '#2d5a39';
+                ctx.lineWidth = 14;
+            }, [expectedNumber]);
+
+            const getCoordinates = (e) => {
+                const canvas = canvasRef.current;
+                const rect = canvas.getBoundingClientRect();
+                let clientX = e.clientX;
+                let clientY = e.clientY;
+                if (e.touches && e.touches.length > 0) {
+                    clientX = e.touches[0].clientX;
+                    clientY = e.touches[0].clientY;
+                }
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                return {
+                    x: (clientX - rect.left) * scaleX,
+                    y: (clientY - rect.top) * scaleY
+                };
+            };
+
+            const startDrawing = (e) => {
+                if (e.cancelable) e.preventDefault();
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+                const pos = getCoordinates(e);
+                ctx.beginPath();
+                ctx.moveTo(pos.x, pos.y);
+                setIsDrawing(true);
+                setHasDrawn(true);
+            };
+
+            const draw = (e) => {
+                if (!isDrawing) return;
+                if (e.cancelable) e.preventDefault();
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+                const pos = getCoordinates(e);
+                ctx.lineTo(pos.x, pos.y);
+                ctx.stroke();
+            };
+
+            const finishDrawing = () => setIsDrawing(false);
+
+            const clearCanvas = () => {
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                setHasDrawn(false);
+            };
+
+            return (
+                <div className="flex flex-col items-center mt-6 w-full max-w-md mx-auto animate-popIn">
+                    <h4 className="text-xl md:text-2xl font-black text-zoo-text mb-4">請在寫字板寫出「{expectedNumber}」：</h4>
+                    <div className="relative w-full h-48 bg-white border-4 border-dashed border-gray-400 rounded-2xl shadow-inner cursor-crosshair">
+                        <canvas
+                            ref={canvasRef}
+                            style={{ touchAction: 'none' }}
+                            className="w-full h-full rounded-xl"
+                            onMouseDown={startDrawing}
+                            onMouseUp={finishDrawing}
+                            onMouseMove={draw}
+                            onMouseLeave={finishDrawing}
+                            onTouchStart={startDrawing}
+                            onTouchEnd={finishDrawing}
+                            onTouchMove={draw}
+                        />
+                    </div>
+                    {hasDrawn && (
+                        <button onClick={clearCanvas} className="mt-3 text-gray-500 hover:text-red-500 font-bold underline px-4 py-1">
+                            清除重寫
+                        </button>
+                    )}
+                </div>
+            );
+        };
+
+        // Game 1: Forward Counting
+        const GameCount = ({ onHome }) => {
+            const { soundEnabled } = useContext(SoundContext);
+            const [total, setTotal] = useState(5);
+            const [count, setCount] = useState(0); 
+            const [animal, setAnimal] = useState('🦁');
+            const [showHint, setShowHint] = useState(true);
+            const [hasStarted, setHasStarted] = useState(false);
+            const [isFinished, setIsFinished] = useState(false);
+
+            const initGame = useCallback(() => {
+                const newTotal = Math.floor(Math.random() * 8) + 5; // 5 to 12
+                setTotal(newTotal);
+                setCount(0);
+                setAnimal(ZOO_ANIMALS[Math.floor(Math.random() * ZOO_ANIMALS.length)]);
+                setHasStarted(false);
+                setIsFinished(false);
+            }, []);
+
+            useEffect(() => { initGame(); }, [initGame]);
+
+            const handleAnimalClick = () => {
+                if (count < total) {
+                    playSoundEffect('pop', soundEnabled);
+                    setHasStarted(true);
+                    setCount(prev => {
+                        const next = prev + 1;
+                        if (next === total) {
+                            setIsFinished(true);
+                            playSoundEffect('success', soundEnabled);
+                        }
+                        return next;
+                    });
+                }
+            };
+
+            const isInitialState = count === 0;
+
+            return (
+                <div className="flex flex-col items-center min-h-screen pb-10">
+                    <TopBar onHome={onHome} title="動物點點數" onNext={initGame} />
+                    
+                    <div className="mb-6 flex flex-col sm:flex-row items-center justify-center gap-4 w-full px-4">
+                        <Toggle label="視覺提示" enabled={showHint} onChange={setShowHint} />
+                        <button onClick={initGame} className="flex items-center gap-2 bg-white text-gray-700 border-2 border-gray-300 px-4 py-2 rounded-xl shadow-sm hover:bg-gray-50 transition-all font-bold">
+                            <IconRefresh /> 重新開始
+                        </button>
+                    </div>
+
+                    <div className="bg-white/90 p-4 md:p-8 rounded-3xl shadow-xl border-4 border-zoo-base max-w-5xl w-[95%] text-center relative backdrop-blur-sm">
+                        <h3 className="text-2xl md:text-3xl lg:text-4xl font-black text-zoo-text mb-6">
+                            {isInitialState 
+                                ? "這裡共有幾多隻小動物？點擊數數看！"
+                                : isFinished 
+                                    ? `好叻！總共有 ${total} 隻小動物！` 
+                                    : `目前數了： ${count} 個`
+                            }
+                        </h3>
+
+                        <div className="w-full min-h-[220px] p-2 flex items-center justify-center overflow-x-auto overflow-y-visible no-scrollbar pt-8">
+                            <div className={`flex flex-nowrap items-center gap-2 sm:gap-3 p-4 transition-all duration-300 rounded-3xl border-4 max-w-full overflow-x-auto overflow-y-visible no-scrollbar pt-6 ${isInitialState ? 'border-dashed border-zoo-orange bg-zoo-yellow/20 cursor-pointer animate-wiggle' : 'border-transparent bg-white/50'}`}
+                                 onClick={isInitialState ? handleAnimalClick : undefined}>
+                                
+                                {count > 0 && (
+                                    <div className="flex flex-nowrap shrink-0 items-center gap-1 sm:gap-2 p-2 sm:p-3 rounded-3xl border-4 border-dashed border-blue-500 bg-blue-50 transition-all duration-300 pt-5">
+                                        {Array.from({length: count}).map((_, i) => (
+                                            <div key={`counted-${i}`} className="relative flex shrink-0 items-center justify-center w-12 h-12 sm:w-16 sm:h-16 md:w-20 md:h-20 animate-popIn">
+                                                 <span className="text-3xl sm:text-4xl md:text-5xl select-none scale-100 opacity-100">{animal}</span>
+                                                 {showHint && (
+                                                     <span className="absolute -bottom-1 -right-1 bg-blue-500 text-white text-xs sm:text-sm md:text-base font-bold rounded-full w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8 flex items-center justify-center border-2 border-white shadow-sm z-10">
+                                                         {i + 1}
+                                                     </span>
+                                                 )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                <div className="flex flex-nowrap shrink-0 items-center gap-1 sm:gap-2">
+                                    {count < total && Array.from({length: total - count}).map((_, i) => {
+                                        const isNext = i === 0 && showHint && !isInitialState;
+                                        return (
+                                            <div key={`rem-${count + i}`} 
+                                                 className="relative flex shrink-0 items-center justify-center w-12 h-12 sm:w-16 sm:h-16 md:w-20 md:h-20 transition-all duration-300"
+                                                 onClick={!isInitialState ? handleAnimalClick : undefined}
+                                            >
+                                                 <span className={`text-3xl sm:text-4xl md:text-5xl select-none transition-transform 
+                                                     ${isNext ? 'animate-bounce drop-shadow-xl hover:scale-110' : ''}
+                                                     ${!isNext && !isInitialState ? 'hover:scale-110 cursor-pointer active:scale-90 opacity-80 hover:opacity-100' : ''}`}>
+                                                     {animal}
+                                                 </span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+
+                        {isFinished && (
+                            <div className="mt-4 w-full flex flex-col items-center">
+                                <DrawingBoard expectedNumber={total} />
+                                <div className="mt-8">
+                                    <button onClick={initGame} className="flex items-center gap-2 bg-zoo-dark text-white text-xl md:text-2xl font-black px-8 py-3 md:px-10 md:py-4 rounded-full shadow-[0_6px_0_rgb(45,90,57)] hover:translate-y-1 hover:shadow-none transition-all animate-bounce_small">
+                                        <IconNext /> 再玩一次！
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // Game 2: Sequence / Train Game (Forward and Backward merged)
+        const GameSequence = ({ onHome }) => {
+            const { soundEnabled } = useContext(SoundContext);
+            const [direction, setDirection] = useState('forward');
+            const [startMode, setStartMode] = useState('head');
+            const [maxRange, setMaxRange] = useState(20);
+            const [inputMethod, setInputMethod] = useState('drag');
+            const [showSettings, setShowSettings] = useState(false);
+
+            const [sequence, setSequence] = useState([]);
+            const [activeSlotIndex, setActiveSlotIndex] = useState(null);
+            const [typedInput, setTypedInput] = useState('');
+            const [userSlotInputs, setUserSlotInputs] = useState({});
+            const [errorSlot, setErrorSlot] = useState(null);
+            const [isWon, setIsWon] = useState(false);
+
+            const [dragOptions, setDragOptions] = useState([]);
+            const [draggedNumber, setDraggedNumber] = useState(null);
+            const [dragPos, setDragPos] = useState(null);
+
+            const RANGE_OPTIONS = [10, 20, 30, 50, 100, 500, 1000, 5000];
+
+            const initGame = useCallback(() => {
+                const seqLength = 5;
+                let startNum = 1;
+
+                if (direction === 'forward') {
+                    if (startMode === 'head') {
+                        startNum = 1;
+                    } else {
+                        const maxStart = Math.max(1, maxRange - seqLength + 1);
+                        startNum = Math.floor(Math.random() * maxStart) + 1;
+                    }
+                } else {
+                    if (startMode === 'head') {
+                        startNum = Math.min(maxRange, seqLength);
+                    } else {
+                        startNum = Math.floor(Math.random() * (maxRange - seqLength + 1)) + seqLength;
+                    }
+                }
+
+                let seq = [];
+                for (let i = 0; i < seqLength; i++) {
+                    seq.push({
+                        id: i,
+                        value: direction === 'forward' ? startNum + i : startNum - i,
+                        isHidden: false
+                    });
+                }
+
+                let hiddenIndices = [];
+                while (hiddenIndices.length < 2) {
+                    let r = Math.floor(Math.random() * seqLength);
+                    if (!hiddenIndices.includes(r)) hiddenIndices.push(r);
+                }
+                hiddenIndices.forEach(idx => seq[idx].isHidden = true);
+
+                setSequence(seq);
+
+                const hiddenValues = seq.filter(s => s.isHidden).map(s => s.value);
+                let distractors = new Set();
+                while (distractors.size < 3) {
+                    let rand = Math.floor(Math.random() * maxRange) + 1;
+                    if (!hiddenValues.includes(rand) && !seq.some(s => s.value === rand)) {
+                        distractors.add(rand);
+                    }
+                }
+                const options = [...hiddenValues, ...Array.from(distractors)].sort(() => Math.random() - 0.5);
+                setDragOptions(options);
+
+                setUserSlotInputs({});
+                setActiveSlotIndex(null);
+                setTypedInput('');
+                setIsWon(false);
+                setErrorSlot(null);
+                setDraggedNumber(null);
+                setDragPos(null);
+            }, [direction, startMode, maxRange]);
+
+            useEffect(() => {
+                initGame();
+            }, [initGame]);
+
+            const handleDrawnChange = (slotIndex, hasDrawn) => {
+                setUserSlotInputs(prev => ({
+                    ...prev,
+                    [slotIndex]: hasDrawn
+                }));
+            };
+
+            const handleKeypadPress = (digit) => {
+                if (activeSlotIndex === null) return;
+                playSoundEffect('pop', soundEnabled);
+                setTypedInput(prev => prev + digit);
+            };
+
+            const handleKeypadClear = () => {
+                setTypedInput('');
+            };
+
+            const handleKeypadSubmit = () => {
+                if (activeSlotIndex === null || typedInput === '') return;
+                const expected = sequence[activeSlotIndex].value;
+                if (parseInt(typedInput, 10) === expected) {
+                    playSoundEffect('success', soundEnabled);
+                    const newSeq = [...sequence];
+                    newSeq[activeSlotIndex].isHidden = false;
+                    setSequence(newSeq);
+                    setActiveSlotIndex(null);
+                    setTypedInput('');
+                    
+                    if (newSeq.every(item => !item.isHidden)) {
+                        setIsWon(true);
+                    }
+                } else {
+                    playSoundEffect('error', soundEnabled);
+                    setErrorSlot(activeSlotIndex);
+                    setTypedInput('');
+                    setTimeout(() => setErrorSlot(null), 500);
+                }
+            };
+
+            const checkAllHandwritten = () => {
+                playSoundEffect('success', soundEnabled);
+                const newSeq = sequence.map(s => ({ ...s, isHidden: false }));
+                setSequence(newSeq);
+                setIsWon(true);
+            };
+
+            const handleDrop = (slotIndex, val) => {
+                if (sequence[slotIndex] && sequence[slotIndex].value === val) {
+                    playSoundEffect('success', soundEnabled);
+                    const newSeq = [...sequence];
+                    newSeq[slotIndex].isHidden = false;
+                    setSequence(newSeq);
+                    setDragOptions(prev => prev.filter(item => item !== val));
+
+                    if (newSeq.every(item => !item.isHidden)) setIsWon(true);
+                } else {
+                    playSoundEffect('error', soundEnabled);
+                    setErrorSlot(slotIndex);
+                    setTimeout(() => setErrorSlot(null), 500);
+                }
+            };
+
+            // Touch event handling for drag-and-drop to prevent screen scrolling
+            const handleTouchStart = (num, e) => {
+                const touch = e.touches[0];
+                setDraggedNumber(num);
+                setDragPos({ x: touch.clientX, y: touch.clientY });
+                playSoundEffect('pop', soundEnabled);
+            };
+
+            const handleTouchMove = (e) => {
+                if (draggedNumber === null) return;
+                // Browsers with passive event listeners might warn here, but CSS touch-action: none is the main defense
+                if (e.cancelable) e.preventDefault(); 
+                const touch = e.touches[0];
+                setDragPos({ x: touch.clientX, y: touch.clientY });
+            };
+
+            const handleTouchEnd = (e) => {
+                if (draggedNumber === null) return;
+                if (e.changedTouches && e.changedTouches.length > 0) {
+                    const touch = e.changedTouches[0];
+                    // Hide floating element temporarily to find what's underneath
+                    const elem = document.elementFromPoint(touch.clientX, touch.clientY);
+                    const dropTarget = elem?.closest('[data-slot-index]');
+                    if (dropTarget) {
+                        const slotIndex = parseInt(dropTarget.getAttribute('data-slot-index'), 10);
+                        handleDrop(slotIndex, draggedNumber);
+                    }
+                }
+                setDraggedNumber(null);
+                setDragPos(null);
+            };
+
+            return (
+                <div className="flex flex-col items-center min-h-screen pb-10 select-none">
+                    <TopBar 
+                        onHome={onHome} 
+                        title="數字火車填空" 
+                        onNext={initGame} 
+                        onOpenSettings={() => setShowSettings(true)}
+                    />
+
+                    <div className="mb-4 flex flex-wrap items-center justify-center gap-3 px-4">
+                        <button onClick={() => setShowSettings(true)} className="flex items-center gap-2 bg-white text-zoo-text px-4 py-2 rounded-xl shadow border-2 border-zoo-base font-bold hover:bg-zoo-light">
+                            <IconSettings /> 設定選項
+                        </button>
+                        <button onClick={initGame} className="flex items-center gap-2 bg-white text-gray-700 border-2 border-gray-300 px-4 py-2 rounded-xl shadow-sm hover:bg-gray-50 font-bold">
+                            <IconRefresh /> 重新開始
+                        </button>
+                    </div>
+
+                    <div className="bg-white/90 p-4 sm:p-6 md:p-8 rounded-3xl shadow-xl border-4 border-zoo-base max-w-5xl w-[95%] text-center flex flex-col items-center backdrop-blur-sm relative">
+                        <div className="flex flex-wrap items-center justify-center gap-2 mb-4 text-sm md:text-base font-bold text-zoo-dark bg-zoo-light/60 px-4 py-1.5 rounded-full">
+                            <span>方向：{direction === 'forward' ? '順數' : '倒數'}</span>
+                            <span>•</span>
+                            <span>範圍：{maxRange}以內</span>
+                            <span>•</span>
+                            <span>模式：{inputMethod === 'drag' ? '🖐️ 拖放答案' : inputMethod === 'handwriting' ? '✍️ 格內手寫' : '🔢 鍵盤輸入'}</span>
+                        </div>
+
+                        <h3 className="text-xl sm:text-2xl md:text-3xl font-black text-zoo-text mb-6">
+                            {isWon ? "太棒了！你成功完成了數字火車！" : (
+                                inputMethod === 'drag' 
+                                    ? "請把下方的正確數字卡片「拖放」到對應的空格中！" 
+                                    : inputMethod === 'handwriting' 
+                                        ? "請直接在空白格內手寫填寫正確數字！" 
+                                        : "點擊空白格，然後用下方數字鍵盤輸入數字！"
+                            )}
+                        </h3>
+
+                        {/* Force Single Row Train Display with visible overflow to avoid cutting off animal heads */}
+                        <div className="flex flex-nowrap justify-start sm:justify-center items-center gap-2 md:gap-4 mb-8 w-full overflow-x-auto overflow-y-visible no-scrollbar pb-4 pt-10 px-2">
+                            {sequence.map((item, index) => (
+                                <div key={item.id} className="flex items-center shrink-0">
+                                    {item.isHidden ? (
+                                        inputMethod === 'drag' ? (
+                                            <div 
+                                                data-slot-index={index}
+                                                onDragOver={(e) => e.preventDefault()}
+                                                onDrop={(e) => {
+                                                    e.preventDefault();
+                                                    const val = parseInt(e.dataTransfer.getData('text/plain') || draggedNumber, 10);
+                                                    handleDrop(index, val);
+                                                }}
+                                                className={`
+                                                    shrink-0 w-20 h-24 sm:w-24 sm:h-28 md:w-32 md:h-36 rounded-2xl border-4 border-dashed
+                                                    flex flex-col items-center justify-center transition-all shadow-inner bg-amber-50 border-amber-400
+                                                    ${errorSlot === index ? 'animate-shake bg-red-100 border-red-500' : 'hover:border-amber-600'}
+                                                `}
+                                            >
+                                                <span className="text-2xl sm:text-3xl md:text-4xl font-black text-amber-500">?</span>
+                                                <span className="text-xs font-bold text-amber-600 mt-1">拖放至此</span>
+                                            </div>
+                                        ) : inputMethod === 'handwriting' ? (
+                                            <SlotCanvas 
+                                                slotIndex={index} 
+                                                expectedValue={item.value} 
+                                                onDrawnChange={handleDrawnChange} 
+                                            />
+                                        ) : (
+                                            <div 
+                                                onClick={() => { setActiveSlotIndex(index); setTypedInput(''); playSoundEffect('pop', soundEnabled); }}
+                                                className={`
+                                                    shrink-0 w-20 h-24 sm:w-24 sm:h-28 md:w-32 md:h-36 rounded-2xl border-4 border-dashed
+                                                    flex flex-col items-center justify-center cursor-pointer transition-all shadow-inner
+                                                    ${activeSlotIndex === index ? 'bg-amber-100 border-amber-500 ring-4 ring-amber-300' : 'bg-gray-50 border-gray-400 hover:bg-gray-100'}
+                                                    ${errorSlot === index ? 'animate-shake bg-red-100 border-red-500' : ''}
+                                                `}
+                                            >
+                                                <span className="text-2xl sm:text-3xl md:text-4xl font-black text-amber-700">
+                                                    {activeSlotIndex === index ? (typedInput || '?') : '?'}
+                                                </span>
+                                                <span className="text-xs font-bold text-gray-400 mt-1">點擊輸入</span>
+                                            </div>
+                                        )
+                                    ) : (
+                                        <div className="shrink-0 relative flex flex-col items-center justify-center w-20 h-24 sm:w-24 sm:h-28 md:w-32 md:h-36 bg-gradient-to-b from-blue-400 to-blue-500 border-4 border-blue-600 rounded-2xl shadow-md select-none animate-popIn">
+                                            {/* Animal head shifted up, container y overflow is visible */}
+                                            <div className="absolute top-[-25px] md:top-[-30px] text-3xl md:text-4xl animate-wiggle z-10 drop-shadow">
+                                                {ZOO_ANIMALS[index % ZOO_ANIMALS.length]}
+                                            </div>
+                                            <span className="text-2xl sm:text-3xl md:text-5xl font-black text-white drop-shadow">
+                                                {item.value}
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    {index < sequence.length - 1 && (
+                                        <div className="shrink-0 w-2 sm:w-4 md:w-6 h-2 bg-gray-400 rounded-full mx-1"></div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Input Method Area */}
+                        {!isWon ? (
+                            inputMethod === 'drag' ? (
+                                <div 
+                                    className="w-full max-w-xl bg-amber-50/80 p-4 md:p-6 rounded-3xl border-2 border-amber-300 flex flex-col items-center animate-popIn shadow-sm"
+                                    style={{ touchAction: 'none' }} // Crucial to stop screen scroll when dragging
+                                    onTouchMove={handleTouchMove}
+                                    onTouchEnd={handleTouchEnd}
+                                >
+                                    <div className="text-sm md:text-base font-bold text-amber-800 mb-3">
+                                        🖐️ 拖動數字卡片到上方空的車廂中：
+                                    </div>
+                                    <div className="flex flex-wrap justify-center gap-3 md:gap-4">
+                                        {dragOptions.map((num, idx) => (
+                                            <div
+                                                key={`${num}-${idx}`}
+                                                draggable={true}
+                                                style={{ touchAction: 'none' }}
+                                                onDragStart={(e) => {
+                                                    e.dataTransfer.setData('text/plain', num.toString());
+                                                    setDraggedNumber(num);
+                                                }}
+                                                onDragEnd={() => setDraggedNumber(null)}
+                                                onTouchStart={(e) => handleTouchStart(num, e)}
+                                                className="w-14 h-16 sm:w-16 sm:h-20 md:w-20 md:h-24 bg-gradient-to-b from-amber-300 to-amber-400 border-4 border-amber-500 rounded-2xl shadow-md flex items-center justify-center font-black text-2xl sm:text-3xl md:text-4xl text-amber-950 cursor-grab active:cursor-grabbing hover:scale-105 transition-transform touch-none"
+                                            >
+                                                {num}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : inputMethod === 'handwriting' ? (
+                                <div className="mt-2 flex flex-col items-center gap-3">
+                                    <button 
+                                        onClick={checkAllHandwritten}
+                                        className="bg-zoo-dark text-white text-lg md:text-xl font-black px-8 py-3 rounded-full shadow-[0_5px_0_rgb(35,70,45)] hover:translate-y-0.5 hover:shadow-none transition-all active:scale-95"
+                                    >
+                                        寫好了！核對答案
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="w-full max-w-sm bg-zoo-light/50 p-4 rounded-2xl border-2 border-zoo-base flex flex-col items-center animate-popIn">
+                                    <div className="text-sm font-bold text-zoo-text mb-2">
+                                        {activeSlotIndex !== null ? `正在為第 ${activeSlotIndex + 1} 個空格輸入數字：` : "請點擊上方的空格進行輸入"}
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-2 w-full mb-3">
+                                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map((num) => (
+                                            <button
+                                                key={num}
+                                                onClick={() => handleKeypadPress(num.toString())}
+                                                disabled={activeSlotIndex === null}
+                                                className={`py-3 rounded-xl font-black text-xl md:text-2xl shadow border-2 transition-all active:scale-95 ${
+                                                    activeSlotIndex !== null 
+                                                        ? 'bg-white border-gray-300 text-gray-800 hover:bg-amber-50' 
+                                                        : 'bg-gray-200 border-gray-300 text-gray-400 cursor-not-allowed'
+                                                }`}
+                                            >
+                                                {num}
+                                            </button>
+                                        ))}
+                                        <button
+                                            onClick={handleKeypadClear}
+                                            disabled={activeSlotIndex === null}
+                                            className="bg-red-100 border-2 border-red-300 text-red-600 py-3 rounded-xl font-bold text-base hover:bg-red-200 transition-all active:scale-95 disabled:opacity-50"
+                                        >
+                                            清除
+                                        </button>
+                                    </div>
+                                    <button
+                                        onClick={handleKeypadSubmit}
+                                        disabled={activeSlotIndex === null || typedInput === ''}
+                                        className="w-full bg-green-500 text-white font-black text-lg py-2.5 rounded-xl shadow-[0_4px_0_rgb(22,101,52)] hover:translate-y-0.5 hover:shadow-none transition-all active:scale-95 disabled:opacity-50"
+                                    >
+                                        確認填入
+                                    </button>
+                                </div>
+                            )
+                        ) : (
+                            <div className="mt-4 flex flex-col items-center animate-popIn">
+                                <div className="text-2xl md:text-3xl font-black text-green-600 mb-4">🎉 答對了，你好棒！</div>
+                                <button onClick={initGame} className="bg-zoo-dark text-white text-xl md:text-2xl font-black px-10 py-4 rounded-full shadow-[0_6px_0_rgb(45,90,57)] hover:translate-y-1 hover:shadow-none transition-all animate-bounce_small">
+                                    再玩下一題！
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Floating Avatar when dragging on touch screens */}
+                    {draggedNumber !== null && dragPos !== null && (
+                        <div 
+                            style={{
+                                position: 'fixed',
+                                left: `${dragPos.x - 35}px`,
+                                top: `${dragPos.y - 40}px`,
+                                pointerEvents: 'none',
+                                zIndex: 9999
+                            }}
+                            className="w-16 h-20 bg-amber-400 border-4 border-amber-600 rounded-2xl shadow-2xl flex items-center justify-center font-black text-3xl text-amber-950 opacity-90 scale-110"
+                        >
+                            {draggedNumber}
+                        </div>
+                    )}
+
+                    {showSettings && (
+                        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-popIn overflow-y-auto pt-10 pb-10">
+                            <div className="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl border-4 border-zoo-base my-auto">
+                                <h3 className="text-2xl font-black text-zoo-text mb-6 text-center border-b pb-3">遊戲設定</h3>
+                                
+                                <div className="mb-5">
+                                    <label className="block text-base font-bold text-gray-700 mb-2">1. 數列方向：</label>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <button 
+                                            onClick={() => setDirection('forward')}
+                                            className={`py-2.5 px-4 rounded-xl font-bold border-2 transition-all ${direction === 'forward' ? 'bg-zoo-base text-zoo-text border-zoo-dark shadow' : 'bg-gray-50 border-gray-300 text-gray-600'}`}
+                                        >
+                                            順數 (例如 1, 2, 3...)
+                                        </button>
+                                        <button 
+                                            onClick={() => setDirection('backward')}
+                                            className={`py-2.5 px-4 rounded-xl font-bold border-2 transition-all ${direction === 'backward' ? 'bg-amber-300 text-amber-900 border-amber-600 shadow' : 'bg-gray-50 border-gray-300 text-gray-600'}`}
+                                        >
+                                            倒數 (例如 5, 4, 3...)
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="mb-5">
+                                    <label className="block text-base font-bold text-gray-700 mb-2">2. 起始數字：</label>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <button 
+                                            onClick={() => setStartMode('head')}
+                                            className={`py-2.5 px-4 rounded-xl font-bold border-2 transition-all ${startMode === 'head' ? 'bg-zoo-base text-zoo-text border-zoo-dark shadow' : 'bg-gray-50 border-gray-300 text-gray-600'}`}
+                                        >
+                                            由頭開始 (如從1開始)
+                                        </button>
+                                        <button 
+                                            onClick={() => setStartMode('random')}
+                                            className={`py-2.5 px-4 rounded-xl font-bold border-2 transition-all ${startMode === 'random' ? 'bg-zoo-base text-zoo-text border-zoo-dark shadow' : 'bg-gray-50 border-gray-300 text-gray-600'}`}
+                                        >
+                                            隨機中間數字
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="mb-5">
+                                    <label className="block text-base font-bold text-gray-700 mb-2">3. 範圍上限：</label>
+                                    <div className="grid grid-cols-4 gap-2">
+                                        {RANGE_OPTIONS.map(r => (
+                                            <button 
+                                                key={r}
+                                                onClick={() => setMaxRange(r)}
+                                                className={`py-2 rounded-lg font-bold border-2 transition-all text-sm md:text-base ${maxRange === r ? 'bg-amber-300 border-amber-600 text-amber-900 shadow' : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'}`}
+                                            >
+                                                {r}以內
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="mb-6">
+                                    <label className="block text-base font-bold text-gray-700 mb-2">4. 作答方式：</label>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        <button 
+                                            onClick={() => setInputMethod('drag')}
+                                            className={`py-2.5 px-2 rounded-xl font-bold border-2 text-sm transition-all ${inputMethod === 'drag' ? 'bg-amber-300 border-amber-600 text-amber-950 shadow' : 'bg-gray-50 border-gray-300 text-gray-600'}`}
+                                        >
+                                            🖐️ 拖放答案
+                                        </button>
+                                        <button 
+                                            onClick={() => setInputMethod('handwriting')}
+                                            className={`py-2.5 px-2 rounded-xl font-bold border-2 text-sm transition-all ${inputMethod === 'handwriting' ? 'bg-blue-200 border-blue-500 text-blue-900 shadow' : 'bg-gray-50 border-gray-300 text-gray-600'}`}
+                                        >
+                                            ✍️ 格內手寫
+                                        </button>
+                                        <button 
+                                            onClick={() => setInputMethod('input')}
+                                            className={`py-2.5 px-2 rounded-xl font-bold border-2 text-sm transition-all ${inputMethod === 'input' ? 'bg-blue-200 border-blue-500 text-blue-900 shadow' : 'bg-gray-50 border-gray-300 text-gray-600'}`}
+                                        >
+                                            🔢 鍵盤輸入
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <button 
+                                    onClick={() => { setShowSettings(false); initGame(); }}
+                                    className="w-full bg-zoo-dark text-white font-black text-lg py-3 rounded-2xl shadow-[0_4px_0_rgb(35,70,45)] hover:translate-y-0.5 hover:shadow-none transition-all"
+                                >
+                                    儲存並套用新設定
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // Main App Component
+        const App = () => {
+            const [view, setView] = useState('menu'); 
+            const [soundEnabled, setSoundEnabled] = useState(true);
+
+            return (
+                <SoundContext.Provider value={{ soundEnabled, setSoundEnabled }}>
+                    <div className="w-full min-h-screen">
+                        
+                        {/* Global Setting Bar on Menu */}
+                        {view === 'menu' && (
+                            <div className="absolute top-4 right-4 z-10">
+                                <Toggle label="🔊 音效" enabled={soundEnabled} onChange={setSoundEnabled} />
+                            </div>
+                        )}
+
+                        {view === 'count-fwd' && <GameCount onHome={() => setView('menu')} />}
+                        {view === 'seq' && <GameSequence onHome={() => setView('menu')} />}
+                        
+                        {view === 'menu' && (
+                            <div className="flex flex-col items-center justify-center min-h-screen px-4 pb-12 select-none relative">
+                                <div className="text-center mb-10 mt-12">
+                                    <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-zoo-text drop-shadow-md mb-3 flex items-center justify-center gap-3">
+                                        <span className="animate-bounce_small">🦁</span>
+                                        快樂動物園
+                                        <span className="animate-bounce_small" style={{animationDelay: '0.2s'}}>🐒</span>
+                                    </h1>
+                                    <p className="text-lg md:text-2xl font-bold text-zoo-dark bg-white/80 inline-block px-6 py-2 rounded-full shadow-sm">
+                                        數數與數字順數/倒數練習遊戲
+                                    </p>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-3xl">
+                                    <button onClick={() => setView('count-fwd')} className="group flex flex-col items-center justify-center bg-white p-6 md:p-10 rounded-3xl shadow-[0_8px_0_rgb(163,217,177)] hover:-translate-y-1.5 hover:shadow-none transition-all border-4 border-zoo-base">
+                                        <div className="text-6xl md:text-7xl mb-4 group-hover:animate-wiggle">🐘</div>
+                                        <h2 className="text-2xl md:text-3xl font-black text-zoo-text mb-2">動物點點數</h2>
+                                        <p className="text-base md:text-lg font-bold text-gray-500 bg-gray-100 px-4 py-1 rounded-full">順數 1 個個數</p>
+                                    </button>
+
+                                    <button onClick={() => setView('seq')} className="group flex flex-col items-center justify-center bg-white p-6 md:p-10 rounded-3xl shadow-[0_8px_0_rgb(163,217,177)] hover:-translate-y-1.5 hover:shadow-none transition-all border-4 border-zoo-base">
+                                        <div className="text-6xl md:text-7xl mb-4 group-hover:animate-wiggle">🚂</div>
+                                        <h2 className="text-2xl md:text-3xl font-black text-zoo-text mb-2">數字火車填空</h2>
+                                        <p className="text-base md:text-lg font-bold text-gray-500 bg-gray-100 px-4 py-1 rounded-full">順數及倒數數列練習</p>
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </SoundContext.Provider>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
