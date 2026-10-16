@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>廣東話隨機數字幸運輪盤</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Canvas Confetti CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;800;900&display=swap');
+        body {
+            font-family: 'Noto Sans TC', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #311042 100%);
+            min-height: 100vh;
+            color: #f8fafc;
+        }
+
+        /* Wheel Pointer Needle Animation */
+        .pointer-bounce {
+            animation: pointerBounce 0.1s ease-in-out infinite alternate;
+        }
+
+        @keyframes pointerBounce {
+            0% { transform: translateX(-50%) rotate(0deg); }
+            100% { transform: translateX(-50%) rotate(-12deg); }
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #6366f1;
+            border-radius: 3px;
+        }
+
+        /* Glassmorphism styling */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .glass-card-accent {
+            background: rgba(99, 102, 241, 0.15);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(129, 140, 248, 0.3);
+        }
+
+        /* Glow animation */
+        .glow-btn {
+            box-shadow: 0 0 20px rgba(99, 102, 241, 0.5);
+            transition: all 0.3s ease;
+        }
+        .glow-btn:hover:not(:disabled) {
+            box-shadow: 0 0 30px rgba(129, 140, 248, 0.8);
+            transform: translateY(-2deg);
+        }
+        .glow-btn:active:not(:disabled) {
+            transform: translateY(1deg);
+        }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen">
+    <!-- Header Navbar -->
+    <header class="w-full glass-card border-b border-slate-700/50 py-4 px-6 sticky top-0 z-30">
+        <div class="max-w-6xl mx-auto flex flex-wrap justify-between items-center gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-pink-500 flex items-center justify-center text-white text-xl shadow-lg">
+                    <i class="fa-solid fa-dharmachakra animate-spin-slow"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl sm:text-2xl font-black bg-gradient-to-r from-indigo-300 via-pink-300 to-amber-200 bg-clip-text text-transparent">
+                        廣東話數字幸運輪盤
+                    </h1>
+                    <p class="text-xs text-slate-400">隨機抽數 ‧ 湊數挑戰 ‧ 廣東話語音發聲</p>
+                </div>
+            </div>
+
+            <!-- Header Quick Controls -->
+            <div class="flex items-center space-x-3 text-sm">
+                <!-- Sound Toggle -->
+                <button id="audioToggleBtn" onclick="toggleAudio()" class="px-3 py-1.5 rounded-lg glass-card hover:bg-slate-700/50 transition flex items-center space-x-2 text-indigo-300 border border-indigo-500/30">
+                    <i id="audioIcon" class="fa-solid fa-volume-high"></i>
+                    <span id="audioText" class="hidden sm:inline">音效啟用</span>
+                </button>
+
+                <!-- Voice Toggle -->
+                <button id="voiceToggleBtn" onclick="toggleVoice()" class="px-3 py-1.5 rounded-lg glass-card hover:bg-slate-700/50 transition flex items-center space-x-2 text-pink-300 border border-pink-500/30">
+                    <i id="voiceIcon" class="fa-solid fa-comment-dots"></i>
+                    <span id="voiceText" class="hidden sm:inline">廣東話朗讀: 開</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="flex-grow max-w-6xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        <!-- Left Panel: Range Settings & Game Modes (4 cols) -->
+        <div class="lg:col-span-4 flex flex-col space-y-6">
+            
+            <!-- Game Mode Selector -->
+            <div class="glass-card rounded-2xl p-5 border border-slate-700">
+                <h2 class="text-sm font-bold uppercase tracking-wider text-indigo-400 mb-3 flex items-center">
+                    <i class="fa-solid fa-gamepad mr-2"></i> 選擇模式 (Mode)
+                </h2>
+                <div class="grid grid-cols-2 gap-2">
+                    <button id="modeNormalBtn" onclick="switchMode('normal')" class="py-2.5 px-3 rounded-xl font-bold text-sm transition text-center border bg-indigo-600 text-white border-indigo-400">
+                        <i class="fa-solid fa-dice mr-1"></i> 自由抽數
+                    </button>
+                    <button id="modeTargetBtn" onclick="switchMode('target')" class="py-2.5 px-3 rounded-xl font-bold text-sm transition text-center border border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700">
+                        <i class="fa-solid fa-bullseye mr-1"></i> 湊數字挑戰
+                    </button>
+                </div>
+            </div>
+
+            <!-- Number Range Selection Panel -->
+            <div class="glass-card rounded-2xl p-5 border border-slate-700">
+                <h2 class="text-sm font-bold uppercase tracking-wider text-indigo-400 mb-4 flex items-center">
+                    <i class="fa-solid fa-sliders mr-2"></i> 設定數字範圍
+                </h2>
+                
+                <!-- Quick Preset Ranges -->
+                <div class="mb-4">
+                    <label class="text-xs text-slate-400 font-semibold mb-2 block">快捷範例範圍：</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="setPresetRange(1, 10)" class="preset-btn px-3 py-2 rounded-lg bg-slate-800 hover:bg-indigo-900/40 border border-slate-700 hover:border-indigo-500 text-xs font-semibold text-slate-200 transition text-left flex justify-between items-center">
+                            <span>1 至 10</span>
+                            <span class="text-indigo-400 text-xs">10個數</span>
+                        </button>
+                        <button onclick="setPresetRange(1, 20)" class="preset-btn px-3 py-2 rounded-lg bg-slate-800 hover:bg-indigo-900/40 border border-slate-700 hover:border-indigo-500 text-xs font-semibold text-slate-200 transition text-left flex justify-between items-center">
+                            <span>1 至 20</span>
+                            <span class="text-indigo-400 text-xs">20個數</span>
+                        </button>
+                        <button onclick="setPresetRange(21, 50)" class="preset-btn px-3 py-2 rounded-lg bg-slate-800 hover:bg-indigo-900/40 border border-slate-700 hover:border-indigo-500 text-xs font-semibold text-slate-200 transition text-left flex justify-between items-center">
+                            <span>21 至 50</span>
+                            <span class="text-indigo-400 text-xs">30個數</span>
+                        </button>
+                        <button onclick="setPresetRange(1, 100)" class="preset-btn px-3 py-2 rounded-lg bg-slate-800 hover:bg-indigo-900/40 border border-slate-700 hover:border-indigo-500 text-xs font-semibold text-slate-200 transition text-left flex justify-between items-center">
+                            <span>1 至 100</span>
+                            <span class="text-indigo-400 text-xs">100個數</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Custom Range Inputs -->
+                <div class="space-y-3 pt-2 border-t border-slate-700/60">
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="text-xs text-slate-400 mb-1 block">起始數字 (Min)</label>
+                            <input type="number" id="minNumInput" value="1" min="0" max="999" class="w-full bg-slate-900/80 border border-slate-700 rounded-lg px-3 py-2 text-sm text-center text-white font-bold focus:outline-none focus:border-indigo-500">
+                        </div>
+                        <div>
+                            <label class="text-xs text-slate-400 mb-1 block">結束數字 (Max)</label>
+                            <input type="number" id="maxNumInput" value="20" min="1" max="999" class="w-full bg-slate-900/80 border border-slate-700 rounded-lg px-3 py-2 text-sm text-center text-white font-bold focus:outline-none focus:border-indigo-500">
+                        </div>
+                    </div>
+
+                    <!-- Slice Count Limit / Options -->
+                    <div>
+                        <label class="text-xs text-slate-400 mb-1 block flex justify-between">
+                            <span>輪盤扇區數量限制</span>
+                            <span id="sliceLimitVal" class="text-indigo-400 font-bold">16 區</span>
+                        </label>
+                        <input type="range" id="sliceLimitInput" min="4" max="30" value="16" class="w-full accent-indigo-500 cursor-pointer" oninput="document.getElementById('sliceLimitVal').innerText = this.value + ' 區'">
+                        <p class="text-[10px] text-slate-500 mt-1">若範圍數字過多，系統會自動均勻抽樣建立輪盤扇區。</p>
+                    </div>
+
+                    <button onclick="applyCustomRange()" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-sm shadow-md transition">
+                        <i class="fa-solid fa-rotate mr-1"></i> 更新輪盤區間
+                    </button>
+                </div>
+            </div>
+
+            <!-- Target Math Game Target Display (Only in Target Mode) -->
+            <div id="targetGameCard" class="hidden glass-card-accent rounded-2xl p-5 border border-indigo-500/30">
+                <div class="flex justify-between items-center mb-3">
+                    <span class="text-xs font-bold uppercase tracking-wider text-pink-300">
+                        <i class="fa-solid fa-flag-checkered mr-1"></i> 湊數字目標
+                    </span>
+                    <button onclick="generateNewTarget()" class="text-xs bg-indigo-600/50 hover:bg-indigo-600 px-2 py-1 rounded text-white border border-indigo-400/30">
+                        換新目標
+                    </button>
+                </div>
+                
+                <div class="text-center py-2">
+                    <div class="text-xs text-indigo-200">當前目標數字 (Target)</div>
+                    <div id="targetNumDisplay" class="text-4xl font-black text-amber-300 tracking-wider my-1">50</div>
+                </div>
+
+                <!-- Current Sum Progress Bar -->
+                <div class="mt-2">
+                    <div class="flex justify-between text-xs text-slate-300 mb-1">
+                        <span>目前累加總和：<strong id="currentSumDisplay" class="text-emerald-400 text-base">0</strong></span>
+                        <span id="targetStatusText" class="text-indigo-300">還差 50</span>
+                    </div>
+                    <div class="w-full h-3 bg-slate-900 rounded-full overflow-hidden border border-slate-700">
+                        <div id="targetProgressBar" class="h-full bg-gradient-to-r from-emerald-500 to-amber-400 w-0 transition-all duration-300"></div>
+                    </div>
+                </div>
+
+                <div class="mt-4 flex space-x-2">
+                    <button onclick="resetTargetGameSum()" class="flex-1 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold border border-slate-700">
+                        重設分數 (0)
+                    </button>
+                </div>
+            </div>
+
+            <!-- Voice Settings Box -->
+            <div class="glass-card rounded-2xl p-4 border border-slate-700 text-xs">
+                <h3 class="font-bold text-slate-300 mb-2 flex items-center">
+                    <i class="fa-solid fa-microchip text-pink-400 mr-2"></i> 廣東話語音設定 (Voice)
+                </h3>
+                <div class="space-y-2">
+                    <div>
+                        <label class="text-slate-400 block mb-1">系統廣東話語音檔：</label>
+                        <select id="voiceSelect" class="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-white text-xs focus:outline-none">
+                            <option value="">自動搜尋廣東話 (zh-HK)...</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center space-x-2 pt-1">
+                        <button onclick="testCantoneseTTS()" class="px-3 py-1 rounded bg-pink-600/80 hover:bg-pink-600 text-white font-bold text-xs">
+                            <i class="fa-solid fa-volume-low mr-1"></i> 測試廣東話語音
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Center Panel: Interactive Wheel & Spin Controls (8 cols) -->
+        <div class="lg:col-span-8 flex flex-col space-y-6">
+            
+            <!-- Wheel Box Container -->
+            <div class="glass-card rounded-3xl p-6 border border-slate-700/80 flex flex-col items-center justify-center relative shadow-2xl overflow-hidden">
+                
+                <!-- Result Announcement Banner -->
+                <div id="resultBanner" class="w-full mb-4 py-3 px-4 rounded-2xl bg-gradient-to-r from-indigo-950/80 via-purple-900/80 to-indigo-950/80 border border-indigo-500/40 text-center transition-all duration-300 min-h-[72px] flex flex-col items-center justify-center">
+                    <span class="text-xs font-semibold text-indigo-300 uppercase tracking-widest">目前結果</span>
+                    <div id="resultText" class="text-3xl font-black text-amber-300 tracking-wider">
+                        準備轉動輪盤！
+                    </div>
+                </div>
+
+                <!-- Canvas Wheel Container -->
+                <div class="relative my-2 flex items-center justify-center">
+                    <!-- Top Pointer Needle -->
+                    <div class="absolute -top-4 left-1/2 transform -translate-x-1/2 z-20 pointer-events-none drop-shadow-[0_4px_10px_rgba(0,0,0,0.8)]">
+                        <div id="wheelPointer" class="w-8 h-10 transition-transform origin-top">
+                            <svg viewBox="0 0 30 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M15 40L2 10C0 8 2 0 15 0C28 0 30 8 28 10L15 40Z" fill="#EF4444"/>
+                                <path d="M15 35L5 10C4 8 5 3 15 3C25 3 26 8 25 10L15 35Z" fill="#F87171"/>
+                                <circle cx="15" cy="8" r="4" fill="#FFFFFF"/>
+                            </svg>
+                        </div>
+                    </div>
+
+                    <!-- Main Canvas -->
+                    <canvas id="wheelCanvas" width="480" height="480" class="max-w-full h-auto rounded-full drop-shadow-[0_0_25px_rgba(99,102,241,0.25)] border-4 border-slate-800"></canvas>
+                </div>
+
+                <!-- Spin Action Buttons -->
+                <div class="mt-6 flex flex-wrap items-center justify-center gap-4 w-full max-w-md">
+                    <button id="spinBtn" onclick="spinWheel()" class="glow-btn flex-1 py-4 px-8 rounded-2xl bg-gradient-to-r from-amber-500 via-pink-500 to-indigo-600 hover:from-amber-400 hover:via-pink-400 hover:to-indigo-500 text-white font-black text-xl tracking-wider shadow-xl disabled:opacity-50 disabled:cursor-not-allowed">
+                        <i class="fa-solid fa-play mr-2"></i> 開始旋轉輪盤
+                    </button>
+                </div>
+            </div>
+
+            <!-- History Log & Drawn Numbers -->
+            <div class="glass-card rounded-2xl p-5 border border-slate-700">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="text-sm font-bold uppercase tracking-wider text-indigo-400 flex items-center">
+                        <i class="fa-solid fa-clock-rotate-left mr-2"></i> 抽數紀錄歷史 (History)
+                    </h3>
+                    <button onclick="clearHistory()" class="text-xs text-slate-400 hover:text-rose-400 transition">
+                        <i class="fa-solid fa-trash-can mr-1"></i> 清除紀錄
+                    </button>
+                </div>
+
+                <div id="historyList" class="flex flex-wrap gap-2 max-h-36 overflow-y-auto p-2 bg-slate-900/50 rounded-xl border border-slate-800">
+                    <span class="text-xs text-slate-500 italic p-2">暫無歷史紀錄，按下「開始旋轉輪盤」開始吧！</span>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="mt-auto border-t border-slate-800 py-4 text-center text-xs text-slate-500">
+        廣東話隨機湊數字輪盤 &copy; 2026 廣東話語音與音效互動體驗
+    </footer>
+
+    <script>
+        // Global App State
+        let minNum = 1;
+        let maxNum = 20;
+        let sliceLimit = 16;
+        let currentSlices = []; // Array of numbers displayed on wheel
+        
+        let isSpinning = false;
+        let currentAngle = 0; // Current wheel angle in radians
+        let soundEnabled = true;
+        let voiceEnabled = true;
+        
+        // Game Modes: 'normal' | 'target'
+        let currentGameMode = 'normal';
+        let targetNum = 50;
+        let currentSum = 0;
+        let historyLog = [];
+
+        // Canvas Context
+        const canvas = document.getElementById('wheelCanvas');
+        const ctx = canvas.getContext('2d');
+        const pointerEl = document.getElementById('wheelPointer');
+
+        // Web Audio API Synth setup
+        let audioCtx = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AudioContext();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        // Web Audio Sound Generator Functions
+        function playTickSound() {
+            if (!soundEnabled) return;
+            try {
+                initAudio();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(300, audioCtx.currentTime + 0.04);
+                
+                gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.04);
+                
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.04);
+            } catch (e) { console.error(e); }
+        }
+
+        function playWinFanfare() {
+            if (!soundEnabled) return;
+            try {
+                initAudio();
+                const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+                notes.forEach((freq, idx) => {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.value = freq;
+                    
+                    const startTime = audioCtx.currentTime + idx * 0.1;
+                    gain.gain.setValueAtTime(0, startTime);
+                    gain.gain.linearRampToValueAtTime(0.2, startTime + 0.05);
+                    gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.4);
+                    
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(startTime);
+                    osc.stop(startTime + 0.4);
+                });
+            } catch (e) { console.error(e); }
+        }
+
+        function playTargetAchievedSound() {
+            if (!soundEnabled) return;
+            try {
+                initAudio();
+                // Fanfare melody for target completion
+                const melody = [440, 554.37, 659.25, 880, 1108.73];
+                melody.forEach((freq, idx) => {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'square';
+                    osc.frequency.value = freq;
+                    
+                    const startTime = audioCtx.currentTime + idx * 0.08;
+                    gain.gain.setValueAtTime(0.15, startTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.3);
+                    
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(startTime);
+                    osc.stop(startTime + 0.3);
+                });
+            } catch(e) {}
+        }
+
+        function populateVoices() {
+            if (!('speechSynthesis' in window)) return;
+            const voiceSelect = document.getElementById('voiceSelect');
+            const voices = window.speechSynthesis.getVoices();
+            voiceSelect.innerHTML = '';
+
+            let cantoneseVoices = voices.filter(v => 
+                v.lang === 'zh-HK' || 
+                v.lang === 'yue-Hant-HK' || 
+                v.lang.toLowerCase().includes('hk') ||
+                v.name.includes('Cantonese') || 
+                v.name.includes('Hong Kong') ||
+                v.name.includes('Sin-Ji') ||
+                v.name.includes('Hiuga')
+            );
+
+            // If specific Cantonese voice not found, fallback to traditional Chinese voices (zh-TW) or all Chinese
+            if (cantoneseVoices.length === 0) {
+                cantoneseVoices = voices.filter(v => v.lang.startsWith('zh'));
+            }
+
+            if (cantoneseVoices.length === 0) {
+                const opt = document.createElement('option');
+                opt.value = "";
+                opt.innerText = "使用系統預設廣東話/中文語音";
+                voiceSelect.appendChild(opt);
+                return;
+            }
+
+            cantoneseVoices.forEach((voice, index) => {
+                const opt = document.createElement('option');
+                opt.value = voice.name;
+                opt.innerText = `${voice.name} (${voice.lang})`;
+                if (index === 0) opt.selected = true;
+                voiceSelect.appendChild(opt);
+            });
+        }
+
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.onvoiceschanged = populateVoices;
+            populateVoices();
+        }
+
+        function speakCantonese(text) {
+            if (!voiceEnabled || !('speechSynthesis' in window)) return;
+            
+            window.speechSynthesis.cancel(); // Stop current speech
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'zh-HK';
+            utterance.rate = 0.95; // Natural speed
+            utterance.pitch = 1.0;
+
+            const selectedVoiceName = document.getElementById('voiceSelect').value;
+            const voices = window.speechSynthesis.getVoices();
+            
+            if (selectedVoiceName) {
+                const match = voices.find(v => v.name === selectedVoiceName);
+                if (match) utterance.voice = match;
+            } else {
+                // Auto-detect Cantonese voice
+                const hkVoice = voices.find(v => 
+                    v.lang === 'zh-HK' || 
+                    v.lang === 'yue-Hant-HK' || 
+                    v.name.includes('Cantonese') || 
+                    v.name.includes('Hong Kong') ||
+                    v.name.includes('Sin-Ji')
+                );
+                if (hkVoice) utterance.voice = hkVoice;
+            }
+
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function testCantoneseTTS() {
+            initAudio();
+            speakCantonese("廣東話測試：一、二、三，幸運輪盤好玩又好聽！");
+        }
+
+        function generateSlices(min, max, maxSlices) {
+            const count = max - min + 1;
+            let slices = [];
+
+            if (count <= maxSlices) {
+                for (let i = min; i <= max; i++) {
+                    slices.push(i);
+                }
+            } else {
+                // Uniform sampling if total numbers exceed slice limit
+                const step = (max - min) / (maxSlices - 1);
+                for (let i = 0; i < maxSlices; i++) {
+                    slices.push(Math.round(min + i * step));
+                }
+            }
+            return slices;
+        }
+
+        // Vibrant color palette generator
+        function getSliceColor(index, total) {
+            const hues = [240, 280, 320, 350, 25, 45, 160, 190, 210];
+            const hue = hues[index % hues.length];
+            const lightness = (index % 2 === 0) ? '55%' : '45%';
+            return `hsl(${hue}, 85%, ${lightness})`;
+        }
+
+        function drawWheel() {
+            const width = canvas.width;
+            const height = canvas.height;
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const radius = width / 2 - 15;
+
+            ctx.clearRect(0, 0, width, height);
+
+            if (currentSlices.length === 0) return;
+
+            const sliceAngle = (Math.PI * 2) / currentSlices.length;
+
+            ctx.save();
+            ctx.translate(centerX, centerY);
+            ctx.rotate(currentAngle);
+
+            // Draw pie slices
+            for (let i = 0; i < currentSlices.length; i++) {
+                const startAngle = i * sliceAngle;
+                const endAngle = startAngle + sliceAngle;
+
+                // Fill sector
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.arc(0, 0, radius, startAngle, endAngle);
+                ctx.closePath();
+                ctx.fillStyle = getSliceColor(i, currentSlices.length);
+                ctx.fill();
+
+                // Sector outline border
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+                ctx.stroke();
+
+                // Draw Text Number
+                ctx.save();
+                ctx.rotate(startAngle + sliceAngle / 2);
+                ctx.textAlign = 'right';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = '#FFFFFF';
+                
+                // Adjust font size according to number of slices
+                const fontSize = currentSlices.length > 20 ? 16 : (currentSlices.length > 12 ? 20 : 26);
+                ctx.font = `900 ${fontSize}px "Noto Sans TC", sans-serif`;
+                
+                // Add text shadow
+                ctx.shadowColor = 'rgba(0,0,0,0.6)';
+                ctx.shadowBlur = 4;
+                
+                ctx.fillText(currentSlices[i].toString(), radius - 25, 0);
+                ctx.restore();
+            }
+
+            // Outer metallic rim
+            ctx.beginPath();
+            ctx.arc(0, 0, radius, 0, Math.PI * 2);
+            ctx.lineWidth = 10;
+            ctx.strokeStyle = '#334155';
+            ctx.stroke();
+
+            // Outer gold accent rim
+            ctx.beginPath();
+            ctx.arc(0, 0, radius + 5, 0, Math.PI * 2);
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = '#F59E0B';
+            ctx.stroke();
+
+            // Center hub
+            ctx.beginPath();
+            ctx.arc(0, 0, 35, 0, Math.PI * 2);
+            ctx.fillStyle = '#0F172A';
+            ctx.fill();
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = '#818CF8';
+            ctx.stroke();
+
+            // Center icon / text
+            ctx.fillStyle = '#F8FAFC';
+            ctx.font = 'bold 12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('抽數', 0, 0);
+
+            ctx.restore();
+        }
+
+        let spinVelocity = 0;
+        let spinFriction = 0.985;
+        let lastPassedSlice = -1;
+
+        function spinWheel() {
+            if (isSpinning) return;
+            initAudio();
+
+            isSpinning = true;
+            document.getElementById('spinBtn').disabled = true;
+            document.getElementById('resultText').innerText = '輪盤旋轉中...';
+            document.getElementById('resultText').className = "text-3xl font-black text-indigo-300 animate-pulse";
+
+            // Speech announcement before spin
+            speakCantonese("開始旋轉！");
+
+            // Initial angular velocity (randomized between 0.35 and 0.55 rad/frame)
+            spinVelocity = 0.35 + Math.random() * 0.22;
+            lastPassedSlice = -1;
+
+            animateSpin();
+        }
+
+        function animateSpin() {
+            if (!isSpinning) return;
+
+            currentAngle += spinVelocity;
+            currentAngle %= (Math.PI * 2); // Keep angle within 0 - 2PI
+
+            // Check which slice is currently under top pointer (Pointer is at 270 deg / -90 deg / 1.5 PI)
+            const numSlices = currentSlices.length;
+            const sliceAngle = (Math.PI * 2) / numSlices;
+            
+            // Pointer position relative to wheel angle
+            let relativeAngle = (Math.PI * 1.5 - currentAngle) % (Math.PI * 2);
+            if (relativeAngle < 0) relativeAngle += Math.PI * 2;
+            
+            const currentSliceIdx = Math.floor(relativeAngle / sliceAngle);
+
+            // Play ticking sound when passing a sector divider
+            if (currentSliceIdx !== lastPassedSlice) {
+                playTickSound();
+                lastPassedSlice = currentSliceIdx;
+
+                // Animate pointer bounce
+                pointerEl.classList.remove('pointer-bounce');
+                void pointerEl.offsetWidth; // Trigger reflow
+                pointerEl.classList.add('pointer-bounce');
+            }
+
+            // Apply friction deceleration
+            spinVelocity *= spinFriction;
+
+            drawWheel();
+
+            if (spinVelocity > 0.002) {
+                requestAnimationFrame(animateSpin);
+            } else {
+                // Spin finished!
+                isSpinning = false;
+                spinVelocity = 0;
+                pointerEl.classList.remove('pointer-bounce');
+                onSpinComplete(currentSliceIdx);
+            }
+        }
+
+        function onSpinComplete(winningIdx) {
+            document.getElementById('spinBtn').disabled = false;
+            const winningNum = currentSlices[winningIdx];
+
+            // Display result
+            const resultTextEl = document.getElementById('resultText');
+            resultTextEl.innerText = `抽中數字：${winningNum}！`;
+            resultTextEl.className = "text-4xl font-black text-amber-300 tracking-wider";
+
+            // Add to history
+            addHistory(winningNum);
+
+            // Audio & Speech
+            playWinFanfare();
+
+            if (currentGameMode === 'normal') {
+                // Speak Cantonese result
+                speakCantonese(`抽中 ${winningNum}`);
+                // Confetti particle effect
+                confetti({
+                    particleCount: 50,
+                    spread: 60,
+                    origin: { y: 0.7 }
+                });
+            } else if (currentGameMode === 'target') {
+                // Target Game Mode Handling
+                currentSum += winningNum;
+                updateTargetGameUI();
+
+                if (currentSum === targetNum) {
+                    // Win exact match!
+                    playTargetAchievedSound();
+                    speakCantonese(`抽中 ${winningNum}！恭喜你！成功湊到目標數字 ${targetNum}！`);
+                    
+                    confetti({
+                        particleCount: 150,
+                        spread: 100,
+                        origin: { y: 0.6 }
+                    });
+
+                    document.getElementById('targetStatusText').innerText = '🎉 完美達成目標！';
+                    document.getElementById('targetStatusText').className = "text-emerald-400 font-bold animate-bounce";
+                } else if (currentSum > targetNum) {
+                    // Over target!
+                    speakCantonese(`抽中 ${winningNum}。總和是 ${currentSum}，爆咗喇！超過咗目標 ${targetNum}！`);
+                    document.getElementById('targetStatusText').innerText = `⚠️ 超出目標 (${currentSum - targetNum})`;
+                    document.getElementById('targetStatusText').className = "text-rose-400 font-bold";
+                } else {
+                    // Under target
+                    const diff = targetNum - currentSum;
+                    speakCantonese(`抽中 ${winningNum}。目前總和 ${currentSum}，仲差 ${diff}。`);
+                }
+            }
+        }
+
+        function setPresetRange(min, max) {
+            document.getElementById('minNumInput').value = min;
+            document.getElementById('maxNumInput').value = max;
+            applyCustomRange();
+        }
+
+        function applyCustomRange() {
+            if (isSpinning) return;
+            const min = parseInt(document.getElementById('minNumInput').value) || 1;
+            const max = parseInt(document.getElementById('maxNumInput').value) || 20;
+            const limit = parseInt(document.getElementById('sliceLimitInput').value) || 16;
+
+            if (min >= max) {
+                alert("起始數字必須小於結束數字！");
+                return;
+            }
+
+            minNum = min;
+            maxNum = max;
+            sliceLimit = limit;
+            currentSlices = generateSlices(minNum, maxNum, sliceLimit);
+            
+            currentAngle = 0;
+            drawWheel();
+
+            document.getElementById('resultText').innerText = `範圍已設為 ${minNum} 至 ${maxNum}`;
+            document.getElementById('resultText').className = "text-2xl font-bold text-indigo-200";
+            
+            speakCantonese(`已設定範圍由 ${minNum} 至 ${maxNum}`);
+        }
+
+        function switchMode(mode) {
+            currentGameMode = mode;
+            const normalBtn = document.getElementById('modeNormalBtn');
+            const targetBtn = document.getElementById('modeTargetBtn');
+            const targetCard = document.getElementById('targetGameCard');
+
+            if (mode === 'normal') {
+                normalBtn.className = "py-2.5 px-3 rounded-xl font-bold text-sm transition text-center border bg-indigo-600 text-white border-indigo-400 shadow-md";
+                targetBtn.className = "py-2.5 px-3 rounded-xl font-bold text-sm transition text-center border border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700";
+                targetCard.classList.add('hidden');
+                speakCantonese("切換至自由抽數模式");
+            } else {
+                targetBtn.className = "py-2.5 px-3 rounded-xl font-bold text-sm transition text-center border bg-indigo-600 text-white border-indigo-400 shadow-md";
+                normalBtn.className = "py-2.5 px-3 rounded-xl font-bold text-sm transition text-center border border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700";
+                targetCard.classList.remove('hidden');
+                
+                generateNewTarget();
+                speakCantonese("切換至湊數字挑戰模式");
+            }
+        }
+
+        function generateNewTarget() {
+            // Generate a reasonable target based on current slices
+            const avgSlice = Math.round((minNum + maxNum) / 2);
+            // Target is roughly 2 to 4 spins worth of numbers
+            targetNum = Math.floor(avgSlice * (2 + Math.random() * 2.5));
+            currentSum = 0;
+            updateTargetGameUI();
+            speakCantonese(`新目標數字係 ${targetNum}`);
+        }
+
+        function resetTargetGameSum() {
+            currentSum = 0;
+            updateTargetGameUI();
+            speakCantonese("總和已重設為零");
+        }
+
+        function updateTargetGameUI() {
+            document.getElementById('targetNumDisplay').innerText = targetNum;
+            document.getElementById('currentSumDisplay').innerText = currentSum;
+
+            const progress = Math.min(100, (currentSum / targetNum) * 100);
+            document.getElementById('targetProgressBar').style.width = `${progress}%`;
+
+            const diff = targetNum - currentSum;
+            const statusEl = document.getElementById('targetStatusText');
+
+            if (diff > 0) {
+                statusEl.innerText = `還差 ${diff}`;
+                statusEl.className = "text-indigo-300";
+            } else if (diff === 0) {
+                statusEl.innerText = '🎉 完美達成！';
+                statusEl.className = "text-emerald-400 font-bold";
+            } else {
+                statusEl.innerText = `⚠️ 超出 ${Math.abs(diff)}`;
+                statusEl.className = "text-rose-400 font-bold";
+            }
+        }
+
+        function addHistory(num) {
+            historyLog.unshift(num);
+            if (historyLog.length > 30) historyLog.pop();
+
+            const historyContainer = document.getElementById('historyList');
+            historyContainer.innerHTML = '';
+
+            historyLog.forEach((item, index) => {
+                const badge = document.createElement('div');
+                badge.className = `px-3 py-1.5 rounded-lg text-xs font-black flex items-center space-x-1 ${
+                    index === 0 ? 'bg-amber-500 text-slate-950 scale-105 shadow-md border border-amber-300' : 'bg-slate-800 text-slate-200 border border-slate-700'
+                }`;
+                badge.innerHTML = `<span>#${historyLog.length - index}</span> <span class="text-sm ml-1">${item}</span>`;
+                historyContainer.appendChild(badge);
+            });
+        }
+
+        function clearHistory() {
+            historyLog = [];
+            document.getElementById('historyList').innerHTML = '<span class="text-xs text-slate-500 italic p-2">暫無歷史紀錄</span>';
+        }
+
+        // Audio & Voice toggles
+        function toggleAudio() {
+            soundEnabled = !soundEnabled;
+            const icon = document.getElementById('audioIcon');
+            const text = document.getElementById('audioText');
+            if (soundEnabled) {
+                icon.className = 'fa-solid fa-volume-high';
+                text.innerText = '音效啟用';
+            } else {
+                icon.className = 'fa-solid fa-volume-xmark text-slate-500';
+                text.innerText = '音效靜音';
+            }
+        }
+
+        function toggleVoice() {
+            voiceEnabled = !voiceEnabled;
+            const icon = document.getElementById('voiceIcon');
+            const text = document.getElementById('voiceText');
+            if (voiceEnabled) {
+                icon.className = 'fa-solid fa-comment-dots';
+                text.innerText = '廣東話朗讀: 開';
+            } else {
+                icon.className = 'fa-solid fa-comment-slash text-slate-500';
+                text.innerText = '廣東話朗讀: 關';
+            }
+        }
+
+        window.onload = function() {
+            // Setup initial slices (1 to 20)
+            currentSlices = generateSlices(1, 20, 16);
+            drawWheel();
+
+            // Resize canvas dynamically if needed
+            window.addEventListener('resize', () => {
+                drawWheel();
+            });
+
+            // Handle touch audio context unlocks
+            document.body.addEventListener('click', function unlockAudio() {
+                initAudio();
+                document.body.removeEventListener('click', unlockAudio);
+            }, { once: true });
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,1356 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>廣東話趣味數數大冒險 (Cantonese Skip Counting Game)</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Canvas Confetti CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <!-- Google Fonts for Friendly Look -->
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Noto+Sans+TC:wght@400;700;900&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      font-family: 'Fredoka', 'Noto Sans TC', sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+
+    /* Custom Animations */
+    @keyframes pulse-glow {
+      0%, 100% { transform: scale(1); box-shadow: 0 0 15px rgba(245, 158, 11, 0.6); }
+      50% { transform: scale(1.05); box-shadow: 0 0 25px rgba(245, 158, 11, 0.9); }
+    }
+
+    @keyframes pop-in {
+      0% { transform: scale(0.5); opacity: 0; }
+      70% { transform: scale(1.1); opacity: 1; }
+      100% { transform: scale(1); }
+    }
+
+    @keyframes bounce-gentle {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+
+    @keyframes float-up-fade {
+      0% { transform: translateY(0) scale(0.8); opacity: 1; }
+      50% { transform: translateY(-30px) scale(1.2); opacity: 1; }
+      100% { transform: translateY(-60px) scale(1); opacity: 0; }
+    }
+
+    @keyframes wiggle-shake {
+      0%, 100% { transform: rotate(0deg); }
+      25% { transform: rotate(-12deg) scale(1.1); }
+      75% { transform: rotate(12deg) scale(1.1); }
+    }
+
+    .animate-float-up {
+      animation: float-up-fade 0.8s ease-out forwards;
+      pointer-events: none;
+    }
+
+    .animate-wiggle {
+      animation: wiggle-shake 0.4s ease-in-out;
+    }
+
+    .animate-pulse-glow {
+      animation: pulse-glow 1.5s infinite ease-in-out;
+    }
+
+    .animate-pop {
+      animation: pop-in 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    }
+
+    .animate-bounce-gentle {
+      animation: bounce-gentle 2s infinite ease-in-out;
+    }
+
+    /* Group Container Card Styles */
+    .group-card {
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    .group-card:hover {
+      transform: translateY(-4px);
+    }
+
+    /* Item custom styling */
+    .item-icon {
+      filter: drop-shadow(0px 3px 3px rgba(0,0,0,0.15));
+      transition: transform 0.2s ease;
+    }
+
+    .group-card:hover .item-icon {
+      transform: scale(1.1);
+    }
+
+    /* Modal Draggable cursor styling */
+    .draggable-modal-header {
+      cursor: move;
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col justify-between overflow-x-hidden transition-colors duration-500">
+
+  <!-- Header / Navigation Bar -->
+  <header id="game-header" class="w-full bg-white/90 backdrop-blur-md shadow-md sticky top-0 z-30 px-4 py-3 border-b border-slate-200">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+      
+      <!-- Logo & Title -->
+      <div class="flex items-center gap-3">
+        <div id="header-avatar" class="w-12 h-12 rounded-2xl bg-amber-400 flex items-center justify-center text-2xl shadow-inner animate-bounce-gentle">
+          🍍
+        </div>
+        <div>
+          <h1 class="text-xl md:text-2xl font-black text-slate-800 tracking-wide flex items-center gap-2">
+            廣東話數數大冒險
+            <span class="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold border border-amber-300">廣東話語音</span>
+          </h1>
+          <p class="text-xs md:text-sm font-semibold text-slate-500" id="sub-title">練習：一個一數、兩個一數、5個一數、10個一數</p>
+        </div>
+      </div>
+
+      <!-- Quick Controls & Score -->
+      <div class="flex items-center gap-3">
+        <!-- Combo Indicator -->
+        <div id="combo-container" class="hidden bg-orange-500 text-white font-black px-3 py-1.5 rounded-full flex items-center gap-1 shadow-md animate-bounce">
+          <span class="text-base">🔥</span>
+          <span id="combo-count-text" class="text-sm">3 連擊</span>
+        </div>
+
+        <!-- Stars Count -->
+        <div class="bg-amber-50 border-2 border-amber-300 px-3 md:px-4 py-1.5 rounded-full flex items-center gap-2 shadow-sm">
+          <span class="text-xl">⭐</span>
+          <span id="score-counter" class="text-lg font-black text-amber-600">0</span>
+        </div>
+
+        <!-- Achievements Button -->
+        <button onclick="openBadgeModal()" class="p-2.5 rounded-2xl bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold flex items-center gap-1 transition shadow-sm border border-amber-300" title="查看成就獎牌">
+          <span class="text-xl">🏆</span>
+          <span class="text-xs hidden lg:inline font-bold">成就獎牌</span>
+        </button>
+
+        <!-- Audio Voice Toggle -->
+        <button id="btn-toggle-voice" onclick="toggleVoice()" class="p-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center gap-1.5 transition shadow-sm border border-slate-300" title="開啟/關閉廣東話發音">
+          <span id="voice-icon" class="text-xl">🔊</span>
+          <span class="text-xs hidden md:inline font-bold" id="voice-status-text">廣東話發音</span>
+        </button>
+
+        <!-- Settings Modal Trigger -->
+        <button onclick="openSettingsModal()" class="p-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-2 transition shadow-md">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+          <span class="text-sm hidden sm:inline">設定遊戲</span>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- Controls Dashboard Panel -->
+  <section class="max-w-7xl mx-auto w-full px-4 pt-4 pb-2">
+    <div class="bg-white rounded-3xl p-4 shadow-sm border border-slate-200/80 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+      
+      <!-- 1. Step Selector (數數單位) -->
+      <div>
+        <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">1. 選擇數數方法 (Counting Step)</label>
+        <div class="grid grid-cols-4 gap-1 bg-slate-100 p-1 rounded-2xl border border-slate-200">
+          <button onclick="setStep(1)" id="btn-step-1" class="step-btn py-2 text-center font-bold text-xs sm:text-sm rounded-xl transition">1個一數</button>
+          <button onclick="setStep(2)" id="btn-step-2" class="step-btn py-2 text-center font-bold text-xs sm:text-sm rounded-xl transition">2個一數</button>
+          <button onclick="setStep(5)" id="btn-step-5" class="step-btn py-2 text-center font-bold text-xs sm:text-sm rounded-xl transition">5個一數</button>
+          <button onclick="setStep(10)" id="btn-step-10" class="step-btn py-2 text-center font-bold text-xs sm:text-sm rounded-xl transition">10個一數</button>
+        </div>
+      </div>
+
+      <!-- 2. Visual Hint Level Selector (視覺提示等級) -->
+      <div>
+        <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">2. 視覺提示等級 (Visual Hints)</label>
+        <div class="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-2xl border border-slate-200">
+          <button onclick="setHint('high')" id="btn-hint-high" class="hint-btn py-2 text-center font-bold text-xs rounded-xl transition">高提示</button>
+          <button onclick="setHint('medium')" id="btn-hint-medium" class="hint-btn py-2 text-center font-bold text-xs rounded-xl transition">中提示</button>
+          <button onclick="setHint('none')" id="btn-hint-none" class="hint-btn py-2 text-center font-bold text-xs rounded-xl transition">無提示</button>
+        </div>
+      </div>
+
+      <!-- 3. Theme Selector (主題選擇) -->
+      <div>
+        <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">3. 遊戲主題 (Themes)</label>
+        <div class="grid grid-cols-4 gap-1 bg-slate-100 p-1 rounded-2xl border border-slate-200">
+          <button onclick="setTheme('bakery')" id="btn-theme-bakery" class="theme-btn py-2 text-center text-base rounded-xl transition" title="港式茶餐廳">菠蘿包</button>
+          <button onclick="setTheme('ocean')" id="btn-theme-ocean" class="theme-btn py-2 text-center text-base rounded-xl transition" title="海底世界">海洋</button>
+          <button onclick="setTheme('space')" id="btn-theme-space" class="theme-btn py-2 text-center text-base rounded-xl transition" title="奇幻太空">太空</button>
+          <button onclick="setTheme('farm')" id="btn-theme-farm" class="theme-btn py-2 text-center text-base rounded-xl transition" title="歡樂農場">農場</button>
+        </div>
+      </div>
+
+      <!-- 4. Final Answer Mode Selector (結尾回答總數方式) -->
+      <div>
+        <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">4. 總數回答方式 (Answer Total)</label>
+        <div class="grid grid-cols-2 gap-1 bg-slate-100 p-1 rounded-2xl border border-slate-200">
+          <button onclick="setAnswerMode('choice')" id="btn-ans-choice" class="ans-btn py-2 text-center font-bold text-xs rounded-xl transition">🔢 選出總數</button>
+          <button onclick="setAnswerMode('handwrite')" id="btn-ans-handwrite" class="ans-btn py-2 text-center font-bold text-xs rounded-xl transition">✍️ 手寫總數</button>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Main Interactive Game Arena -->
+  <main class="max-w-7xl mx-auto w-full px-4 py-2 flex-grow flex flex-col justify-between gap-4">
+    
+    <!-- Target Mission Display Banner (No total counter revealed!) -->
+    <div id="mission-card" class="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 rounded-3xl p-5 text-white shadow-xl relative overflow-hidden transition-all duration-300">
+      <div class="flex items-center justify-between gap-4 relative z-10">
+        
+        <!-- Speech / Instruction Box -->
+        <div class="flex items-center gap-4 text-left flex-grow">
+          <div class="relative cursor-pointer group" onclick="tapMascot()">
+            <div id="mascot-avatar" class="text-5xl bg-white/20 backdrop-blur-md p-3 rounded-2xl shadow-inner animate-bounce-gentle shrink-0 group-hover:scale-110 transition-transform">
+              👨‍🍳
+            </div>
+            <div id="mascot-speech-bubble" class="absolute -top-12 left-1/2 transform -translate-x-1/2 bg-white text-slate-800 text-xs font-black px-3 py-1 rounded-xl shadow-lg whitespace-nowrap opacity-0 transition-all pointer-events-none z-20">
+              加油啊！數下有幾多個！✨
+            </div>
+          </div>
+          <div>
+            <div class="inline-flex items-center gap-2 bg-black/20 px-3 py-1 rounded-full text-xs font-bold mb-1 text-amber-100">
+              <span id="target-mode-badge">5個一數</span> 任務挑戰
+            </div>
+            <h2 id="mission-instruction" class="text-xl md:text-2xl font-black tracking-wide">
+              請用【<span class="underline decoration-wavy decoration-yellow-300">5個一數</span>】幫手數數這裡一共有多少個菠蘿包！
+            </h2>
+            <div class="mt-2 flex items-center gap-2">
+              <button onclick="speakCurrentInstruction()" class="px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white rounded-xl text-xs font-bold transition flex items-center gap-1">
+                <span>🗣️ 讀出任務</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Decorative Background Circles -->
+      <div class="absolute -bottom-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-xl pointer-events-none"></div>
+    </div>
+
+    <!-- Playground & Right-Side Answer Container Grid -->
+    <div id="playground-and-answer-container" class="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+      
+      <!-- Left / Main Playground Grid (Quantity Items Area) -->
+      <div id="playground" class="lg:col-span-3 min-h-[380px] bg-white rounded-3xl p-6 shadow-md border border-slate-200 flex flex-wrap items-center justify-center gap-6 relative transition-all duration-300">
+        <!-- Dynamic Group Cards injected via JS -->
+      </div>
+
+      <!-- Right-Side Answer Panel (在數量的右邊答題) -->
+      <aside id="right-answer-panel" class="lg:col-span-1 bg-white rounded-3xl p-5 shadow-lg border-2 border-indigo-200 flex flex-col gap-4 sticky top-20">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div class="flex items-center gap-2 font-black text-slate-800 text-base">
+            <span class="text-xl">📝</span> 右方答題區
+          </div>
+          <!-- Toggle Mode Tabs -->
+          <div class="flex gap-1 bg-slate-100 p-1 rounded-xl text-xs">
+            <button onclick="setRightAnswerTab('choice')" id="right-tab-choice" class="px-2.5 py-1 rounded-lg font-bold transition bg-indigo-600 text-white shadow">
+              🔢 選出
+            </button>
+            <button onclick="setRightAnswerTab('handwrite')" id="right-tab-handwrite" class="px-2.5 py-1 rounded-lg font-bold transition text-slate-600 hover:bg-slate-200">
+              ✍️ 手寫
+            </button>
+          </div>
+        </div>
+
+        <p class="text-xs font-bold text-slate-500">
+          觀察左邊數量，數完後在此選擇或寫出總數：
+        </p>
+
+        <!-- Mode 1: Multiple Choice Grid -->
+        <div id="right-choice-container" class="grid grid-cols-2 gap-2">
+          <!-- Dynamic choice buttons injected via JS -->
+        </div>
+
+        <!-- Mode 2: Mini Handwriting Canvas -->
+        <div id="right-handwrite-container" class="hidden flex flex-col items-center gap-3">
+          <div class="relative w-full h-32 bg-amber-50/90 rounded-2xl border-2 border-dashed border-indigo-300 touch-none shadow-inner flex items-center justify-center overflow-hidden">
+            <canvas id="handwrite-canvas" class="w-full h-full cursor-crosshair z-10"></canvas>
+            <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-25 text-slate-400 font-black text-lg select-none">
+              在此寫下數字
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between w-full gap-2">
+            <button onclick="clearCanvas()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition border border-slate-300">
+              🧹 清除重寫
+            </button>
+            <div class="flex items-center gap-1 text-xs text-slate-600 font-bold">
+              <span>對應數字：</span>
+              <select id="handwrite-num-select" class="bg-indigo-50 border border-indigo-300 text-slate-800 font-black rounded-xl px-2 py-1 text-xs">
+                <!-- Populated via JS -->
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dedicated Answer Button (加入回答鍵) -->
+        <button id="btn-submit-answer" onclick="submitCurrentAnswer()" class="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black text-base rounded-2xl shadow-md hover:shadow-lg transition transform active:scale-95 flex items-center justify-center gap-2">
+          <span>✨ 核對答案 (Submit)</span>
+        </button>
+
+        <!-- Answer Feedback Text / Try Again Button -->
+        <div id="right-answer-feedback" class="hidden flex flex-col items-center gap-2 p-3 rounded-2xl font-black text-xs text-center transition-all">
+          <div id="feedback-message-text"></div>
+          <button id="btn-retry-answer" onclick="resetAnswerFeedback()" class="hidden px-4 py-1.5 bg-white text-rose-700 border border-rose-300 font-bold rounded-xl text-xs shadow-sm hover:bg-rose-50 transition">
+            🔄 再數一次 / 重新回答
+          </button>
+        </div>
+      </aside>
+
+    </div>
+
+    <!-- Floating FX Container -->
+    <div id="fx-layer" class="fixed inset-0 pointer-events-none z-40 overflow-hidden"></div>
+
+    <!-- Game Bottom Toolbar (Reset & Next Level) -->
+    <div class="flex items-center justify-between my-2 px-2">
+      <button onclick="resetGame()" class="px-5 py-2.5 rounded-2xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-sm flex items-center gap-2 transition active:scale-95">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+        重新數過 (Reset)
+      </button>
+
+      <button onclick="generateNewLevel()" class="px-6 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold text-base shadow-lg hover:shadow-xl flex items-center gap-2 transition transform hover:-translate-y-0.5 active:scale-95">
+        <span>下一關 (Next Level)</span>
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path></svg>
+      </button>
+    </div>
+
+  </main>
+
+  <!-- Total Answer Challenge Modal (支援關閉、可移動返回) -->
+  <div id="answer-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl max-w-lg w-full p-6 text-center shadow-2xl transform transition-all animate-pop border-4 border-indigo-500 relative">
+      
+      <!-- Close / Back Button -->
+      <button onclick="closeAnswerModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-2 text-lg font-bold rounded-full hover:bg-slate-100 transition" title="返回數數">
+        ✕ 返回數數
+      </button>
+
+      <!-- Top Title -->
+      <div class="flex items-center justify-center gap-2 mb-2 pt-2">
+        <span class="text-3xl">📝</span>
+        <h3 class="text-2xl font-black text-slate-800">數完了！總共有多少個呢？</h3>
+      </div>
+      <p id="answer-modal-subtitle" class="text-sm text-slate-500 font-bold mb-4">請選出或手寫填寫你剛才數到的總數量：</p>
+
+      <!-- Toggle Mode Tabs inside modal -->
+      <div class="flex justify-center gap-2 mb-4">
+        <button onclick="switchModalTab('choice')" id="modal-tab-choice" class="px-4 py-1.5 rounded-full text-xs font-extrabold transition bg-indigo-600 text-white shadow">
+          🔢 選出答案 (Select)
+        </button>
+        <button onclick="switchModalTab('handwrite')" id="modal-tab-handwrite" class="px-4 py-1.5 rounded-full text-xs font-extrabold transition bg-slate-200 text-slate-700 hover:bg-slate-300">
+          ✍️ 手寫板 (Draw)
+        </button>
+      </div>
+
+      <!-- Mode 1: Multiple Choice Container -->
+      <div id="modal-choice-container" class="grid grid-cols-2 gap-3 mb-6">
+        <!-- Dynamic choice buttons injected via JS -->
+      </div>
+
+      <!-- Mode 2: Handwriting Canvas Container -->
+      <div id="modal-handwrite-container" class="hidden flex flex-col items-center mb-6">
+        <div class="relative w-full max-w-xs h-40 bg-amber-50 rounded-2xl border-2 border-dashed border-indigo-400 touch-none shadow-inner flex items-center justify-center overflow-hidden">
+          <canvas id="modal-handwrite-canvas" class="w-full h-full cursor-crosshair z-10"></canvas>
+          <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20 text-slate-400 font-black text-4xl select-none">
+            寫下數字
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3 mt-3 w-full max-w-xs">
+          <button onclick="clearModalCanvas()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl text-xs transition">
+            🧹 清除重寫
+          </button>
+          <div class="flex-grow"></div>
+          <span class="text-xs font-bold text-slate-500">對應數字：</span>
+          <select id="modal-handwrite-num-select" class="bg-indigo-50 border border-indigo-300 font-black text-slate-800 rounded-xl px-3 py-1.5 text-sm">
+            <!-- Populated via JS -->
+          </select>
+        </div>
+
+        <button onclick="submitModalHandwriteAnswer()" class="w-full max-w-xs mt-4 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-black text-base rounded-2xl shadow-lg hover:shadow-xl active:scale-95 transition">
+          核對手寫答案 (Submit)
+        </button>
+      </div>
+
+      <!-- Feedback Banner -->
+      <div id="modal-answer-feedback" class="hidden flex flex-col items-center gap-2 py-2 px-4 rounded-xl font-black text-sm mb-2">
+        <div id="modal-feedback-message"></div>
+        <button onclick="resetModalFeedback()" class="px-4 py-1.5 bg-rose-600 text-white font-bold rounded-xl text-xs shadow hover:bg-rose-700 transition">
+          再數一次 / 重新回答
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Victory Celebration Modal -->
+  <div id="win-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl max-w-md w-full p-8 text-center shadow-2xl transform transition-all animate-pop border-4 border-amber-400">
+      <div class="text-6xl mb-3 animate-bounce-gentle">🎉</div>
+      <h3 class="text-3xl font-black text-slate-800 mb-2">太棒了！答對了！</h3>
+      <p id="win-modal-text" class="text-lg text-slate-600 font-bold mb-6">你用廣東話成功數出了菠蘿包的總數！</p>
+      
+      <div class="bg-amber-50 p-4 rounded-2xl border border-amber-200 mb-4 flex items-center justify-center gap-3">
+        <span class="text-3xl">⭐</span>
+        <span class="text-lg font-black text-amber-800">獎勵 10 顆星星！</span>
+      </div>
+
+      <div id="unlocked-badge-box" class="hidden bg-indigo-50 border border-indigo-200 p-3 rounded-2xl mb-6 text-indigo-900 text-sm font-bold flex items-center justify-center gap-2">
+        <span class="text-2xl" id="unlocked-badge-icon">🏆</span>
+        <span id="unlocked-badge-text">解鎖新成就：跳數大師！</span>
+      </div>
+
+      <button onclick="closeWinModalAndNext()" class="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black text-lg shadow-lg transition active:scale-95">
+        繼續下一關 (Next Level)
+      </button>
+    </div>
+  </div>
+
+  <!-- Achievements Modal -->
+  <div id="badge-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl max-w-lg w-full p-6 text-left shadow-2xl border border-slate-200">
+      <div class="flex items-center justify-between pb-4 border-b border-slate-100">
+        <h3 class="text-xl font-black text-slate-800 flex items-center gap-2">
+          <span>🏆</span> 我的成就獎牌榜
+        </h3>
+        <button onclick="closeBadgeModal()" class="text-slate-400 hover:text-slate-600 p-2 text-xl font-bold">✕</button>
+      </div>
+
+      <div id="badge-list" class="py-4 grid grid-cols-2 gap-3 text-sm">
+        <!-- Dynamic Badges rendered via JS -->
+      </div>
+
+      <div class="pt-4 border-t border-slate-100 text-right">
+        <button onclick="closeBadgeModal()" class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow">
+          關閉
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="w-full text-center py-4 text-xs font-semibold text-slate-400">
+    廣東話小學數學教學輔助工具 • 支援一個一數、兩個一數、5個一數、10個一數
+  </footer>
+
+  <script>
+    /* ===================================================================
+       GLOBAL STATE & CONFIGURATION
+       =================================================================== */
+    const gameState = {
+      step: 5,            // 1, 2, 5, 10
+      hint: 'high',       // 'high', 'medium', 'none'
+      theme: 'bakery',    // 'bakery', 'ocean', 'space', 'farm'
+      answerMode: 'choice', // 'handwrite', 'choice'
+      selectedChoice: null, // Track currently selected choice in right panel
+      targetCount: 20,    // Target count for current level
+      currentProgress: 0, // Current counted items progress
+      score: 0,           // Stars earned
+      comboCount: 0,      // Current consecutive count combo
+      voiceEnabled: true, // Audio enabled flag
+      groupCount: 0,      // Total groups on stage
+      clickedGroups: [],  // Tracks indices of clicked groups
+      unlockedBadges: []  // Track unlocked achievement badge IDs
+    };
+
+    // Canvas Handwriting variables
+    let isDrawing = false;
+    let canvasCtx = null;
+    let modalCanvasCtx = null;
+
+    // Achievement Badge Definitions
+    const badges = [
+      { id: 'first_step', icon: '🌟', title: '數數起步走', desc: '完成第 1 個數數關卡', reqStars: 10 },
+      { id: 'star_collector', icon: '⭐', title: '星星收藏家', desc: '累積獲得 50 顆星星', reqStars: 50 },
+      { id: 'master_counter', icon: '👑', title: '跳數大師', desc: '累積獲得 100 顆星星', reqStars: 100 },
+      { id: 'cantonese_expert', icon: '🗣️', title: '廣東話小學霸', desc: '累積獲得 200 顆星星', reqStars: 200 }
+    ];
+
+    /* ===================================================================
+       THEME CONFIGURATIONS (4 Unique Themes)
+       =================================================================== */
+    const themes = {
+      bakery: {
+        name: '港式茶餐廳',
+        mascot: '👨‍🍳',
+        bgGradient: 'from-amber-500 via-orange-500 to-amber-600',
+        cardBg: 'bg-amber-50/50',
+        cardBorder: 'border-amber-200',
+        activeGlow: 'border-amber-400 animate-pulse-glow',
+        itemEmoji: '🍍',
+        itemName: '菠蘿包',
+        unitName: '個',
+        welcomeMsg: '快啲幫手數菠蘿包啦！'
+      },
+      ocean: {
+        name: '海底世界',
+        mascot: '🤿',
+        bgGradient: 'from-cyan-600 via-blue-600 to-indigo-700',
+        cardBg: 'bg-cyan-50/50',
+        cardBorder: 'border-cyan-200',
+        activeGlow: 'border-cyan-400 animate-pulse-glow',
+        itemEmoji: '🐠',
+        itemName: '小魚',
+        unitName: '條',
+        welcomeMsg: '歡迎來到海底世界數小魚！'
+      },
+      space: {
+        name: '奇幻太空',
+        mascot: '👨‍🚀',
+        bgGradient: 'from-purple-700 via-indigo-800 to-slate-900',
+        cardBg: 'bg-purple-50/50',
+        cardBorder: 'border-purple-200',
+        activeGlow: 'border-purple-400 animate-pulse-glow',
+        itemEmoji: '⭐',
+        itemName: '星星',
+        unitName: '顆',
+        welcomeMsg: '準備發射！一齊數太空星星！'
+      },
+      farm: {
+        name: '歡樂農場',
+        mascot: '👩‍🌾',
+        bgGradient: 'from-emerald-600 via-green-600 to-teal-700',
+        cardBg: 'bg-emerald-50/50',
+        cardBorder: 'border-emerald-200',
+        activeGlow: 'border-emerald-400 animate-pulse-glow',
+        itemEmoji: '🍎',
+        itemName: '紅蘋果',
+        unitName: '個',
+        welcomeMsg: '農場蘋果熟啦！快啲數下！'
+      }
+    };
+
+    /* ===================================================================
+       CANTONESE SPEECH SYNTHESIS & SOUND EFFECTS
+       =================================================================== */
+    let audioCtx = null;
+
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+    }
+
+    function playTone(freq, type = 'sine', duration = 0.15) {
+      try {
+        initAudio();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch (e) {}
+    }
+
+    // Cute bubble pop sound effect when tapping items
+    function playPopSFX(stepVal) {
+      try {
+        initAudio();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const baseFreq = 300 + (gameState.currentProgress * 12);
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(baseFreq, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.8, audioCtx.currentTime + 0.08);
+
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.08);
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.08);
+      } catch (e) {}
+    }
+
+    function playMascotSFX() {
+      playTone(587.33, 'sine', 0.1);
+      setTimeout(() => playTone(880, 'triangle', 0.15), 80);
+    }
+
+    function playSuccessSFX() {
+      playTone(523.25, 'triangle', 0.12);
+      setTimeout(() => playTone(659.25, 'triangle', 0.12), 100);
+      setTimeout(() => playTone(783.99, 'triangle', 0.12), 200);
+      setTimeout(() => playTone(1046.50, 'triangle', 0.35), 300);
+    }
+
+    // Cantonese TTS Function
+    function speakCantonese(text) {
+      if (!gameState.voiceEnabled) return;
+      if (!('speechSynthesis' in window)) return;
+
+      window.speechSynthesis.cancel();
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'zh-HK';
+      utterance.rate = 0.85;
+      utterance.pitch = 1.05;
+
+      const voices = window.speechSynthesis.getVoices();
+      const cantoneseVoice = voices.find(v => 
+        v.lang === 'zh-HK' || 
+        v.lang === 'zh_HK' || 
+        v.name.includes('Cantonese') || 
+        v.name.includes('Hong Kong') ||
+        v.name.includes('HiuGaai') ||
+        v.name.includes('Sin-Ji')
+      );
+
+      if (cantoneseVoice) {
+        utterance.voice = cantoneseVoice;
+      }
+
+      window.speechSynthesis.speak(utterance);
+    }
+
+    /* ===================================================================
+       GAME INITIALIZATION & LEVEL GENERATOR
+       =================================================================== */
+    window.onload = function() {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.getVoices();
+      }
+
+      updateUIControls();
+      generateNewLevel();
+    };
+
+    function setStep(newStep) {
+      gameState.step = newStep;
+      updateUIControls();
+      generateNewLevel();
+      speakCantonese(`切換到 ${newStep} 個一數`);
+    }
+
+    function setHint(newHint) {
+      gameState.hint = newHint;
+      updateUIControls();
+      renderPlayground();
+    }
+
+    function setAnswerMode(mode) {
+      gameState.answerMode = mode;
+      updateUIControls();
+      renderRightAnswerPanel();
+      speakCantonese(mode === 'handwrite' ? '右方選擇手寫回答' : '右方選擇按鈕回答');
+    }
+
+    function setTheme(newTheme) {
+      gameState.theme = newTheme;
+      updateUIControls();
+      applyThemeStyles();
+      renderPlayground();
+    }
+
+    function toggleVoice() {
+      gameState.voiceEnabled = !gameState.voiceEnabled;
+      const btn = document.getElementById('btn-toggle-voice');
+      const text = document.getElementById('voice-status-text');
+      const icon = document.getElementById('voice-icon');
+
+      if (gameState.voiceEnabled) {
+        btn.classList.remove('bg-rose-100', 'text-rose-700', 'border-rose-300');
+        btn.classList.add('bg-slate-100', 'text-slate-700');
+        text.innerText = "廣東話發音";
+        icon.innerText = "🔊";
+        speakCantonese("廣東話發音已開啟");
+      } else {
+        btn.classList.remove('bg-slate-100', 'text-slate-700');
+        btn.classList.add('bg-rose-100', 'text-rose-700', 'border-rose-300');
+        text.innerText = "靜音模式";
+        icon.innerText = "🔇";
+      }
+    }
+
+    function updateUIControls() {
+      // 1. Update Step Buttons
+      [1, 2, 5, 10].forEach(s => {
+        const btn = document.getElementById(`btn-step-${s}`);
+        if (s === gameState.step) {
+          btn.className = "step-btn py-2 text-center font-black text-xs sm:text-sm rounded-xl bg-indigo-600 text-white shadow-md transition";
+        } else {
+          btn.className = "step-btn py-2 text-center font-bold text-xs sm:text-sm rounded-xl bg-transparent text-slate-600 hover:bg-slate-200 transition";
+        }
+      });
+
+      // 2. Update Hint Buttons
+      ['high', 'medium', 'none'].forEach(h => {
+        const btn = document.getElementById(`btn-hint-${h}`);
+        if (h === gameState.hint) {
+          btn.className = "hint-btn py-2 text-center font-black text-xs rounded-xl bg-indigo-600 text-white shadow-md transition";
+        } else {
+          btn.className = "hint-btn py-2 text-center font-bold text-xs rounded-xl bg-transparent text-slate-600 hover:bg-slate-200 transition";
+        }
+      });
+
+      // 3. Update Theme Buttons
+      ['bakery', 'ocean', 'space', 'farm'].forEach(t => {
+        const btn = document.getElementById(`btn-theme-${t}`);
+        if (t === gameState.theme) {
+          btn.className = "theme-btn py-2 text-center text-base rounded-xl bg-indigo-600 text-white shadow-md transition scale-105 border-2 border-indigo-400";
+        } else {
+          btn.className = "theme-btn py-2 text-center text-base rounded-xl bg-transparent text-slate-600 hover:bg-slate-200 transition";
+        }
+      });
+
+      // 4. Update Answer Mode Buttons
+      ['handwrite', 'choice'].forEach(m => {
+        const btn = document.getElementById(`btn-ans-${m}`);
+        if (btn) {
+          if (m === gameState.answerMode) {
+            btn.className = "ans-btn py-2 text-center font-black text-xs rounded-xl bg-indigo-600 text-white shadow-md transition";
+          } else {
+            btn.className = "ans-btn py-2 text-center font-bold text-xs rounded-xl bg-transparent text-slate-600 hover:bg-slate-200 transition";
+          }
+        }
+      });
+
+      document.getElementById('target-mode-badge').innerText = `${gameState.step}個一數`;
+    }
+
+    function applyThemeStyles() {
+      const curTheme = themes[gameState.theme];
+      const missionCard = document.getElementById('mission-card');
+      const avatar = document.getElementById('mascot-avatar');
+      const headerAvatar = document.getElementById('header-avatar');
+
+      missionCard.className = `bg-gradient-to-r ${curTheme.bgGradient} rounded-3xl p-5 text-white shadow-xl relative overflow-hidden transition-all duration-300`;
+      avatar.innerText = curTheme.mascot;
+      headerAvatar.innerText = curTheme.itemEmoji;
+    }
+
+    function generateNewLevel() {
+      let possibleMultiplier;
+      if (gameState.step === 1) possibleMultiplier = [4, 5, 6, 7, 8, 9, 10];
+      else if (gameState.step === 2) possibleMultiplier = [3, 4, 5, 6, 7, 8, 9, 10];
+      else if (gameState.step === 5) possibleMultiplier = [3, 4, 5, 6, 7, 8];
+      else if (gameState.step === 10) possibleMultiplier = [2, 3, 4, 5, 6];
+
+      const numGroups = possibleMultiplier[Math.floor(Math.random() * possibleMultiplier.length)];
+      gameState.groupCount = numGroups;
+      gameState.targetCount = numGroups * gameState.step;
+      gameState.currentProgress = 0;
+      gameState.clickedGroups = [];
+      gameState.selectedChoice = null;
+
+      applyThemeStyles();
+      updateMissionText();
+      resetAnswerFeedback();
+      renderPlayground();
+
+      const t = themes[gameState.theme];
+      speakCantonese(`請用 ${gameState.step} 個一數，幫手數數一共有多少個 ${t.itemName}！`);
+    }
+
+    function updateMissionText() {
+      const t = themes[gameState.theme];
+      const inst = document.getElementById('mission-instruction');
+      if (inst) {
+        // Absolutely NO total sum revealed!
+        inst.innerHTML = `請用【<span class="underline decoration-wavy decoration-yellow-300">${gameState.step}個一數</span>】幫手數數這裡一共有多少個${t.itemName}！`;
+      }
+      renderRightAnswerPanel();
+    }
+
+    function speakCurrentInstruction() {
+      const t = themes[gameState.theme];
+      speakCantonese(`請用 ${gameState.step} 個一數，數數看這裡一共有多少個 ${t.itemName}。`);
+    }
+
+    /* ===================================================================
+       PLAYGROUND RENDERER & VISUAL HINTS
+       =================================================================== */
+    function renderPlayground() {
+      const playground = document.getElementById('playground');
+      playground.innerHTML = '';
+      const t = themes[gameState.theme];
+
+      for (let g = 0; g < gameState.groupCount; g++) {
+        const isClicked = gameState.clickedGroups.includes(g);
+        const groupNumberLabel = (g + 1) * gameState.step;
+        const isNextTarget = !isClicked && (g === gameState.clickedGroups.length);
+
+        let showBorder = true;
+        let showLabel = false;
+        let glowEffect = false;
+
+        if (gameState.hint === 'high') {
+          showBorder = true;
+          showLabel = true;
+          if (isNextTarget) glowEffect = true;
+        } else if (gameState.hint === 'medium') {
+          showBorder = true;
+          showLabel = false;
+        } else if (gameState.hint === 'none') {
+          showBorder = false;
+          showLabel = false;
+        }
+
+        let borderBgClass = isClicked 
+          ? 'bg-emerald-100/80 border-2 border-emerald-400 opacity-90 scale-95'
+          : (showBorder ? `${t.cardBg} border-2 ${t.cardBorder}` : 'bg-transparent border-2 border-transparent');
+
+        if (glowEffect && !isClicked) {
+          borderBgClass += ` ${t.activeGlow} ring-4 ring-amber-300/50`;
+        }
+
+        const groupDiv = document.createElement('div');
+        groupDiv.className = `group-card relative p-3 rounded-2xl flex flex-wrap items-center justify-center gap-2 cursor-pointer select-none transition-all duration-300 ${borderBgClass}`;
+        groupDiv.style.minWidth = gameState.step === 10 ? '160px' : (gameState.step === 5 ? '130px' : '90px');
+        groupDiv.onclick = (e) => handleGroupClick(g, e);
+
+        // Render cumulative step label (High Hint Level)
+        if (showLabel) {
+          const badge = document.createElement('div');
+          badge.className = `absolute -top-3 -right-2 px-2.5 py-0.5 rounded-full text-xs font-black shadow-md ${
+            isClicked ? 'bg-emerald-500 text-white' : 'bg-amber-400 text-slate-900 border border-amber-200'
+          }`;
+          badge.innerText = groupNumberLabel;
+          groupDiv.appendChild(badge);
+        }
+
+        // Checkmark badge for completed group
+        if (isClicked) {
+          const check = document.createElement('div');
+          check.className = "absolute inset-0 bg-emerald-500/10 rounded-2xl flex items-center justify-center z-10 pointer-events-none";
+          check.innerHTML = '<span class="text-3xl text-emerald-600 font-bold bg-white/90 rounded-full w-10 h-10 flex items-center justify-center shadow-md">✓</span>';
+          groupDiv.appendChild(check);
+        }
+
+        for (let i = 0; i < gameState.step; i++) {
+          const itemSpan = document.createElement('span');
+          itemSpan.className = 'item-icon text-3xl sm:text-4xl transition-transform transform hover:scale-125';
+          itemSpan.innerText = t.itemEmoji;
+          groupDiv.appendChild(itemSpan);
+        }
+
+        playground.appendChild(groupDiv);
+      }
+    }
+
+    function handleGroupClick(groupIndex, event) {
+      if (gameState.clickedGroups.includes(groupIndex)) {
+        return;
+      }
+
+      gameState.clickedGroups.push(groupIndex);
+      gameState.currentProgress += gameState.step;
+      gameState.comboCount++;
+
+      playPopSFX(gameState.step);
+
+      if (event) {
+        createFloatingText(event.clientX, event.clientY, `+${gameState.step}`);
+      }
+
+      updateComboUI();
+      renderPlayground();
+
+      // Speak ONLY current Cantonese count out loud! (NO running total text box!)
+      speakCantonese(`${gameState.currentProgress}`);
+    }
+
+    /* ===================================================================
+       RIGHT-SIDE ANSWER PANEL LOGIC (右方答題區)
+       =================================================================== */
+    function setRightAnswerTab(tab) {
+      gameState.answerMode = tab;
+      updateUIControls();
+      renderRightAnswerPanel();
+    }
+
+    function renderRightAnswerPanel() {
+      const tabChoice = document.getElementById('right-tab-choice');
+      const tabHandwrite = document.getElementById('right-tab-handwrite');
+      const containerChoice = document.getElementById('right-choice-container');
+      const containerHandwrite = document.getElementById('right-handwrite-container');
+
+      if (gameState.answerMode === 'handwrite') {
+        tabChoice.className = "px-2.5 py-1 rounded-lg font-bold transition text-slate-600 hover:bg-slate-200";
+        tabHandwrite.className = "px-2.5 py-1 rounded-lg font-bold transition bg-indigo-600 text-white shadow";
+        containerChoice.classList.add('hidden');
+        containerHandwrite.classList.remove('hidden');
+
+        initRightHandwritingCanvas();
+        populateHandwriteSelect('handwrite-num-select');
+      } else {
+        tabChoice.className = "px-2.5 py-1 rounded-lg font-bold transition bg-indigo-600 text-white shadow";
+        tabHandwrite.className = "px-2.5 py-1 rounded-lg font-bold transition text-slate-600 hover:bg-slate-200";
+        containerChoice.classList.remove('hidden');
+        containerHandwrite.classList.add('hidden');
+
+        generateRightChoiceButtons();
+      }
+    }
+
+    function generateRightChoiceButtons() {
+      const container = document.getElementById('right-choice-container');
+      container.innerHTML = '';
+
+      const correct = gameState.targetCount;
+      const step = gameState.step;
+
+      let options = [correct];
+      let candidates = [
+        correct - step,
+        correct + step,
+        correct + (step * 2),
+        correct - (step * 2),
+        correct + 1,
+        correct + 5
+      ].filter(v => v > 0 && v !== correct);
+
+      candidates.sort(() => 0.5 - Math.random());
+      options.push(...candidates.slice(0, 3));
+      options.sort((a, b) => a - b);
+
+      options.forEach(val => {
+        const btn = document.createElement('button');
+        const isSelected = gameState.selectedChoice === val;
+        btn.className = `py-3 font-black text-xl rounded-2xl shadow transition transform active:scale-95 border-2 ${
+          isSelected 
+            ? 'bg-indigo-600 text-white border-indigo-700 ring-2 ring-indigo-300' 
+            : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-200'
+        }`;
+        btn.innerText = val;
+        btn.onclick = () => {
+          gameState.selectedChoice = val;
+          generateRightChoiceButtons(); // Refresh selection state
+        };
+        container.appendChild(btn);
+      });
+    }
+
+    // Submit Answer Button Callback (回答鍵)
+    function submitCurrentAnswer() {
+      let valToSubmit = null;
+      if (gameState.answerMode === 'choice') {
+        if (gameState.selectedChoice === null) {
+          speakCantonese("請先點選一個答案！");
+          const feedback = document.getElementById('right-answer-feedback');
+          const feedbackMsg = document.getElementById('feedback-message-text');
+          feedback.className = "flex flex-col items-center gap-2 p-3 rounded-2xl font-black text-xs text-center bg-amber-100 text-amber-800 border border-amber-300";
+          feedbackMsg.innerText = "⚠️ 請先點選右邊其中一個數字！";
+          feedback.classList.remove('hidden');
+          return;
+        }
+        valToSubmit = gameState.selectedChoice;
+      } else {
+        const sel = document.getElementById('handwrite-num-select');
+        valToSubmit = parseInt(sel.value);
+      }
+
+      checkAnswer(valToSubmit);
+    }
+
+    function checkAnswer(userAnswer) {
+      const feedback = document.getElementById('right-answer-feedback');
+      const feedbackMsg = document.getElementById('feedback-message-text');
+      const btnRetry = document.getElementById('btn-retry-answer');
+      feedback.classList.remove('hidden');
+
+      if (userAnswer === gameState.targetCount) {
+        feedback.className = "flex flex-col items-center gap-2 p-3 rounded-2xl font-black text-xs text-center bg-emerald-500 text-white shadow animate-bounce";
+        feedbackMsg.innerText = "🎉 答對了！非常好！";
+        btnRetry.classList.add('hidden');
+
+        playSuccessSFX();
+        speakCantonese(`答對了！總數確實係 ${gameState.targetCount} 個！`);
+
+        setTimeout(() => {
+          handleVictory();
+        }, 900);
+      } else {
+        // Allow return and retry!
+        feedback.className = "flex flex-col items-center gap-2 p-3 rounded-2xl font-black text-xs text-center bg-rose-500 text-white shadow animate-wiggle";
+        feedbackMsg.innerText = "❌ 答錯了少少！再數下左邊物品試多一次！";
+        btnRetry.classList.remove('hidden');
+
+        playTone(200, 'sawtooth', 0.2);
+        speakCantonese("再試下啦！再數一數！");
+      }
+    }
+
+    function resetAnswerFeedback() {
+      const feedback = document.getElementById('right-answer-feedback');
+      if (feedback) feedback.classList.add('hidden');
+    }
+
+    /* ===================================================================
+       MODAL HANDWRITING & ANSWER MODAL LOGIC
+       =================================================================== */
+    function openAnswerModal() {
+      const modal = document.getElementById('answer-modal');
+      document.getElementById('modal-answer-feedback').classList.add('hidden');
+      switchModalTab('choice');
+      modal.classList.remove('hidden');
+      speakCantonese(`數完了！請回答總共有多少個 ${themes[gameState.theme].itemName}？`);
+    }
+
+    function closeAnswerModal() {
+      document.getElementById('answer-modal').classList.add('hidden');
+    }
+
+    function switchModalTab(tab) {
+      const btnChoice = document.getElementById('modal-tab-choice');
+      const btnHandwrite = document.getElementById('modal-tab-handwrite');
+      const containerChoice = document.getElementById('modal-choice-container');
+      const containerHandwrite = document.getElementById('modal-handwrite-container');
+
+      if (tab === 'choice') {
+        btnChoice.className = "px-4 py-1.5 rounded-full text-xs font-extrabold transition bg-indigo-600 text-white shadow";
+        btnHandwrite.className = "px-4 py-1.5 rounded-full text-xs font-extrabold transition bg-slate-200 text-slate-700 hover:bg-slate-300";
+        containerChoice.classList.remove('hidden');
+        containerHandwrite.classList.add('hidden');
+        generateModalChoiceButtons();
+      } else {
+        btnHandwrite.className = "px-4 py-1.5 rounded-full text-xs font-extrabold transition bg-indigo-600 text-white shadow";
+        btnChoice.className = "px-4 py-1.5 rounded-full text-xs font-extrabold transition bg-slate-200 text-slate-700 hover:bg-slate-300";
+        containerHandwrite.classList.remove('hidden');
+        containerChoice.classList.add('hidden');
+        initModalHandwritingCanvas();
+        populateHandwriteSelect('modal-handwrite-num-select');
+      }
+    }
+
+    function generateModalChoiceButtons() {
+      const container = document.getElementById('modal-choice-container');
+      container.innerHTML = '';
+
+      const correct = gameState.targetCount;
+      const step = gameState.step;
+
+      let options = [correct];
+      let candidates = [
+        correct - step,
+        correct + step,
+        correct + (step * 2),
+        correct - (step * 2),
+        correct + 1,
+        correct + 5
+      ].filter(v => v > 0 && v !== correct);
+
+      candidates.sort(() => 0.5 - Math.random());
+      options.push(...candidates.slice(0, 3));
+      options.sort((a, b) => a - b);
+
+      options.forEach(val => {
+        const btn = document.createElement('button');
+        btn.className = "py-4 bg-amber-50 hover:bg-amber-100 border-2 border-amber-300 text-amber-900 font-black text-2xl rounded-2xl shadow-md transition transform active:scale-95";
+        btn.innerText = val;
+        btn.onclick = () => submitModalChoiceAnswer(val);
+        container.appendChild(btn);
+      });
+    }
+
+    function populateHandwriteSelect(selectId) {
+      const select = document.getElementById(selectId);
+      if (!select) return;
+      select.innerHTML = '';
+      const step = gameState.step;
+      
+      let options = [];
+      for (let i = Math.max(step, gameState.targetCount - (step * 3)); i <= gameState.targetCount + (step * 3); i += (step === 1 ? 1 : (step === 10 ? 5 : step))) {
+        options.push(i);
+      }
+      if (!options.includes(gameState.targetCount)) options.push(gameState.targetCount);
+      options.sort((a, b) => a - b);
+
+      options.forEach(val => {
+        const opt = document.createElement('option');
+        opt.value = val;
+        opt.innerText = val;
+        select.appendChild(opt);
+      });
+    }
+
+    function initRightHandwritingCanvas() {
+      const canvas = document.getElementById('handwrite-canvas');
+      if (!canvas) return;
+
+      canvas.width = canvas.parentElement.clientWidth;
+      canvas.height = canvas.parentElement.clientHeight;
+
+      canvasCtx = canvas.getContext('2d');
+      canvasCtx.strokeStyle = '#4f46e5';
+      canvasCtx.lineWidth = 5;
+      canvasCtx.lineCap = 'round';
+      canvasCtx.lineJoin = 'round';
+
+      clearCanvas();
+
+      canvas.onmousedown = (e) => startDrawing(e, canvasCtx, 'handwrite-canvas');
+      canvas.onmousemove = (e) => draw(e, canvasCtx, 'handwrite-canvas');
+      canvas.onmouseup = stopDrawing;
+      canvas.onmouseleave = stopDrawing;
+
+      canvas.ontouchstart = (e) => { e.preventDefault(); startDrawing(e.touches[0], canvasCtx, 'handwrite-canvas'); };
+      canvas.ontouchmove = (e) => { e.preventDefault(); draw(e.touches[0], canvasCtx, 'handwrite-canvas'); };
+      canvas.ontouchend = stopDrawing;
+    }
+
+    function initModalHandwritingCanvas() {
+      const canvas = document.getElementById('modal-handwrite-canvas');
+      if (!canvas) return;
+
+      canvas.width = canvas.parentElement.clientWidth;
+      canvas.height = canvas.parentElement.clientHeight;
+
+      modalCanvasCtx = canvas.getContext('2d');
+      modalCanvasCtx.strokeStyle = '#4f46e5';
+      modalCanvasCtx.lineWidth = 5;
+      modalCanvasCtx.lineCap = 'round';
+      modalCanvasCtx.lineJoin = 'round';
+
+      clearModalCanvas();
+
+      canvas.onmousedown = (e) => startDrawing(e, modalCanvasCtx, 'modal-handwrite-canvas');
+      canvas.onmousemove = (e) => draw(e, modalCanvasCtx, 'modal-handwrite-canvas');
+      canvas.onmouseup = stopDrawing;
+      canvas.onmouseleave = stopDrawing;
+
+      canvas.ontouchstart = (e) => { e.preventDefault(); startDrawing(e.touches[0], modalCanvasCtx, 'modal-handwrite-canvas'); };
+      canvas.ontouchmove = (e) => { e.preventDefault(); draw(e.touches[0], modalCanvasCtx, 'modal-handwrite-canvas'); };
+      canvas.ontouchend = stopDrawing;
+    }
+
+    function startDrawing(e, ctx, canvasId) {
+      isDrawing = true;
+      const rect = document.getElementById(canvasId).getBoundingClientRect();
+      ctx.beginPath();
+      ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+    }
+
+    function draw(e, ctx, canvasId) {
+      if (!isDrawing || !ctx) return;
+      const rect = document.getElementById(canvasId).getBoundingClientRect();
+      ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+      ctx.stroke();
+    }
+
+    function stopDrawing() {
+      isDrawing = false;
+    }
+
+    function clearCanvas() {
+      if (!canvasCtx) return;
+      const canvas = document.getElementById('handwrite-canvas');
+      canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    function clearModalCanvas() {
+      if (!modalCanvasCtx) return;
+      const canvas = document.getElementById('modal-handwrite-canvas');
+      modalCanvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    function submitModalChoiceAnswer(selectedVal) {
+      checkModalAnswer(selectedVal);
+    }
+
+    function submitModalHandwriteAnswer() {
+      const selectedVal = parseInt(document.getElementById('modal-handwrite-num-select').value);
+      checkModalAnswer(selectedVal);
+    }
+
+    function checkModalAnswer(userAnswer) {
+      const feedback = document.getElementById('modal-answer-feedback');
+      const msg = document.getElementById('modal-feedback-message');
+      feedback.classList.remove('hidden');
+
+      if (userAnswer === gameState.targetCount) {
+        feedback.className = "flex flex-col items-center gap-2 py-2 px-4 rounded-xl font-black text-sm mb-2 bg-emerald-100 text-emerald-800 border border-emerald-300";
+        msg.innerText = "🎉 答對了！非常棒！";
+        playSuccessSFX();
+        speakCantonese(`答對了！總數確實係 ${gameState.targetCount} 個！`);
+
+        setTimeout(() => {
+          document.getElementById('answer-modal').classList.add('hidden');
+          handleVictory();
+        }, 800);
+      } else {
+        feedback.className = "flex flex-col items-center gap-2 py-2 px-4 rounded-xl font-black text-sm mb-2 bg-rose-100 text-rose-800 border border-rose-300 animate-wiggle";
+        msg.innerText = "❌ 答錯了少少，再試一次啦！";
+        playTone(200, 'sawtooth', 0.2);
+        speakCantonese("再試下啦！再數一數！");
+      }
+    }
+
+    function resetModalFeedback() {
+      document.getElementById('modal-answer-feedback').classList.add('hidden');
+    }
+
+    function tapMascot() {
+      playMascotSFX();
+      
+      const mascotBtn = document.getElementById('mascot-avatar');
+      mascotBtn.classList.remove('animate-wiggle');
+      void mascotBtn.offsetWidth;
+      mascotBtn.classList.add('animate-wiggle');
+
+      const speeches = [
+        "加油呀！你數得好快！✨",
+        "真係聰明！繼續數落去！👍",
+        "廣東話數數最有趣！❤️",
+        "好棒！快啲在右邊回答答案啦！🌟"
+      ];
+      const randomSpeech = speeches[Math.floor(Math.random() * speeches.length)];
+      
+      const bubble = document.getElementById('mascot-speech-bubble');
+      bubble.innerText = randomSpeech;
+      bubble.classList.remove('opacity-0', '-translate-y-2');
+      bubble.classList.add('opacity-100', 'translate-y-0');
+
+      speakCantonese(randomSpeech);
+
+      setTimeout(() => {
+        bubble.classList.remove('opacity-100', 'translate-y-0');
+        bubble.classList.add('opacity-0', '-translate-y-2');
+      }, 2200);
+    }
+
+    function createFloatingText(x, y, text) {
+      const container = document.getElementById('fx-layer');
+      const elem = document.createElement('div');
+      elem.className = 'fixed font-black text-2xl text-amber-500 shadow-sm animate-float-up z-50 pointer-events-none';
+      elem.style.left = `${x - 20}px`;
+      elem.style.top = `${y - 30}px`;
+      elem.innerText = text;
+
+      container.appendChild(elem);
+      setTimeout(() => elem.remove(), 850);
+    }
+
+    function updateComboUI() {
+      const comboBox = document.getElementById('combo-container');
+      const comboText = document.getElementById('combo-count-text');
+
+      if (gameState.comboCount >= 2) {
+        comboBox.classList.remove('hidden');
+        comboText.innerText = `${gameState.comboCount} 連擊`;
+      } else {
+        comboBox.classList.add('hidden');
+      }
+    }
+
+    function resetGame() {
+      gameState.currentProgress = 0;
+      gameState.clickedGroups = [];
+      gameState.comboCount = 0;
+      gameState.selectedChoice = null;
+      updateComboUI();
+      resetAnswerFeedback();
+      renderPlayground();
+      speakCantonese("重新數過");
+    }
+
+    function handleVictory() {
+      playSuccessSFX();
+      
+      gameState.score += 10;
+      document.getElementById('score-counter').innerText = gameState.score;
+
+      const newUnlocked = checkBadges();
+
+      const t = themes[gameState.theme];
+      const winText = document.getElementById('win-modal-text');
+      winText.innerText = `太棒了！你用廣東話成功數出了 ${gameState.targetCount} ${t.unitName}${t.itemName}！`;
+
+      const badgeBox = document.getElementById('unlocked-badge-box');
+      if (newUnlocked) {
+        document.getElementById('unlocked-badge-icon').innerText = newUnlocked.icon;
+        document.getElementById('unlocked-badge-text').innerText = `新成就解鎖：${newUnlocked.title}！`;
+        badgeBox.classList.remove('hidden');
+      } else {
+        badgeBox.classList.add('hidden');
+      }
+
+      if (typeof confetti === 'function') {
+        confetti({
+          particleCount: 90,
+          spread: 80,
+          origin: { y: 0.6 }
+        });
+      }
+
+      speakCantonese(`太棒了！答對了！你成功數出了 ${gameState.targetCount} ${t.unitName}${t.itemName}！`);
+      document.getElementById('win-modal').classList.remove('hidden');
+    }
+
+    function checkBadges() {
+      let newlyUnlocked = null;
+      badges.forEach(b => {
+        if (!gameState.unlockedBadges.includes(b.id) && gameState.score >= b.reqStars) {
+          gameState.unlockedBadges.push(b.id);
+          newlyUnlocked = b;
+        }
+      });
+      return newlyUnlocked;
+    }
+
+    function openBadgeModal() {
+      const list = document.getElementById('badge-list');
+      list.innerHTML = '';
+
+      badges.forEach(b => {
+        const isUnlocked = gameState.unlockedBadges.includes(b.id);
+        const card = document.createElement('div');
+        card.className = `p-3 rounded-2xl border flex items-center gap-3 ${
+          isUnlocked 
+            ? 'bg-amber-50 border-amber-300 text-slate-800' 
+            : 'bg-slate-50 border-slate-200 text-slate-400 opacity-60'
+        }`;
+        
+        card.innerHTML = `
+          <div class="text-3xl p-2 rounded-xl ${isUnlocked ? 'bg-amber-200' : 'bg-slate-200'}">${b.icon}</div>
+          <div>
+            <div class="font-black text-xs md:text-sm">${b.title} ${isUnlocked ? '✅' : '🔒'}</div>
+            <div class="text-xs text-slate-500">${b.desc}</div>
+          </div>
+        `;
+        list.appendChild(card);
+      });
+
+      document.getElementById('badge-modal').classList.remove('hidden');
+    }
+
+    function closeBadgeModal() {
+      document.getElementById('badge-modal').classList.add('hidden');
+    }
+
+    function closeWinModalAndNext() {
+      document.getElementById('win-modal').classList.add('hidden');
+      gameState.comboCount = 0;
+      updateComboUI();
+      generateNewLevel();
+    }
+
+    function openSettingsModal() {
+      const settingsSection = document.querySelector('section');
+      if (settingsSection) {
+        settingsSection.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+  </script>
+</body>
+</html>

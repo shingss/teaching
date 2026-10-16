@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>數字塗鴉大冒險 - 廣東話朗讀與位值遊戲</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@700&family=Fredoka:wght@400;600;700&family=Noto+Sans+TC:wght@500;700;900&family=Zen+Maru+Gothic:wght@700;900&family=M+PLUS+Rounded+1c:wght@700;900&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Fredoka', 'Noto Sans TC', sans-serif;
+            background: radial-gradient(circle at 50% 20%, #fef3c7 0%, #e0f2fe 50%, #f3e8ff 100%);
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+
+        /* Continuous single number text rendering */
+        .unified-number-box {
+            background: #ffffff;
+            box-shadow: inset 0 4px 12px rgba(0, 0, 0, 0.06), 0 20px 40px -10px rgba(99, 102, 241, 0.2);
+        }
+
+        /* Seamless individual digit character inside single text stream */
+        .digit-char {
+            display: inline-block;
+            transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+            padding: 0 0.15em;
+            border-radius: 0.25em;
+            cursor: pointer;
+            line-height: 1;
+        }
+
+        .digit-char:hover {
+            transform: scale(1.15) translateY(-4px);
+            text-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .digit-char.drag-hover {
+            transform: scale(1.25) translateY(-8px);
+            background-color: rgba(243, 244, 246, 0.9);
+            box-shadow: 0 0 25px rgba(99, 102, 241, 0.5);
+            border: 3px dashed #6366f1;
+        }
+
+        /* Pen Palette Crayon Card Styles */
+        .crayon-card {
+            transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .crayon-card:hover {
+            transform: translateY(-6px) scale(1.02);
+        }
+
+        .crayon-card.active-pen {
+            transform: scale(1.05);
+            box-shadow: 0 0 0 4px #fbbf24, 0 12px 25px -5px rgba(0,0,0,0.2);
+        }
+
+        /* Floating Pen / Drag Follower Avatar */
+        #dragCursorAvatar {
+            pointer-events: none;
+            position: fixed;
+            z-index: 99999;
+            transform: translate(-50%, -80%) rotate(-15deg);
+            display: none;
+            filter: drop-shadow(0 15px 15px rgba(0,0,0,0.3));
+        }
+
+        /* Mascot animations */
+        @keyframes mascotBob {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(-8px) rotate(2deg); }
+        }
+
+        .animate-mascot {
+            animation: mascotBob 3s ease-in-out infinite;
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0.5); opacity: 0; }
+            80% { transform: scale(1.1); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .animate-pop {
+            animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        /* Digit Coloring Classes */
+        .digit-color-none { color: #1e293b; background: transparent; }
+        .digit-color-hundreds { color: #ef4444; text-shadow: 0 4px 12px rgba(239, 68, 68, 0.4); }
+        .digit-color-tens { color: #10b981; text-shadow: 0 4px 12px rgba(16, 185, 129, 0.4); }
+        .digit-color-units { color: #3b82f6; text-shadow: 0 4px 12px rgba(59, 130, 246, 0.4); }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between overflow-x-hidden text-slate-800">
+
+    <!-- Navigation / Header -->
+    <header class="w-full bg-white/80 backdrop-blur-md border-b-4 border-amber-300 px-4 py-3 sticky top-0 z-40 shadow-sm">
+        <div class="max-w-5xl mx-auto flex justify-between items-center">
+            
+            <!-- Logo & Game Title -->
+            <div class="flex items-center space-x-3">
+                <div class="w-12 h-12 bg-gradient-to-tr from-amber-400 to-orange-500 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg transform -rotate-3 hover:rotate-0 transition">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl sm:text-2xl font-black bg-gradient-to-r from-amber-600 via-emerald-600 to-indigo-600 bg-clip-text text-transparent tracking-wide">
+                        數字塗鴉大冒險
+                    </h1>
+                    <p id="headerSubtitle" class="text-xs text-slate-500 font-bold hidden sm:block">十位填綠色 🟢 個位填藍色 🔵 廣東話聽讀</p>
+                </div>
+            </div>
+
+            <!-- Stats & Controls -->
+            <div class="flex items-center space-x-2 sm:space-x-4">
+                <!-- Stars & Combo -->
+                <div class="bg-amber-100 border-2 border-amber-300 px-3 py-1.5 rounded-2xl flex items-center space-x-2 shadow-inner">
+                    <i class="fa-solid fa-star text-amber-500 text-xl animate-bounce"></i>
+                    <span id="scoreText" class="text-xl font-black text-amber-900">0</span>
+                </div>
+
+                <div id="comboBadge" class="hidden bg-gradient-to-r from-pink-500 to-rose-500 text-white px-3 py-1.5 rounded-2xl font-black text-xs sm:text-sm shadow-md animate-pulse">
+                    <i class="fa-solid fa-fire mr-1"></i><span id="comboText">2x Combo</span>
+                </div>
+
+                <!-- Settings Button -->
+                <button id="openSettingsBtn" class="bg-slate-100 hover:bg-slate-200 text-slate-700 w-11 h-11 rounded-2xl border-2 border-slate-300 flex items-center justify-center transition active:scale-90" title="設定數字範圍">
+                    <i class="fa-solid fa-gear text-lg"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Interactive Area -->
+    <main class="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 flex flex-col items-center justify-center space-y-6">
+        
+        <!-- Quick Rules Header -->
+        <div class="w-full max-w-2xl bg-white/90 backdrop-blur rounded-2xl p-3.5 shadow-md border-2 border-indigo-100 flex items-center justify-around text-xs sm:text-sm font-bold">
+            <div id="ruleHundredsTag" class="hidden items-center space-x-2 bg-red-50 text-red-700 px-3.5 py-1.5 rounded-xl border border-red-200">
+                <span class="w-4 h-4 rounded-full bg-red-500 inline-block shadow-sm"></span>
+                <span>百位 = 紅色</span>
+            </div>
+            <div id="ruleTensTag" class="flex items-center space-x-2 bg-emerald-50 text-emerald-700 px-3.5 py-1.5 rounded-xl border border-emerald-200">
+                <span class="w-4 h-4 rounded-full bg-emerald-500 inline-block shadow-sm"></span>
+                <span>十位 = 綠色</span>
+            </div>
+            <div id="ruleUnitsTag" class="flex items-center space-x-2 bg-blue-50 text-blue-700 px-3.5 py-1.5 rounded-xl border border-blue-200">
+                <span class="w-4 h-4 rounded-full bg-blue-500 inline-block shadow-sm"></span>
+                <span>個位 = 藍色</span>
+            </div>
+        </div>
+
+        <!-- Single Unified Board Container with Pens Placed Directly Next to Numbers -->
+        <div class="w-full max-w-2xl bg-white/80 backdrop-blur-xl rounded-3xl p-6 sm:p-8 shadow-2xl border-4 border-white/80 relative flex flex-col items-center justify-center">
+            
+            <!-- Mascot & Speech Dialog Box -->
+            <div class="flex items-center space-x-3 mb-6 bg-slate-50/90 border-2 border-indigo-100 px-5 py-2.5 rounded-full shadow-sm animate-mascot">
+                <div id="mascotIcon" class="text-3xl text-indigo-500">
+                    <i class="fa-solid fa-cat"></i>
+                </div>
+                <span id="mascotSpeech" class="text-sm sm:text-base font-bold text-slate-700">
+                    請用彩色筆把數字塗上對應的顏色吧！
+                </span>
+            </div>
+
+            <!-- Unified Single Number Box + Pens Side-by-Side Toolbar -->
+            <div class="w-full flex flex-col md:flex-row items-center justify-center gap-4 sm:gap-6 my-2">
+                
+                <!-- The single continuous number display -->
+                <div id="unifiedNumberCard" class="unified-number-box w-full max-w-sm py-8 px-6 rounded-3xl border-4 border-indigo-200 flex items-center justify-center relative overflow-hidden transition-all duration-300 min-h-[160px]">
+                    <!-- Background Grid Pattern Accent -->
+                    <div class="absolute inset-0 opacity-5 bg-[radial-gradient(#4f46e5_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none"></div>
+                    
+                    <!-- The single continuous number display -->
+                    <div id="numberDisplayContainer" class="font-black text-7xl sm:text-8xl tracking-tight text-slate-800 select-none flex items-center justify-center z-10">
+                        <!-- Individual digit spans generated via JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Color Pens Toolbar Located Right Beside Number Card -->
+                <div class="flex md:flex-col flex-wrap justify-center gap-2.5 w-full md:w-auto">
+                    
+                    <!-- Red Pen (Hundreds) - Dynamically toggled -->
+                    <div id="penHundredsCard" class="crayon-card hidden cursor-grab active:cursor-grabbing bg-red-50 hover:bg-red-100 border-2 border-red-300 rounded-2xl p-3 flex items-center space-x-3 shadow-sm min-w-[130px]" draggable="true" data-pen="hundreds">
+                        <div class="w-10 h-10 rounded-xl bg-red-500 text-white flex items-center justify-center text-xl shadow transform -rotate-6 pointer-events-none">
+                            <i class="fa-solid fa-pen-paintbrush"></i>
+                        </div>
+                        <div class="text-left pointer-events-none">
+                            <span class="block text-sm font-black text-red-600">百位筆</span>
+                            <span class="text-[11px] text-red-400 font-bold">紅色</span>
+                        </div>
+                    </div>
+
+                    <!-- Green Pen (Tens) -->
+                    <div id="penTensCard" class="crayon-card cursor-grab active:cursor-grabbing bg-emerald-50 hover:bg-emerald-100 border-2 border-emerald-300 rounded-2xl p-3 flex items-center space-x-3 shadow-sm min-w-[130px]" draggable="true" data-pen="tens">
+                        <div class="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center text-xl shadow transform -rotate-6 pointer-events-none">
+                            <i class="fa-solid fa-pen-paintbrush"></i>
+                        </div>
+                        <div class="text-left pointer-events-none">
+                            <span class="block text-sm font-black text-emerald-700">十位筆</span>
+                            <span class="text-[11px] text-emerald-500 font-bold">綠色</span>
+                        </div>
+                    </div>
+
+                    <!-- Blue Pen (Units) -->
+                    <div id="penUnitsCard" class="crayon-card cursor-grab active:cursor-grabbing bg-blue-50 hover:bg-blue-100 border-2 border-blue-300 rounded-2xl p-3 flex items-center space-x-3 shadow-sm min-w-[130px]" draggable="true" data-pen="units">
+                        <div class="w-10 h-10 rounded-xl bg-blue-500 text-white flex items-center justify-center text-xl shadow transform -rotate-6 pointer-events-none">
+                            <i class="fa-solid fa-pen-paintbrush"></i>
+                        </div>
+                        <div class="text-left pointer-events-none">
+                            <span class="block text-sm font-black text-blue-700">個位筆</span>
+                            <span class="text-[11px] text-blue-400 font-bold">藍色</span>
+                        </div>
+                    </div>
+
+                    <!-- Eraser -->
+                    <div id="penEraserCard" class="crayon-card cursor-grab active:cursor-grabbing bg-slate-100 hover:bg-slate-200 border-2 border-slate-300 rounded-2xl p-3 flex items-center space-x-3 shadow-sm min-w-[130px]" draggable="true" data-pen="eraser">
+                        <div class="w-10 h-10 rounded-xl bg-slate-400 text-white flex items-center justify-center text-xl shadow pointer-events-none">
+                            <i class="fa-solid fa-eraser"></i>
+                        </div>
+                        <div class="text-left pointer-events-none">
+                            <span class="block text-sm font-black text-slate-700">橡皮擦</span>
+                            <span class="text-[11px] text-slate-400 font-bold">清除顏色</span>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Action & Reset Buttons -->
+            <div class="flex items-center justify-between gap-3 w-full max-w-md mt-4 pt-3 border-t-2 border-slate-100">
+                <button id="resetColorsBtn" class="bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 px-4 rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 border border-slate-300 transition">
+                    <i class="fa-solid fa-rotate-left"></i>
+                    <span>清除塗色</span>
+                </button>
+                <button id="skipQuestionBtn" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 py-2.5 px-4 rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 border border-indigo-200 transition">
+                    <i class="fa-solid fa-forward"></i>
+                    <span>跳過換題</span>
+                </button>
+            </div>
+
+            <!-- Correct Answer Feedback Banner & Speech Button -->
+            <div id="resultSpeechBox" class="hidden flex-col items-center space-y-3 mt-6 animate-pop">
+                <div class="bg-gradient-to-r from-amber-100 to-orange-100 border-2 border-amber-400 rounded-2xl px-6 py-3.5 flex items-center space-x-4 shadow-md">
+                    <button id="speakBtn" class="bg-amber-500 hover:bg-amber-600 active:scale-90 text-white w-12 h-12 rounded-2xl flex items-center justify-center text-xl shadow-lg transition">
+                        <i class="fa-solid fa-volume-high"></i>
+                    </button>
+                    <div>
+                        <p class="text-xs font-bold text-amber-700">廣東話讀音 (Cantonese)</p>
+                        <p id="cantoneseText" class="text-2xl font-black text-amber-950 tracking-wide">--</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom Action Controls -->
+            <div class="mt-6 flex items-center justify-center gap-4 w-full max-w-xs">
+                <button id="checkAnswerBtn" class="w-full bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 hover:brightness-110 text-white font-black text-xl py-3.5 px-6 rounded-2xl shadow-xl border-b-4 border-orange-700 transition active:translate-y-1 active:border-b-0 flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-circle-check text-2xl"></i>
+                    <span>確定答案</span>
+                </button>
+
+                <button id="nextQuestionBtn" class="hidden w-full bg-gradient-to-r from-emerald-400 via-teal-500 to-emerald-600 hover:brightness-110 text-white font-black text-xl py-3.5 px-6 rounded-2xl shadow-xl border-b-4 border-emerald-800 transition active:translate-y-1 active:border-b-0 items-center justify-center space-x-2">
+                    <span>下一題</span>
+                    <i class="fa-solid fa-arrow-right text-2xl"></i>
+                </button>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Floating Drag Follower Cursor Avatar -->
+    <div id="dragCursorAvatar" class="flex items-center space-x-2 bg-white px-3 py-2 rounded-2xl shadow-2xl border-2 border-amber-300">
+        <div id="avatarIconBox" class="w-10 h-10 rounded-xl flex items-center justify-center text-white text-xl shadow">
+            <i class="fa-solid fa-pen-paintbrush"></i>
+        </div>
+        <span id="avatarLabel" class="text-xs font-black pr-1">綠色筆</span>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border-4 border-amber-300 animate-pop">
+            <div class="flex justify-between items-center border-b-2 border-slate-100 pb-3 mb-4">
+                <h3 class="text-xl font-black text-slate-800 flex items-center space-x-2">
+                    <i class="fa-solid fa-sliders text-amber-500"></i>
+                    <span>遊戲設定 (數字範圍)</span>
+                </h3>
+                <button id="closeSettingsBtn" class="text-slate-400 hover:text-slate-600 text-xl">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-2">快速選擇預設範圍：</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button type="button" class="preset-btn bg-slate-100 hover:bg-amber-100 hover:text-amber-900 font-bold py-2 px-3 rounded-xl text-xs border border-slate-200 transition" data-min="10" data-max="99">10 - 99 (十位數)</button>
+                        <button type="button" class="preset-btn bg-slate-100 hover:bg-amber-100 hover:text-amber-900 font-bold py-2 px-3 rounded-xl text-xs border border-slate-200 transition" data-min="1" data-max="9">1 - 9 (個位數)</button>
+                        <button type="button" class="preset-btn bg-slate-100 hover:bg-amber-100 hover:text-amber-900 font-bold py-2 px-3 rounded-xl text-xs border border-slate-200 transition" data-min="100" data-max="999">100 - 999 (百位數)</button>
+                        <button type="button" class="preset-btn bg-slate-100 hover:bg-amber-100 hover:text-amber-900 font-bold py-2 px-3 rounded-xl text-xs border border-slate-200 transition" data-min="1" data-max="99">1 - 99 (混合)</button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1">最小值 (Min):</label>
+                        <input type="number" id="minInput" min="1" max="998" value="10" class="w-full bg-slate-50 border-2 border-slate-200 rounded-xl p-2 font-black text-center text-slate-800 focus:outline-none focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 mb-1">最大值 (Max):</label>
+                        <input type="number" id="maxInput" min="2" max="999" value="99" class="w-full bg-slate-50 border-2 border-slate-200 rounded-xl p-2 font-black text-center text-slate-800 focus:outline-none focus:border-indigo-500">
+                    </div>
+                </div>
+
+                <!-- Font Selection & Custom Font Upload Section -->
+                <div class="border-t-2 border-slate-100 pt-3 mt-3">
+                    <label class="block text-xs font-bold text-slate-600 mb-2">
+                        <i class="fa-solid fa-font text-indigo-500 mr-1"></i>數字顯示字體風格：
+                    </label>
+                    <div class="grid grid-cols-2 gap-2 mb-2">
+                        <button type="button" class="font-preset-btn bg-amber-100 border-2 border-amber-400 text-amber-900 font-bold py-1.5 px-2 rounded-xl text-xs transition" data-font="'Fredoka', 'Noto Sans TC', sans-serif">圓潤可愛 (預設)</button>
+                        <button type="button" class="font-preset-btn bg-slate-100 hover:bg-amber-50 font-bold py-1.5 px-2 rounded-xl text-xs border border-slate-200 transition" data-font="'Zen Maru Gothic', sans-serif">日系圓體</button>
+                        <button type="button" class="font-preset-btn bg-slate-100 hover:bg-amber-50 font-bold py-1.5 px-2 rounded-xl text-xs border border-slate-200 transition" data-font="'Chakra Petch', sans-serif">科技方體</button>
+                        <button type="button" class="font-preset-btn bg-slate-100 hover:bg-amber-50 font-bold py-1.5 px-2 rounded-xl text-xs border border-slate-200 transition" data-font="'M PLUS Rounded 1c', sans-serif">柔和黑體</button>
+                    </div>
+                    <label class="block text-xs text-slate-500 mb-1 font-bold">上傳您的電腦字體檔案 (.ttf, .otf, .woff):</label>
+                    <input type="file" id="fontFileInput" accept=".ttf,.otf,.woff,.woff2" class="block w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer">
+                    <p id="fontStatusText" class="text-[10px] text-emerald-600 font-bold mt-1.5 hidden"><i class="fa-solid fa-circle-check mr-1"></i>已成功套用自訂字體！</p>
+                </div>
+
+                <button id="saveSettingsBtn" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-black py-3 rounded-2xl shadow-lg transition active:scale-95">
+                    儲存並重新開始
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fireworks Canvas for Visual Celebrations -->
+    <canvas id="fireworksCanvas" class="pointer-events-none fixed inset-0 z-50 w-full h-full"></canvas>
+
+    <script>
+        // Game State Management
+        const gameState = {
+            minNum: 10,
+            maxNum: 99,
+            currentNumber: 0,
+            digits: [], // Array of digit objects { val, place: 'hundreds'|'tens'|'units', color: 'none'|'hundreds'|'tens'|'units' }
+            selectedPen: 'tens', // Default selected pen
+            score: 0,
+            combo: 0,
+            draggedPen: null
+        };
+
+        // Web Audio API Synthesizer for Fun Sound Effects
+        const AudioEngine = {
+            ctx: null,
+            init() {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    if (AudioContext) this.ctx = new AudioContext();
+                }
+            },
+            playPop() {
+                this.init();
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(400, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(800, this.ctx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.1);
+            },
+            playPaint() {
+                this.init();
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(300, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(600, this.ctx.currentTime + 0.12);
+                gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.12);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.12);
+            },
+            playCorrect() {
+                this.init();
+                if (!this.ctx) return;
+                const now = this.ctx.currentTime;
+                [523.25, 659.25, 783.99, 1046.50].forEach((freq, idx) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.value = freq;
+                    gain.gain.setValueAtTime(0.2, now + idx * 0.08);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.25);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now + idx * 0.08);
+                    osc.stop(now + idx * 0.08 + 0.25);
+                });
+            },
+            playWrong() {
+                this.init();
+                if (!this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(220, now);
+                osc.frequency.linearRampToValueAtTime(150, now + 0.25);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.25);
+            }
+        };
+
+        // Cantonese Numerals Mapping logic
+        const cantoneseMap = { 0:'零', 1:'一', 2:'二', 3:'三', 4:'四', 5:'五', 6:'六', 7:'七', 8:'八', 9:'九' };
+
+        function numberToCantonese(num) {
+            if (num <= 10) return num === 10 ? '十' : cantoneseMap[num];
+            
+            if (num < 100) {
+                const tens = Math.floor(num / 10);
+                const units = num % 10;
+                const tensStr = tens === 1 ? '十' : cantoneseMap[tens] + '十';
+                const unitsStr = units === 0 ? '' : cantoneseMap[units];
+                return tensStr + unitsStr;
+            }
+
+            const hundreds = Math.floor(num / 100);
+            const remainder = num % 100;
+            const tens = Math.floor(remainder / 10);
+            const units = remainder % 10;
+
+            let res = cantoneseMap[hundreds] + '百';
+            if (remainder === 0) return res;
+            if (remainder < 10) return res + '零' + cantoneseMap[units];
+            if (remainder < 20) return res + '一十' + (units ? cantoneseMap[units] : '');
+            return res + cantoneseMap[tens] + '十' + (units ? cantoneseMap[units] : '');
+        }
+
+        function speakCantonese(text) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel(); // Stop ongoing speech
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'zh-HK';
+                utterance.rate = 0.85; // Slightly slower for clear learning
+                
+                // Try finding Cantonese voice
+                const voices = window.speechSynthesis.getVoices();
+                const cantoneseVoice = voices.find(v => v.lang.includes('HK') || v.lang.includes('yue'));
+                if (cantoneseVoice) utterance.voice = cantoneseVoice;
+
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
+        // Render unified digit elements inside number display box
+        function renderUnifiedNumber() {
+            const container = document.getElementById('numberDisplayContainer');
+            if (!container) return;
+            container.innerHTML = '';
+
+            gameState.digits.forEach((digitObj, index) => {
+                const span = document.createElement('span');
+                span.className = `digit-char digit-color-${digitObj.color}`;
+                span.innerText = digitObj.val;
+                span.dataset.index = index;
+
+                // Click / Tap to paint with current selected pen
+                span.addEventListener('click', () => {
+                    applyColorToDigit(index, gameState.selectedPen);
+                });
+
+                // Drag over / drop target handlers
+                span.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    span.classList.add('drag-hover');
+                });
+
+                span.addEventListener('dragleave', () => {
+                    span.classList.remove('drag-hover');
+                });
+
+                span.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    span.classList.remove('drag-hover');
+                    const pen = e.dataTransfer.getData('text/plain') || gameState.draggedPen;
+                    if (pen) {
+                        applyColorToDigit(index, pen);
+                    }
+                });
+
+                container.appendChild(span);
+            });
+        }
+
+        function applyColorToDigit(index, penType) {
+            if (index < 0 || index >= gameState.digits.length) return;
+            
+            if (penType === 'eraser') {
+                gameState.digits[index].color = 'none';
+            } else {
+                gameState.digits[index].color = penType;
+            }
+            
+            AudioEngine.playPaint();
+            renderUnifiedNumber();
+        }
+
+        function generateQuestion() {
+            const min = Math.max(1, gameState.minNum);
+            const max = Math.min(999, gameState.maxNum);
+            const num = Math.floor(Math.random() * (max - min + 1)) + min;
+            
+            gameState.currentNumber = num;
+            gameState.digits = [];
+
+            const str = num.toString();
+            const len = str.length;
+
+            for (let i = 0; i < len; i++) {
+                const val = str[i];
+                let place = 'units';
+                if (len - 1 - i === 1) place = 'tens';
+                if (len - 1 - i === 2) place = 'hundreds';
+
+                gameState.digits.push({
+                    val: val,
+                    place: place,
+                    color: 'none'
+                });
+            }
+
+            // Check if Hundreds place is included in the current configuration (max >= 100)
+            const hasHundreds = max >= 100;
+            const ruleHundredsTag = document.getElementById('ruleHundredsTag');
+            const penHundredsCard = document.getElementById('penHundredsCard');
+            const headerSubtitle = document.getElementById('headerSubtitle');
+
+            if (hasHundreds) {
+                ruleHundredsTag.classList.remove('hidden');
+                ruleHundredsTag.classList.add('flex');
+                penHundredsCard.classList.remove('hidden');
+                penHundredsCard.classList.add('flex');
+                if (headerSubtitle) headerSubtitle.innerText = '百位填紅色 🔴 十位填綠色 🟢 個位填藍色 🔵 廣東話聽讀';
+            } else {
+                ruleHundredsTag.classList.add('hidden');
+                ruleHundredsTag.classList.remove('flex');
+                penHundredsCard.classList.add('hidden');
+                penHundredsCard.classList.remove('flex');
+                if (headerSubtitle) headerSubtitle.innerText = '十位填綠色 🟢 個位填藍色 🔵 廣東話聽讀';
+
+                // If hundreds pen was previously selected, switch to tens or units
+                if (gameState.selectedPen === 'hundreds') {
+                    selectPen(len > 1 ? 'tens' : 'units');
+                }
+            }
+
+            document.getElementById('resultSpeechBox').classList.add('hidden');
+            document.getElementById('checkAnswerBtn').classList.remove('hidden');
+            document.getElementById('nextQuestionBtn').classList.add('hidden');
+            document.getElementById('nextQuestionBtn').classList.remove('flex');
+
+            setMascotSpeech('請選取彩色筆，把數字塗上對應的顏色吧！', 'fa-cat');
+            renderUnifiedNumber();
+        }
+
+        function checkAnswer() {
+            let isCorrect = true;
+
+            for (let digitObj of gameState.digits) {
+                if (digitObj.color !== digitObj.place) {
+                    isCorrect = false;
+                    break;
+                }
+            }
+
+            if (isCorrect) {
+                AudioEngine.playCorrect();
+                triggerFireworks();
+
+                gameState.combo++;
+                const bonus = gameState.combo > 1 ? gameState.combo * 5 : 0;
+                gameState.score += 10 + bonus;
+                
+                document.getElementById('scoreText').innerText = gameState.score;
+
+                const comboBadge = document.getElementById('comboBadge');
+                if (gameState.combo >= 2) {
+                    comboBadge.classList.remove('hidden');
+                    document.getElementById('comboText').innerText = `${gameState.combo}x 連勝!`;
+                }
+
+                const cantoneseText = numberToCantonese(gameState.currentNumber);
+                document.getElementById('cantoneseText').innerText = `${gameState.currentNumber} (${cantoneseText})`;
+                
+                document.getElementById('resultSpeechBox').classList.remove('hidden');
+                document.getElementById('resultSpeechBox').classList.add('flex');
+                
+                document.getElementById('checkAnswerBtn').classList.add('hidden');
+                document.getElementById('nextQuestionBtn').classList.remove('hidden');
+                document.getElementById('nextQuestionBtn').classList.add('flex');
+
+                setMascotSpeech(`太棒了！答對囉，這是「${cantoneseText}」！`, 'fa-face-laugh-beam');
+                speakCantonese(`答對了！這是${cantoneseText}`);
+
+            } else {
+                AudioEngine.playWrong();
+                gameState.combo = 0;
+                document.getElementById('comboBadge').classList.add('hidden');
+
+                const hasHundreds = gameState.maxNum >= 100;
+                if (hasHundreds) {
+                    setMascotSpeech('再檢查一下喔！百位要紅色，十位要綠色，個位要藍色！', 'fa-face-rolling-eyes');
+                } else {
+                    setMascotSpeech('再檢查一下喔！十位要綠色，個位要藍色！', 'fa-face-rolling-eyes');
+                }
+            }
+        }
+
+        function selectPen(penType) {
+            AudioEngine.playPop();
+            gameState.selectedPen = penType;
+
+            document.querySelectorAll('.crayon-card').forEach(card => {
+                card.classList.remove('active-pen');
+                if (card.dataset.pen === penType) {
+                    card.classList.add('active-pen');
+                }
+            });
+        }
+
+        function setupPenInteractions() {
+            const crayonCards = document.querySelectorAll('.crayon-card');
+            const avatar = document.getElementById('dragCursorAvatar');
+            const avatarIconBox = document.getElementById('avatarIconBox');
+            const avatarLabel = document.getElementById('avatarLabel');
+
+            const penInfo = {
+                hundreds: { label: '百位筆 (紅色)', bg: 'bg-red-500' },
+                tens: { label: '十位筆 (綠色)', bg: 'bg-emerald-500' },
+                units: { label: '個位筆 (藍色)', bg: 'bg-blue-500' },
+                eraser: { label: '橡皮擦', bg: 'bg-slate-400' }
+            };
+
+            crayonCards.forEach(card => {
+                const pen = card.dataset.pen;
+
+                // Click to select active pen
+                card.addEventListener('click', () => {
+                    selectPen(pen);
+                });
+
+                // Desktop Drag & Drop
+                card.addEventListener('dragstart', (e) => {
+                    gameState.draggedPen = pen;
+                    e.dataTransfer.setData('text/plain', pen);
+                    selectPen(pen);
+                });
+
+                card.addEventListener('dragend', () => {
+                    gameState.draggedPen = null;
+                });
+            });
+
+            // Touch support for dragging pens on touch screens (tablets/mobile)
+            let touchPen = null;
+
+            crayonCards.forEach(card => {
+                card.addEventListener('touchstart', (e) => {
+                    const pen = card.dataset.pen;
+                    touchPen = pen;
+                    selectPen(pen);
+
+                    if (avatar && penInfo[pen]) {
+                        avatarIconBox.className = `w-10 h-10 rounded-xl flex items-center justify-center text-white text-xl shadow ${penInfo[pen].bg}`;
+                        avatarLabel.innerText = penInfo[pen].label;
+                        avatar.style.display = 'flex';
+                    }
+                }, { passive: true });
+
+                card.addEventListener('touchmove', (e) => {
+                    if (!touchPen) return;
+                    const touch = e.touches[0];
+                    if (avatar) {
+                        avatar.style.left = `${touch.clientX}px`;
+                        avatar.style.top = `${touch.clientY}px`;
+                    }
+
+                    // Highlight target digit if touch is over it
+                    const elem = document.elementFromPoint(touch.clientX, touch.clientY);
+                    document.querySelectorAll('.digit-char').forEach(d => d.classList.remove('drag-hover'));
+                    if (elem && elem.classList.contains('digit-char')) {
+                        elem.classList.add('drag-hover');
+                    }
+                }, { passive: true });
+
+                card.addEventListener('touchend', (e) => {
+                    if (!touchPen) return;
+                    const touch = e.changedTouches[0];
+                    const elem = document.elementFromPoint(touch.clientX, touch.clientY);
+
+                    if (elem && elem.classList.contains('digit-char')) {
+                        const idx = parseInt(elem.dataset.index, 10);
+                        if (!isNaN(idx)) {
+                            applyColorToDigit(idx, touchPen);
+                        }
+                    }
+
+                    document.querySelectorAll('.digit-char').forEach(d => d.classList.remove('drag-hover'));
+                    if (avatar) avatar.style.display = 'none';
+                    touchPen = null;
+                });
+            });
+        }
+
+        function setMascotSpeech(text, iconClass = 'fa-cat') {
+            document.getElementById('mascotSpeech').innerText = text;
+            document.getElementById('mascotIcon').innerHTML = `<i class="fa-solid ${iconClass}"></i>`;
+        }
+
+        function triggerFireworks() {
+            const canvas = document.getElementById('fireworksCanvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            const particles = [];
+            const colors = ['#ef4444', '#10b981', '#3b82f6', '#f59e0b', '#ec4899', '#8b5cf6'];
+
+            for (let i = 0; i < 80; i++) {
+                particles.push({
+                    x: canvas.width / 2,
+                    y: canvas.height / 2,
+                    vx: (Math.random() - 0.5) * 12,
+                    vy: (Math.random() - 0.5) * 12 - 3,
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    radius: Math.random() * 6 + 3,
+                    alpha: 1
+                });
+            }
+
+            function animate() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                let alive = false;
+
+                particles.forEach(p => {
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.vy += 0.15; // gravity
+                    p.alpha -= 0.015;
+
+                    if (p.alpha > 0) {
+                        alive = true;
+                        ctx.beginPath();
+                        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                        ctx.fillStyle = p.color;
+                        ctx.globalAlpha = p.alpha;
+                        ctx.fill();
+                    }
+                });
+
+                if (alive) requestAnimationFrame(animate);
+            }
+            animate();
+        }
+
+        window.onload = function() {
+            // Setup Pen interactions and initial selection
+            setupPenInteractions();
+            selectPen('tens');
+
+            // Button Event Listeners
+            document.getElementById('checkAnswerBtn').addEventListener('click', checkAnswer);
+            document.getElementById('nextQuestionBtn').addEventListener('click', generateQuestion);
+            document.getElementById('skipQuestionBtn').addEventListener('click', generateQuestion);
+
+            document.getElementById('resetColorsBtn').addEventListener('click', () => {
+                AudioEngine.playPop();
+                gameState.digits.forEach(d => d.color = 'none');
+                renderUnifiedNumber();
+            });
+
+            document.getElementById('speakBtn').addEventListener('click', () => {
+                const text = numberToCantonese(gameState.currentNumber);
+                speakCantonese(text);
+            });
+
+            // Settings Modal
+            const modal = document.getElementById('settingsModal');
+            document.getElementById('openSettingsBtn').addEventListener('click', () => modal.classList.remove('hidden'));
+            document.getElementById('closeSettingsBtn').addEventListener('click', () => modal.classList.add('hidden'));
+
+            // Font preset selector handlers
+            document.querySelectorAll('.font-preset-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('.font-preset-btn').forEach(b => {
+                        b.classList.remove('bg-amber-100', 'border-2', 'border-amber-400', 'text-amber-900');
+                        b.classList.add('bg-slate-100', 'border', 'border-slate-200');
+                    });
+                    const target = e.currentTarget;
+                    target.classList.remove('bg-slate-100', 'border-slate-200');
+                    target.classList.add('bg-amber-100', 'border-2', 'border-amber-400', 'text-amber-900');
+                    
+                    const selectedFont = target.dataset.font;
+                    document.getElementById('numberDisplayContainer').style.fontFamily = selectedFont;
+                    AudioEngine.playPop();
+                });
+            });
+
+            // Dynamic Font File Reader
+            document.getElementById('fontFileInput').addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    try {
+                        const font = new FontFace('CustomUserFont', evt.target.result);
+                        font.load().then(function(loadedFont) {
+                            document.fonts.add(loadedFont);
+                            document.getElementById('numberDisplayContainer').style.fontFamily = "'CustomUserFont', sans-serif";
+                            const status = document.getElementById('fontStatusText');
+                            status.classList.remove('hidden');
+                            status.innerHTML = `<i class="fa-solid fa-circle-check mr-1"></i>已成功載入字體：<strong>${file.name}</strong>`;
+                            AudioEngine.playPop();
+                        }).catch(function() {
+                            alert('字體載入失敗，請檢查字體檔案格式！');
+                        });
+                    } catch (err) {
+                        alert('字體解析失敗！');
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            });
+
+            document.querySelectorAll('.preset-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.getElementById('minInput').value = e.target.dataset.min;
+                    document.getElementById('maxInput').value = e.target.dataset.max;
+                });
+            });
+
+            document.getElementById('saveSettingsBtn').addEventListener('click', () => {
+                const minVal = parseInt(document.getElementById('minInput').value) || 1;
+                const maxVal = parseInt(document.getElementById('maxInput').value) || 99;
+
+                if (minVal >= maxVal) {
+                    alert('最小值必須小於最大值！');
+                    return;
+                }
+
+                gameState.minNum = minVal;
+                gameState.maxNum = maxVal;
+                modal.classList.add('hidden');
+                generateQuestion();
+            });
+
+            // Generate initial game question
+            generateQuestion();
+        };
+    </script>
+</body>
+</html>

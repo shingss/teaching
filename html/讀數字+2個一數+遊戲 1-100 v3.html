@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>廣東話數數小樂園 Cantonese Counting Playground</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Noto+Sans+HK:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans HK', 'Fredoka', sans-serif;
+            background: linear-gradient(135deg, #e0f2fe 0%, #f0fdf4 50%, #fef3c7 100%);
+            min-height: 100vh;
+        }
+
+        /* Custom scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.05);
+            border-radius: 8px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #94a3b8;
+            border-radius: 8px;
+        }
+
+        /* Dynamic Grid Layout Classes */
+        .grid-cols-5-custom {
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+        }
+        .grid-cols-10-custom {
+            grid-template-columns: repeat(10, minmax(0, 1fr));
+        }
+
+        /* Adjust button sizes for 10-column mode on mobile */
+        .grid-cols-10-custom .number-btn {
+            font-size: 0.75rem;
+            padding: 0.1rem;
+        }
+        @media (min-width: 640px) {
+            .grid-cols-10-custom .number-btn {
+                font-size: 1.125rem;
+            }
+        }
+
+        /* Number Circle Animations */
+        .number-btn {
+            transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .number-btn:hover {
+            transform: scale(1.08) translateY(-2px);
+            box-shadow: 0 8px 12px -2px rgba(0, 0, 0, 0.15);
+        }
+        .number-btn:active {
+            transform: scale(0.95);
+        }
+        .number-btn.active {
+            animation: pulse-ring 1.5s infinite;
+        }
+        .number-btn.non-step {
+            opacity: 0.25;
+            filter: grayscale(60%);
+        }
+
+        /* Hide non-step numbers when mode enabled */
+        .hide-non-step .non-step {
+            display: none !important;
+        }
+
+        @keyframes pulse-ring {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        /* 3D 立體積木風格 */
+        .unit-cube, .ten-rod-seg {
+            box-shadow: 
+                inset 1px 1px 0px rgba(255, 255, 255, 0.8),
+                inset -1px -1px 0px rgba(0, 0, 0, 0.25),
+                1px 2px 3px rgba(0, 0, 0, 0.15);
+            transition: all 0.15s ease;
+        }
+
+        /* Confetti Canvas overlay */
+        #confetti-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body class="text-slate-800 antialiased p-3 sm:p-6 flex flex-col items-center justify-between min-h-screen">
+
+    <canvas id="confetti-canvas"></canvas>
+
+    <!-- Top Header Navigation -->
+    <header class="w-full max-w-6xl flex flex-col md:flex-row items-center justify-between bg-white/90 backdrop-blur-md rounded-2xl p-4 shadow-md mb-4 border border-white/60 gap-4">
+        <div class="flex items-center gap-3">
+            <div class="bg-amber-400 text-white p-3 rounded-2xl shadow-inner text-2xl sm:text-3xl font-black flex items-center justify-center">
+                🔢
+            </div>
+            <div>
+                <h1 class="text-2xl sm:text-3xl font-black text-slate-800 tracking-wide flex items-center gap-2">
+                    廣東話數數小樂園
+                </h1>
+            </div>
+        </div>
+
+        <!-- Mode Selectors & Floating Settings Toggle Button -->
+        <div class="flex flex-wrap gap-2 justify-center items-center">
+            <button id="mode-explore" onclick="switchGameMode('explore')" class="px-3.5 py-2 rounded-xl font-bold text-xs sm:text-sm shadow-sm transition-all bg-indigo-600 text-white hover:bg-indigo-700">
+                💡 自由數數
+            </button>
+            <button id="mode-quiz-find" onclick="switchGameMode('quiz-find')" class="px-3.5 py-2 rounded-xl font-bold text-xs sm:text-sm shadow-sm transition-all bg-slate-100 text-slate-700 hover:bg-slate-200">
+                👂 聽數搵數字
+            </button>
+            <button id="mode-quiz-count" onclick="switchGameMode('quiz-count')" class="px-3.5 py-2 rounded-xl font-bold text-xs sm:text-sm shadow-sm transition-all bg-slate-100 text-slate-700 hover:bg-slate-200">
+                🧱 睇數粒揀數字
+            </button>
+            
+            <!-- Open Floating Settings Window Button -->
+            <button onclick="openSettingsModal()" class="px-3.5 py-2 rounded-xl font-bold text-xs sm:text-sm shadow-sm transition-all bg-amber-400 text-slate-900 hover:bg-amber-500 active:scale-95 flex items-center gap-1.5">
+                <span>⚙️</span>
+                <span>設定</span>
+            </button>
+        </div>
+    </header>
+
+    <main class="w-full max-w-6xl flex flex-col gap-4 flex-grow">
+
+        <!-- 1. 上方主要展示區：當前數字 + 數棒數粒 -->
+        <section class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            
+            <!-- 當前數字卡片 -->
+            <div class="lg:col-span-4 bg-white rounded-3xl p-5 shadow-xl border border-white/80 flex flex-col items-center justify-between text-center relative overflow-hidden min-h-[300px]">
+                <div class="absolute top-3 left-3 bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full text-xs font-bold">
+                    當前數字
+                </div>
+                
+                <!-- Cantonese TTS Status Indicator -->
+                <div id="tts-status" class="absolute top-3 right-3 text-xs px-2.5 py-1 rounded-full font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                    <span>廣東話就緒</span>
+                </div>
+
+                <div class="my-auto pt-6 pb-2 flex flex-col items-center">
+                    <div id="display-number-big" class="text-6xl sm:text-7xl font-black text-indigo-600 tracking-tight transition-all duration-200 hover:scale-105 cursor-pointer" onclick="speakCurrentNumber()">
+                        1
+                    </div>
+                    <div id="display-chinese-text" class="text-2xl sm:text-3xl font-bold text-slate-700 mt-1">
+                        一
+                    </div>
+                </div>
+
+                <!-- Action Button for Speech -->
+                <button onclick="speakCurrentNumber()" class="w-full py-2.5 bg-amber-400 hover:bg-amber-500 text-slate-900 rounded-2xl font-black text-sm shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 active:scale-98">
+                    <span>🔊 廣東話發音</span>
+                </button>
+            </div>
+
+            <!-- 視覺輔助：數棒與數粒（純積木展示，無外框） -->
+            <div class="lg:col-span-8 bg-white/90 backdrop-blur-md rounded-3xl p-4 sm:p-5 shadow-xl border border-white/80 flex flex-col justify-end min-h-[320px]">
+                <div class="flex items-center justify-between mb-2 px-1">
+                    <div class="text-xs font-bold text-slate-500 flex items-center gap-1.5">
+                        <span>🧊</span> 3D 立體數棒與數粒 (由下而上堆疊)
+                    </div>
+                    <div class="text-[11px] font-bold text-slate-400">
+                        藍色條 = 10，黃色粒 = 1
+                    </div>
+                </div>
+                <div id="visual-blocks-container" class="flex-grow flex items-end justify-center p-4 bg-slate-50/80 rounded-2xl border border-slate-200/80 min-h-[290px] overflow-x-auto">
+                    <!-- Blocks injected dynamically via JavaScript -->
+                </div>
+            </div>
+
+        </section>
+
+        <!-- 2. 下方數字圓圈網格 -->
+        <section class="bg-white/90 backdrop-blur-md rounded-3xl p-4 sm:p-5 shadow-xl border border-white/80 flex flex-col flex-grow min-h-[350px]">
+            
+            <div class="flex items-center justify-between mb-3">
+                <div id="grid-header-title" class="font-bold text-slate-700 text-sm sm:text-base flex items-center gap-2">
+                    ⭕ 按數字圓圈聽廣東話讀音
+                </div>
+                <div id="quiz-score-badge" class="hidden bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-xs font-black">
+                    得分: <span id="quiz-score">0</span>
+                </div>
+            </div>
+
+            <div id="quiz-banner" class="hidden mb-3 p-3 bg-indigo-50 border border-indigo-200 rounded-2xl flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span class="text-2xl animate-bounce">🎯</span>
+                    <div>
+                        <div id="quiz-question-text" class="text-sm font-extrabold text-indigo-900">請聽音搵數字</div>
+                        <div class="text-xs text-indigo-600 font-medium">按圓圈回答</div>
+                    </div>
+                </div>
+                <button onclick="playQuizQuestionAudio()" class="px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-xl shadow-sm hover:bg-indigo-700 flex items-center gap-1">
+                    🔊 重聽發音
+                </button>
+            </div>
+
+            <div id="numbers-grid" class="flex-grow grid grid-cols-10-custom gap-2 sm:gap-2.5 p-2 overflow-y-auto max-h-[400px] bg-slate-50/50 rounded-2xl border border-slate-100">
+                <!-- Circle Buttons injected dynamically -->
+            </div>
+
+        </section>
+
+    </main>
+
+
+    <!-- 3. 浮動設定小視窗 -->
+    <div id="settings-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-all duration-300 opacity-0 pointer-events-none" onclick="handleModalBackdropClick(event)">
+        <div id="settings-modal-card" class="bg-white rounded-3xl p-5 sm:p-6 shadow-2xl border border-white max-w-lg w-full transform scale-95 transition-all duration-300 flex flex-col gap-4">
+            
+            <div class="flex items-center justify-between border-b pb-3">
+                <h3 class="text-base sm:text-lg font-black text-slate-800 flex items-center gap-2">
+                    ⚙️ 遊戲設定
+                </h3>
+                <button onclick="closeSettingsModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold flex items-center justify-center transition-all">
+                    ✕
+                </button>
+            </div>
+
+            <!-- (1) 數數範圍設定 -->
+            <div class="flex flex-col gap-2">
+                <label class="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                    🎯 數數範圍設定
+                </label>
+                <div class="flex flex-wrap gap-2 items-center">
+                    <button onclick="setNumberRangePreset(1, 20)" id="range-btn-20" class="range-btn px-3 py-1.5 rounded-xl font-bold text-xs transition-all bg-indigo-600 text-white shadow-sm">
+                        1 ~ 20
+                    </button>
+                    <button onclick="setNumberRangePreset(1, 50)" id="range-btn-50" class="range-btn px-3 py-1.5 rounded-xl font-bold text-xs transition-all bg-slate-100 text-slate-600 hover:bg-slate-200">
+                        1 ~ 50
+                    </button>
+                    <button onclick="setNumberRangePreset(1, 100)" id="range-btn-100" class="range-btn px-3 py-1.5 rounded-xl font-bold text-xs transition-all bg-slate-100 text-slate-600 hover:bg-slate-200">
+                        1 ~ 100
+                    </button>
+                    
+                    <div class="flex items-center bg-slate-100 rounded-xl px-2 py-1 gap-1 border border-slate-200">
+                        <input type="number" id="custom-min-input" min="1" max="100" value="1" class="w-10 text-center text-xs font-bold bg-white rounded border border-slate-300 focus:outline-none focus:border-indigo-600">
+                        <span class="text-xs text-slate-500">至</span>
+                        <input type="number" id="custom-max-input" min="2" max="120" value="20" class="w-10 text-center text-xs font-bold bg-white rounded border border-slate-300 focus:outline-none focus:border-indigo-600">
+                        <button onclick="applyCustomRange()" class="text-xs bg-indigo-500 text-white px-2 py-0.5 rounded-lg font-bold hover:bg-indigo-600">套用</button>
+                    </div>
+                </div>
+            </div>
+
+            <hr class="border-slate-100">
+
+            <!-- (2) 跳數設定 -->
+            <div class="flex flex-col gap-2">
+                <label class="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                    🚀 跳數模式
+                </label>
+                <div class="flex flex-wrap items-center gap-2">
+                    <div class="flex flex-wrap gap-1">
+                        <button id="step-btn-1" onclick="setStepSize(1)" class="step-btn px-2.5 py-1.5 rounded-xl font-bold text-xs bg-amber-500 text-white shadow-sm transition-all">
+                            1個一數
+                        </button>
+                        <button id="step-btn-2" onclick="setStepSize(2)" class="step-btn px-2.5 py-1.5 rounded-xl font-bold text-xs bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all">
+                            2個一數
+                        </button>
+                        <button id="step-btn-3" onclick="setStepSize(3)" class="step-btn px-2.5 py-1.5 rounded-xl font-bold text-xs bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all">
+                            3個一數
+                        </button>
+                        <button id="step-btn-5" onclick="setStepSize(5)" class="step-btn px-2.5 py-1.5 rounded-xl font-bold text-xs bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all">
+                            5個一數
+                        </button>
+                        <button id="step-btn-10" onclick="setStepSize(10)" class="step-btn px-2.5 py-1.5 rounded-xl font-bold text-xs bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all">
+                            10個一數
+                        </button>
+                    </div>
+
+                    <button id="btn-toggle-hide-nonstep" onclick="toggleHideNonStep()" class="px-2.5 py-1.5 rounded-xl font-bold text-xs bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200 transition-all flex items-center gap-1">
+                        <span id="hide-nonstep-icon">👁️</span>
+                        <span id="hide-nonstep-text">顯示灰字</span>
+                    </button>
+                </div>
+            </div>
+
+            <hr class="border-slate-100">
+
+            <!-- (3) 版面與自動朗讀控制 -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+                
+                <div class="flex flex-col gap-1.5">
+                    <label class="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                        📐 每行數字個數
+                    </label>
+                    <div class="flex items-center gap-2">
+                        <button id="cols-btn-5" onclick="setGridColumns(5)" class="px-3 py-1 rounded-xl font-bold text-xs transition-all bg-slate-100 text-slate-600 hover:bg-slate-200">
+                            一行 5 個
+                        </button>
+                        <button id="cols-btn-10" onclick="setGridColumns(10)" class="px-3 py-1 rounded-xl font-bold text-xs transition-all bg-indigo-600 text-white shadow-sm">
+                            一行 10 個
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex flex-col gap-1.5">
+                    <label class="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                        🔊 自動朗讀與語速
+                    </label>
+                    <div class="flex items-center gap-2">
+                        <button id="btn-auto-play" onclick="toggleAutoPlay()" class="flex-1 py-1.5 px-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow-md transition-all flex items-center justify-center gap-1">
+                            <span id="auto-play-icon">▶️</span>
+                            <span id="auto-play-text">自動朗讀</span>
+                        </button>
+                        
+                        <div class="flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-xl">
+                            <span class="text-xs font-bold text-slate-600 whitespace-nowrap"><span id="speed-val-text" class="text-indigo-600">1.0x</span></span>
+                            <input type="range" id="speech-rate-slider" min="0.4" max="1.6" step="0.1" value="1.0" oninput="updateSpeechRate(this.value)" class="w-16 accent-indigo-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg">
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="mt-2 text-right">
+                <button onclick="closeSettingsModal()" class="w-full sm:w-auto px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition-all">
+                    完成關閉
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Toast Notification Popup -->
+    <div id="toast-msg" class="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-slate-900/90 text-white px-5 py-3 rounded-2xl font-bold text-sm shadow-2xl opacity-0 pointer-events-none transition-all duration-300 z-50 flex items-center gap-2">
+        <span id="toast-icon">✨</span>
+        <span id="toast-text">提示訊息</span>
+    </div>
+
+    <script>
+        /* State Variables */
+        let currentMin = 1;
+        let currentMax = 20;
+        let stepSize = 1; 
+        let colsPerRow = 10; 
+        let hideNonStepNumbers = false; 
+        let currentSelectedNum = 1;
+        let currentGameMode = 'explore';
+        let speechRate = 1.0;
+        let isAutoPlaying = false;
+        let autoPlayTimer = null;
+        let quizTargetNumber = null;
+        let quizScore = 0;
+
+        const synth = window.speechSynthesis;
+        let cantoneseVoice = null;
+
+        const numToChineseMap = {
+            0: '零', 1: '一', 2: '二', 3: '三', 4: '四', 5: '五',
+            6: '六', 7: '七', 8: '八', 9: '九', 10: '十'
+        };
+
+        const circleColors = [
+            'bg-rose-500 text-white ring-rose-300',
+            'bg-sky-500 text-white ring-sky-300',
+            'bg-emerald-500 text-white ring-emerald-300',
+            'bg-amber-500 text-white ring-amber-300',
+            'bg-purple-500 text-white ring-purple-300',
+            'bg-indigo-500 text-white ring-indigo-300',
+            'bg-teal-500 text-white ring-teal-300',
+            'bg-pink-500 text-white ring-pink-300'
+        ];
+
+        window.addEventListener('DOMContentLoaded', () => {
+            initVoices();
+            if (speechSynthesis.onvoiceschanged !== undefined) {
+                speechSynthesis.onvoiceschanged = initVoices;
+            }
+
+            renderNumberGrid();
+            selectNumber(currentMin, false);
+            setupCanvasConfetti();
+        });
+
+        function openSettingsModal() {
+            const modal = document.getElementById('settings-modal');
+            const card = document.getElementById('settings-modal-card');
+            modal.classList.remove('opacity-0', 'pointer-events-none');
+            modal.classList.add('opacity-100');
+            card.classList.remove('scale-95');
+            card.classList.add('scale-100');
+        }
+
+        function closeSettingsModal() {
+            const modal = document.getElementById('settings-modal');
+            const card = document.getElementById('settings-modal-card');
+            modal.classList.remove('opacity-100');
+            modal.classList.add('opacity-0', 'pointer-events-none');
+            card.classList.remove('scale-100');
+            card.classList.add('scale-95');
+        }
+
+        function handleModalBackdropClick(e) {
+            if (e.target.id === 'settings-modal') {
+                closeSettingsModal();
+            }
+        }
+
+        function initVoices() {
+            const voices = synth.getVoices();
+            cantoneseVoice = voices.find(v => v.lang === 'zh-HK' || v.lang === 'zh_HK' || v.lang.includes('yue') || v.name.includes('Cantonese') || v.name.includes('Hong Kong')) ||
+                             voices.find(v => v.lang.startsWith('zh')) || null;
+
+            const statusEl = document.getElementById('tts-status');
+            if (cantoneseVoice) {
+                statusEl.className = 'absolute top-3 right-3 text-xs px-2.5 py-1 rounded-full font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1';
+                statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500"></span>廣東話就緒';
+            } else {
+                statusEl.className = 'absolute top-3 right-3 text-xs px-2.5 py-1 rounded-full font-bold bg-amber-100 text-amber-800 flex items-center gap-1';
+                statusEl.innerHTML = '⚠️ 預設語音';
+            }
+        }
+
+        function getCantoneseText(num) {
+            if (num === 0) return '零';
+            if (num <= 10) return numToChineseMap[num];
+            
+            if (num < 100) {
+                const tens = Math.floor(num / 10);
+                const ones = num % 10;
+                let tensText = (tens === 1 ? '十' : numToChineseMap[tens] + '十');
+                let onesText = (ones === 0 ? '' : numToChineseMap[ones]);
+                return tensText + onesText;
+            }
+
+            if (num === 100) return '一百';
+
+            if (num < 1000) {
+                const hundreds = Math.floor(num / 100);
+                const remainder = num % 100;
+                let result = numToChineseMap[hundreds] + '百';
+                if (remainder === 0) return result;
+                if (remainder < 10) {
+                    result += '零' + numToChineseMap[remainder];
+                } else {
+                    const tens = Math.floor(remainder / 10);
+                    const ones = remainder % 10;
+                    result += (tens === 1 ? '一十' : numToChineseMap[tens] + '十') + (ones === 0 ? '' : numToChineseMap[ones]);
+                }
+                return result;
+            }
+
+            return num.toString();
+        }
+
+        function speakText(text, onEndCallback = null) {
+            synth.cancel();
+
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'zh-HK';
+            utterance.rate = speechRate;
+            utterance.pitch = 1.0;
+
+            if (cantoneseVoice) {
+                utterance.voice = cantoneseVoice;
+            }
+
+            if (onEndCallback) {
+                utterance.onend = onEndCallback;
+            }
+
+            synth.speak(utterance);
+        }
+
+        function speakCurrentNumber() {
+            const spokenText = getCantoneseText(currentSelectedNum);
+            speakText(spokenText);
+        }
+
+        function isStepNumber(num) {
+            if (stepSize === 1) return true;
+            if (currentMin === 1) {
+                return num % stepSize === 0;
+            }
+            if (currentMin % stepSize === 0) {
+                return num % stepSize === 0;
+            }
+            return (num - currentMin) % stepSize === 0;
+        }
+
+        function getFirstStepNumber() {
+            for (let i = currentMin; i <= currentMax; i++) {
+                if (isStepNumber(i)) return i;
+            }
+            return currentMin;
+        }
+
+        /* 渲染積木：完全移除外圍框線與背景，只直接顯示 3D 立體積木 */
+        function renderVisualBlocks(num) {
+            const container = document.getElementById('visual-blocks-container');
+            container.innerHTML = '';
+
+            const tens = Math.floor(num / 10);
+            const ones = num % 10;
+
+            const mainWrapper = document.createElement('div');
+            mainWrapper.className = 'flex flex-row items-end justify-center gap-6 sm:gap-10 w-full h-full py-2';
+
+            // 1. 十位數棒組 (藍色)
+            if (tens > 0) {
+                const tensGroup = document.createElement('div');
+                tensGroup.className = 'flex flex-col items-center justify-end';
+
+                const rodsRow = document.createElement('div');
+                rodsRow.className = 'flex flex-row items-end gap-3 max-w-full overflow-x-auto';
+
+                for (let i = 0; i < tens; i++) {
+                    const rod = document.createElement('div');
+                    // flex-col-reverse: 由下而上堆疊，完全無外圍框與背景
+                    rod.className = 'ten-rod-container flex flex-col-reverse gap-1 transition-transform hover:scale-105 cursor-pointer';
+                    rod.onclick = () => playPopSound(1000);
+
+                    // 10 個小方塊 (尺寸：w-6 h-6 sm:w-7 sm:h-7)
+                    for (let j = 0; j < 10; j++) {
+                        const cubeSeg = document.createElement('div');
+                        cubeSeg.className = 'ten-rod-seg w-6 h-6 sm:w-7 sm:h-7 rounded-md bg-gradient-to-br from-sky-400 via-sky-500 to-sky-600 border border-sky-200 shadow-inner flex items-center justify-center text-xs text-white font-black';
+                        cubeSeg.innerText = j + 1;
+                        rod.appendChild(cubeSeg);
+                    }
+                    rodsRow.appendChild(rod);
+                }
+
+                tensGroup.appendChild(rodsRow);
+                mainWrapper.appendChild(tensGroup);
+            }
+
+            // 加號（同時有十位與個位時顯示）
+            if (tens > 0 && ones > 0) {
+                const plusSign = document.createElement('div');
+                plusSign.className = 'text-2xl font-black text-indigo-400 my-auto pb-4';
+                plusSign.innerText = '➕';
+                mainWrapper.appendChild(plusSign);
+            }
+
+            // 2. 個位數粒組 (黃色)
+            if (ones > 0 || tens === 0) {
+                const onesGroup = document.createElement('div');
+                onesGroup.className = 'flex flex-col items-center justify-end';
+
+                const columnsContainer = document.createElement('div');
+                columnsContainer.className = 'flex flex-row items-end gap-3 max-w-full overflow-x-auto';
+
+                const numOnesCols = Math.max(1, Math.ceil(ones / 10));
+
+                for (let col = 0; col < numOnesCols; col++) {
+                    const colBox = document.createElement('div');
+                    // 完全無外圍框與背景
+                    colBox.className = 'ones-col-container flex flex-col-reverse gap-1 justify-start items-center';
+
+                    const cubesInThisCol = Math.min(10, ones - col * 10);
+
+                    for (let i = 0; i < cubesInThisCol; i++) {
+                        const globalIndex = col * 10 + i + 1;
+                        const cube = document.createElement('div');
+                        cube.className = 'unit-cube w-6 h-6 sm:w-7 sm:h-7 rounded-md bg-gradient-to-br from-amber-300 via-amber-400 to-amber-500 border border-amber-600 shadow-md transition-transform hover:scale-110 cursor-pointer flex items-center justify-center text-xs text-amber-950 font-black';
+                        cube.innerText = globalIndex;
+                        cube.onclick = () => playPopSound(800 + i * 50);
+                        colBox.appendChild(cube);
+                    }
+                    columnsContainer.appendChild(colBox);
+                }
+
+                onesGroup.appendChild(columnsContainer);
+                mainWrapper.appendChild(onesGroup);
+            }
+
+            container.appendChild(mainWrapper);
+        }
+
+        function renderNumberGrid() {
+            const grid = document.getElementById('numbers-grid');
+            grid.innerHTML = '';
+
+            if (colsPerRow === 5) {
+                grid.className = "flex-grow grid grid-cols-5-custom gap-2 sm:gap-3 p-2 overflow-y-auto max-h-[400px] bg-slate-50/50 rounded-2xl border border-slate-100";
+            } else {
+                grid.className = "flex-grow grid grid-cols-10-custom gap-1.5 sm:gap-2.5 p-2 overflow-y-auto max-h-[400px] bg-slate-50/50 rounded-2xl border border-slate-100";
+            }
+
+            if (hideNonStepNumbers && stepSize > 1) {
+                grid.classList.add('hide-non-step');
+            } else {
+                grid.classList.remove('hide-non-step');
+            }
+
+            for (let i = currentMin; i <= currentMax; i++) {
+                const colorClass = circleColors[(i - currentMin) % circleColors.length];
+                const isStep = isStepNumber(i);
+
+                const btn = document.createElement('button');
+                btn.id = `num-btn-${i}`;
+                
+                let btnClasses = `number-btn ${colorClass} aspect-square rounded-full flex flex-col items-center justify-center shadow-md font-black border-2 border-white/50 relative overflow-hidden`;
+                
+                if (!isStep && stepSize > 1) {
+                    btnClasses += ' non-step';
+                }
+
+                btn.className = btnClasses;
+                btn.innerHTML = `
+                    <span>${i}</span>
+                    <span class="text-[9px] opacity-80 font-normal leading-none hidden sm:inline">${getCantoneseText(i)}</span>
+                `;
+
+                btn.onclick = () => handleNumberClick(i);
+                grid.appendChild(btn);
+            }
+
+            highlightActiveCircle(currentSelectedNum);
+        }
+
+        function selectNumber(num, speak = true) {
+            currentSelectedNum = num;
+
+            document.getElementById('display-number-big').innerText = num;
+            document.getElementById('display-chinese-text').innerText = getCantoneseText(num);
+
+            renderVisualBlocks(num);
+            highlightActiveCircle(num);
+
+            if (speak) {
+                speakCurrentNumber();
+            }
+        }
+
+        function highlightActiveCircle(num) {
+            document.querySelectorAll('.number-btn').forEach(btn => {
+                btn.classList.remove('ring-4', 'ring-amber-400', 'scale-110', 'z-10', 'active');
+            });
+
+            const activeBtn = document.getElementById(`num-btn-${num}`);
+            if (activeBtn) {
+                activeBtn.classList.add('ring-4', 'ring-amber-400', 'scale-110', 'z-10', 'active');
+                activeBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }
+
+        function handleNumberClick(num) {
+            if (currentGameMode === 'explore') {
+                stopAutoPlay();
+                selectNumber(num, true);
+            } else if (currentGameMode === 'quiz-find' || currentGameMode === 'quiz-count') {
+                checkQuizAnswer(num);
+            }
+        }
+
+        function setGridColumns(cols) {
+            colsPerRow = cols;
+
+            const btn5 = document.getElementById('cols-btn-5');
+            const btn10 = document.getElementById('cols-btn-10');
+
+            if (cols === 5) {
+                btn5.className = "px-3 py-1 rounded-xl font-bold text-xs transition-all bg-indigo-600 text-white shadow-sm";
+                btn10.className = "px-3 py-1 rounded-xl font-bold text-xs transition-all bg-slate-100 text-slate-600 hover:bg-slate-200";
+            } else {
+                btn10.className = "px-3 py-1 rounded-xl font-bold text-xs transition-all bg-indigo-600 text-white shadow-sm";
+                btn5.className = "px-3 py-1 rounded-xl font-bold text-xs transition-all bg-slate-100 text-slate-600 hover:bg-slate-200";
+            }
+
+            renderNumberGrid();
+            showToast(`已切換為：一行 ${cols} 個`, "📐");
+        }
+
+        function toggleHideNonStep() {
+            hideNonStepNumbers = !hideNonStepNumbers;
+
+            const btn = document.getElementById('btn-toggle-hide-nonstep');
+            const icon = document.getElementById('hide-nonstep-icon');
+            const text = document.getElementById('hide-nonstep-text');
+
+            if (hideNonStepNumbers) {
+                btn.className = "px-2.5 py-1.5 rounded-xl font-bold text-xs bg-rose-500 text-white shadow-sm transition-all flex items-center gap-1";
+                icon.innerText = "🙈";
+                text.innerText = "完全隱藏非跳數字";
+                showToast("已完全隱藏非跳數數字", "🙈");
+            } else {
+                btn.className = "px-2.5 py-1.5 rounded-xl font-bold text-xs bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200 transition-all flex items-center gap-1";
+                icon.innerText = "👁️";
+                text.innerText = "顯示灰字";
+                showToast("已顯示半透明非跳數字", "👁️");
+            }
+
+            renderNumberGrid();
+        }
+
+        function toggleAutoPlay() {
+            if (isAutoPlaying) {
+                stopAutoPlay();
+            } else {
+                startAutoPlay();
+            }
+        }
+
+        function startAutoPlay() {
+            if (currentGameMode !== 'explore') {
+                switchGameMode('explore');
+            }
+            
+            isAutoPlaying = true;
+            document.getElementById('auto-play-text').innerText = "暫停朗讀";
+            document.getElementById('auto-play-icon').innerText = "⏸️";
+            document.getElementById('btn-auto-play').className = "flex-1 py-1.5 px-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-xs shadow-md transition-all flex items-center justify-center gap-1";
+
+            if (!isStepNumber(currentSelectedNum)) {
+                currentSelectedNum = getFirstStepNumber();
+            }
+
+            showToast("▶️ 開始跳數朗讀", "📢");
+            readNextInAutoPlay();
+        }
+
+        function stopAutoPlay() {
+            isAutoPlaying = false;
+            if (autoPlayTimer) clearTimeout(autoPlayTimer);
+            synth.cancel();
+
+            document.getElementById('auto-play-text').innerText = "自動朗讀";
+            document.getElementById('auto-play-icon').innerText = "▶️";
+            document.getElementById('btn-auto-play').className = "flex-1 py-1.5 px-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow-md transition-all flex items-center justify-center gap-1";
+        }
+
+        function readNextInAutoPlay() {
+            if (!isAutoPlaying) return;
+
+            selectNumber(currentSelectedNum, false);
+
+            const textToSpeak = getCantoneseText(currentSelectedNum);
+            
+            speakText(textToSpeak, () => {
+                if (!isAutoPlaying) return;
+
+                const delay = Math.max(400, 1200 / speechRate);
+                
+                autoPlayTimer = setTimeout(() => {
+                    if (!isAutoPlaying) return;
+
+                    let nextNum = currentSelectedNum + stepSize;
+                    
+                    while (nextNum <= currentMax && !isStepNumber(nextNum)) {
+                        nextNum++;
+                    }
+
+                    if (nextNum > currentMax) {
+                        nextNum = getFirstStepNumber();
+                    }
+
+                    currentSelectedNum = nextNum;
+                    readNextInAutoPlay();
+                }, delay);
+            });
+        }
+
+        function updateSpeechRate(val) {
+            speechRate = parseFloat(val);
+            document.getElementById('speed-val-text').innerText = `${speechRate.toFixed(1)}x`;
+            if (isAutoPlaying) {
+                speakCurrentNumber();
+            }
+        }
+
+        function setNumberRangePreset(minVal, maxVal) {
+            stopAutoPlay();
+            currentMin = minVal;
+            currentMax = maxVal;
+            
+            document.getElementById('custom-min-input').value = minVal;
+            document.getElementById('custom-max-input').value = maxVal;
+
+            if (currentSelectedNum < currentMin || currentSelectedNum > currentMax) {
+                currentSelectedNum = currentMin;
+            }
+
+            document.querySelectorAll('.range-btn').forEach(btn => {
+                btn.className = "range-btn px-3 py-1.5 rounded-xl font-bold text-xs transition-all bg-slate-100 text-slate-600 hover:bg-slate-200";
+            });
+
+            const activeBtn = document.getElementById(`range-btn-${maxVal}`);
+            if (activeBtn && minVal === 1) {
+                activeBtn.className = "range-btn px-3 py-1.5 rounded-xl font-bold text-xs transition-all bg-indigo-600 text-white shadow-sm";
+            }
+
+            renderNumberGrid();
+            selectNumber(currentSelectedNum, false);
+            showToast(`範圍已更換：${currentMin} ~ ${currentMax}`, "🔢");
+
+            if (currentGameMode !== 'explore') {
+                generateQuizQuestion();
+            }
+        }
+
+        function applyCustomRange() {
+            const minVal = parseInt(document.getElementById('custom-min-input').value);
+            const maxVal = parseInt(document.getElementById('custom-max-input').value);
+
+            if (isNaN(minVal) || isNaN(maxVal) || minVal < 1 || maxVal <= minVal || maxVal > 120) {
+                showToast("請輸入有效的範圍（最小值需小於最大值）", "⚠️");
+                return;
+            }
+
+            setNumberRangePreset(minVal, maxVal);
+        }
+
+        function setStepSize(step) {
+            stepSize = step;
+            
+            [1, 2, 3, 5, 10].forEach(s => {
+                const btn = document.getElementById(`step-btn-${s}`);
+                if (s === step) {
+                    btn.className = "step-btn px-2.5 py-1.5 rounded-xl font-bold text-xs bg-amber-500 text-white shadow-sm transition-all";
+                } else {
+                    btn.className = "step-btn px-2.5 py-1.5 rounded-xl font-bold text-xs bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all";
+                }
+            });
+
+            renderNumberGrid();
+            showToast(`已切換至：${step}個一數`, "🚀");
+
+            if (isAutoPlaying) {
+                stopAutoPlay();
+                startAutoPlay();
+            }
+        }
+
+        function switchGameMode(mode) {
+            stopAutoPlay();
+            currentGameMode = mode;
+
+            ['explore', 'quiz-find', 'quiz-count'].forEach(m => {
+                const btn = document.getElementById(`mode-${m}`);
+                if (m === mode) {
+                    btn.className = "px-3.5 py-2 rounded-xl font-bold text-xs sm:text-sm shadow-sm transition-all bg-indigo-600 text-white";
+                } else {
+                    btn.className = "px-3.5 py-2 rounded-xl font-bold text-xs sm:text-sm shadow-sm transition-all bg-slate-100 text-slate-700 hover:bg-slate-200";
+                }
+            });
+
+            const quizBanner = document.getElementById('quiz-banner');
+            const scoreBadge = document.getElementById('quiz-score-badge');
+            const title = document.getElementById('grid-header-title');
+
+            if (mode === 'explore') {
+                quizBanner.classList.add('hidden');
+                scoreBadge.classList.add('hidden');
+                title.innerText = "⭕ 按數字圓圈聽廣東話讀音";
+                selectNumber(currentSelectedNum, false);
+            } else {
+                quizBanner.classList.remove('hidden');
+                scoreBadge.classList.remove('hidden');
+                quizScore = 0;
+                document.getElementById('quiz-score').innerText = quizScore;
+                
+                if (mode === 'quiz-find') {
+                    title.innerText = "👂 聽聲按出正確的數字圓圈";
+                } else {
+                    title.innerText = "🧱 觀察上方數棒數粒，選擇正確數字";
+                }
+                
+                generateQuizQuestion();
+            }
+        }
+
+        function generateQuizQuestion() {
+            const rangeSpan = currentMax - currentMin + 1;
+            quizTargetNumber = Math.floor(Math.random() * rangeSpan) + currentMin;
+
+            if (currentGameMode === 'quiz-find') {
+                document.getElementById('quiz-question-text').innerText = "聽聽看這是什麼數字？";
+                document.getElementById('display-number-big').innerText = "❓";
+                document.getElementById('display-chinese-text').innerText = "???";
+                document.getElementById('visual-blocks-container').innerHTML = `
+                    <div class="text-center text-slate-400 font-bold p-6 my-auto">
+                        🔒 答對後顯示數棒與數粒
+                    </div>
+                `;
+                playQuizQuestionAudio();
+            } else if (currentGameMode === 'quiz-count') {
+                document.getElementById('quiz-question-text').innerText = "數數上方的數棒同數粒，然後按答案！";
+                document.getElementById('display-number-big').innerText = "❓";
+                document.getElementById('display-chinese-text').innerText = "???";
+                renderVisualBlocks(quizTargetNumber);
+            }
+        }
+
+        function playQuizQuestionAudio() {
+            if (quizTargetNumber) {
+                speakText(getCantoneseText(quizTargetNumber));
+            }
+        }
+
+        function checkQuizAnswer(selectedNum) {
+            if (selectedNum === quizTargetNumber) {
+                quizScore += 10;
+                document.getElementById('quiz-score').innerText = quizScore;
+                playSuccessTone();
+                triggerConfetti();
+                showToast(`答對了！🎉 (+10分)`, "✅");
+
+                selectNumber(quizTargetNumber, false);
+                speakText(getCantoneseText(quizTargetNumber), () => {
+                    setTimeout(() => {
+                        if (currentGameMode !== 'explore') generateQuizQuestion();
+                    }, 1200);
+                });
+            } else {
+                playFailTone();
+                showToast(`再試一次喔！加油 💪`, "❌");
+                speakText("再試一次");
+            }
+        }
+
+        /* Web Audio Sound Synthesizer */
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playPopSound(freq = 600) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(freq / 2, audioCtx.currentTime + 0.08);
+            gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.08);
+        }
+
+        function playSuccessTone() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const now = audioCtx.currentTime;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(523.25, now);
+            osc.frequency.setValueAtTime(659.25, now + 0.1);
+            osc.frequency.setValueAtTime(783.99, now + 0.2);
+            osc.frequency.setValueAtTime(1046.50, now + 0.3);
+            gain.gain.setValueAtTime(0.2, now);
+            gain.gain.linearRampToValueAtTime(0.01, now + 0.5);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(now);
+            osc.stop(now + 0.5);
+        }
+
+        function playFailTone() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const now = audioCtx.currentTime;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(300, now);
+            osc.frequency.linearRampToValueAtTime(180, now + 0.25);
+            gain.gain.setValueAtTime(0.2, now);
+            gain.gain.linearRampToValueAtTime(0.01, now + 0.25);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(now);
+            osc.stop(now + 0.25);
+        }
+
+        function showToast(text, icon = "✨") {
+            const toast = document.getElementById('toast-msg');
+            document.getElementById('toast-text').innerText = text;
+            document.getElementById('toast-icon').innerText = icon;
+            
+            toast.classList.remove('opacity-0', 'pointer-events-none');
+            toast.classList.add('opacity-100');
+
+            setTimeout(() => {
+                toast.classList.remove('opacity-100');
+                toast.classList.add('opacity-0', 'pointer-events-none');
+            }, 2000);
+        }
+
+        /* Confetti Effect */
+        let confettiParticles = [];
+        function setupCanvasConfetti() {
+            const canvas = document.getElementById('confetti-canvas');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            window.addEventListener('resize', () => {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            });
+        }
+
+        function triggerConfetti() {
+            const canvas = document.getElementById('confetti-canvas');
+            const ctx = canvas.getContext('2d');
+            confettiParticles = [];
+
+            for (let i = 0; i < 70; i++) {
+                confettiParticles.push({
+                    x: canvas.width / 2,
+                    y: canvas.height / 2,
+                    vx: (Math.random() - 0.5) * 14,
+                    vy: (Math.random() - 0.7) * 14,
+                    color: `hsl(${Math.random() * 360}, 90%, 60%)`,
+                    size: Math.random() * 8 + 4,
+                    alpha: 1
+                });
+            }
+
+            function animateConfetti() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                let alive = false;
+
+                confettiParticles.forEach(p => {
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.vy += 0.3;
+                    p.alpha -= 0.015;
+
+                    if (p.alpha > 0) {
+                        alive = true;
+                        ctx.globalAlpha = p.alpha;
+                        ctx.fillStyle = p.color;
+                        ctx.beginPath();
+                        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                });
+
+                if (alive) {
+                    requestAnimationFrame(animateConfetti);
+                } else {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                }
+            }
+
+            animateConfetti();
+        }
+    </script>
+</body>
+</html>

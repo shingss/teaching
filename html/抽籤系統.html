@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎉 歡樂課堂抽籤系統</title>
+    
+    <!-- 引入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 引入 React 與 ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    
+    <!-- 引入 Babel 用於瀏覽器內編譯 JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- 引入 Tone.js 用於音效 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+
+    <!-- 引入 Canvas Confetti 用於慶祝動畫 -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <!-- 自訂 Tailwind 設定與字體 -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+        
+        /* 自訂抽籤特效動畫 */
+        @keyframes fast-spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        @keyframes dice-shake {
+            0%, 100% { transform: rotate(0deg) scale(1); }
+            25% { transform: rotate(-8deg) scale(1.05); }
+            50% { transform: rotate(8deg) scale(0.95); }
+            75% { transform: rotate(-8deg) scale(1.05); }
+        }
+        @keyframes slot-roll {
+            0% { transform: translateY(-35%); opacity: 0; filter: blur(2px); }
+            20% { opacity: 1; filter: blur(0px); }
+            80% { opacity: 1; filter: blur(0px); }
+            100% { transform: translateY(35%); opacity: 0; filter: blur(2px); }
+        }
+        .roulette-bg {
+            background: conic-gradient(from 0deg, #ef4444 0 45deg, #1f2937 45deg 90deg, #ef4444 90deg 135deg, #1f2937 135deg 180deg, #ef4444 180deg 225deg, #1f2937 225deg 270deg, #ef4444 270deg 315deg, #1f2937 315deg 360deg);
+        }
+        .font-digital { font-family: 'Share Tech Mono', monospace; }
+
+        body {
+            font-family: 'Nunito', sans-serif;
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            min-height: 100vh;
+            margin: 0;
+            overflow-x: hidden;
+        }
+        
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+        }
+
+        .photo-frame {
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            border: 8px solid white;
+        }
+
+        /* 自訂滾動條 */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useMemo } = React;
+
+        // 全局音效設定 (Tone.js)
+        let tickSynth, tadaSynth;
+        const initAudio = async () => {
+            await Tone.start();
+            if (!tickSynth) {
+                tickSynth = new Tone.MembraneSynth({
+                    pitchDecay: 0.01,
+                    octaves: 2,
+                    oscillator: { type: "sine" },
+                    envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.01 }
+                }).toDestination();
+                tickSynth.volume.value = -10;
+            }
+            if (!tadaSynth) {
+                tadaSynth = new Tone.PolySynth(Tone.Synth, {
+                    oscillator: { type: "triangle" },
+                    envelope: { attack: 0.05, decay: 0.2, sustain: 0.4, release: 1 }
+                }).toDestination();
+                tadaSynth.volume.value = -5;
+            }
+        };
+
+        const playTick = () => { if (tickSynth) tickSynth.triggerAttackRelease("C3", "32n"); };
+        const playTada = () => { 
+            if (tadaSynth) {
+                const now = Tone.now();
+                tadaSynth.triggerAttackRelease(["C4", "E4", "G4", "C5"], "2n", now);
+            }
+        };
+
+        function App() {
+            // 狀態管理
+            const [students, setStudents] = useState([]);
+            const [drawnStudents, setDrawnStudents] = useState(new Set());
+            const [mode, setMode] = useState('both'); // 'both', 'photo', 'number'
+            const [maxNumber, setMaxNumber] = useState(10);
+            const [isNoRepeat, setIsNoRepeat] = useState(false);
+            const [numberStyle, setNumberStyle] = useState('dice'); // 新增：預設為骰子風格
+            
+            // 抽籤過程狀態
+            const [isDrawing, setIsDrawing] = useState(false);
+            const [currentDisplay, setCurrentDisplay] = useState({ photo: null, number: '?' });
+            
+            // 系統訊息
+            const [message, setMessage] = useState('');
+
+            const handleFileUpload = (e) => {
+                const files = Array.from(e.target.files);
+                const newStudents = files.map(file => ({
+                    id: Math.random().toString(36).substr(2, 9),
+                    file: file,
+                    url: URL.createObjectURL(file),
+                    name: file.name.split('.')[0]
+                }));
+                setStudents(prev => [...prev, ...newStudents]);
+                setMessage(`已成功上載 ${newStudents.length} 張相片！`);
+                setTimeout(() => setMessage(''), 3000);
+            };
+
+            const clearStudents = () => {
+                students.forEach(s => URL.revokeObjectURL(s.url));
+                setStudents([]);
+                setDrawnStudents(new Set());
+                setCurrentDisplay({ photo: null, number: '?' });
+            };
+
+            const availableStudents = useMemo(() => {
+                if (!isNoRepeat) return students;
+                return students.filter(s => !drawnStudents.has(s.id));
+            }, [students, drawnStudents, isNoRepeat]);
+
+            const startDraw = async () => {
+                // 1. 檢查前置條件
+                if ((mode === 'both' || mode === 'photo') && students.length === 0) {
+                    setMessage("請先上載學生相片！");
+                    setTimeout(() => setMessage(''), 3000);
+                    return;
+                }
+                
+                if (isNoRepeat && (mode === 'both' || mode === 'photo') && availableStudents.length === 0) {
+                    setMessage("所有學生都已經被抽過囉！已自動重置名單。");
+                    setDrawnStudents(new Set());
+                    setTimeout(() => setMessage(''), 3000);
+                    return;
+                }
+
+                // 2. 初始化與啟動音效
+                await initAudio();
+                setIsDrawing(true);
+                setMessage('');
+
+                // 3. 設置動畫迴圈參數
+                let rollCount = 0;
+                const maxRolls = 25; // 滾動次數
+                const intervalTime = 80; // 毫秒
+
+                const rollInterval = setInterval(() => {
+                    playTick();
+                    let nextPhoto = null;
+                    let nextNumber = '?';
+
+                    if (mode === 'both' || mode === 'photo') {
+                        // 在滾動時，為了視覺效果，可以從所有學生中隨機顯示（不限於未抽過的）
+                        const randomStudent = students[Math.floor(Math.random() * students.length)];
+                        nextPhoto = randomStudent ? randomStudent.url : null;
+                    }
+                    if (mode === 'both' || mode === 'number') {
+                        nextNumber = Math.floor(Math.random() * maxNumber) + 1;
+                    }
+
+                    setCurrentDisplay({ photo: nextPhoto, number: nextNumber });
+                    rollCount++;
+
+                    // 4. 停止動畫，決定最終結果
+                    if (rollCount >= maxRolls) {
+                        clearInterval(rollInterval);
+                        
+                        let finalPhotoUrl = null;
+                        let finalStudentId = null;
+                        let finalNumber = '?';
+
+                        if (mode === 'both' || mode === 'photo') {
+                            const pool = availableStudents.length > 0 ? availableStudents : students;
+                            const finalStudent = pool[Math.floor(Math.random() * pool.length)];
+                            finalPhotoUrl = finalStudent.url;
+                            finalStudentId = finalStudent.id;
+                            
+                            if (isNoRepeat) {
+                                setDrawnStudents(prev => new Set(prev).add(finalStudentId));
+                            }
+                        }
+
+                        if (mode === 'both' || mode === 'number') {
+                            finalNumber = Math.floor(Math.random() * maxNumber) + 1;
+                        }
+
+                        setCurrentDisplay({ photo: finalPhotoUrl, number: finalNumber });
+                        setIsDrawing(false);
+                        playTada();
+                        
+                        // 觸發彩帶動畫
+                        confetti({
+                            particleCount: 150,
+                            spread: 70,
+                            origin: { y: 0.6 },
+                            colors: ['#ff0a54', '#ff477e', '#ff7096', '#ff85a1', '#fbb1bd', '#f9bec7']
+                        });
+                    }
+                }, intervalTime);
+            };
+
+            return (
+                <div className="container mx-auto px-4 py-8 max-w-6xl">
+                    {/* 頂部標題 */}
+                    <div className="text-center mb-10">
+                        <h1 className="text-4xl md:text-5xl font-black text-gray-800 tracking-tight drop-shadow-sm mb-4">
+                            🎉 歡樂課堂抽籤系統
+                        </h1>
+                        <p className="text-lg text-gray-600 font-medium">讓每一次抽籤都充滿驚喜與期待！</p>
+                    </div>
+
+                    {/* 系統提示訊息 */}
+                    {message && (
+                        <div className="fixed top-5 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-6 py-3 rounded-full shadow-2xl z-50 animate-bounce font-bold">
+                            {message}
+                        </div>
+                    )}
+
+                    <div className="flex flex-col lg:flex-row gap-8">
+                        {/* 左側：控制面板 */}
+                        <div className="w-full lg:w-1/3 space-y-6">
+                            <div className="glass-panel p-6 rounded-2xl">
+                                <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                                    <span className="text-2xl mr-2">⚙️</span> 設定選項
+                                </h2>
+                                
+                                {/* 模式選擇 */}
+                                <div className="mb-6">
+                                    <label className="block text-sm font-bold text-gray-700 mb-2">1. 選擇抽籤模式</label>
+                                    <div className="grid grid-cols-1 gap-2">
+                                        {[
+                                            { id: 'both', label: '📸 相片 + 🔢 數字', desc: '適合配搭任務數量' },
+                                            { id: 'photo', label: '📸 只抽相片', desc: '純點名/抽人' },
+                                            { id: 'number', label: '🔢 只抽數字', desc: '隨機數字產生' }
+                                        ].map(m => (
+                                            <button 
+                                                key={m.id}
+                                                onClick={() => setMode(m.id)}
+                                                className={`p-3 rounded-xl border-2 text-left transition-all ${
+                                                    mode === m.id 
+                                                    ? 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-md font-bold' 
+                                                    : 'border-gray-200 hover:border-indigo-300 hover:bg-gray-50 text-gray-600'
+                                                }`}
+                                            >
+                                                <div className="text-md">{m.label}</div>
+                                                <div className="text-xs opacity-75 font-normal">{m.desc}</div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* 數字設定 (依模式顯示) */}
+                                {(mode === 'both' || mode === 'number') && (
+                                    <div className="mb-6 bg-blue-50 p-4 rounded-xl border border-blue-100">
+                                        <label className="block text-sm font-bold text-blue-900 mb-2">2. 設定最大數字數量</label>
+                                        <input 
+                                            type="number" 
+                                            min="1" max="999" 
+                                            value={maxNumber}
+                                            onChange={(e) => setMaxNumber(Math.max(1, parseInt(e.target.value) || 1))}
+                                            className="w-full p-3 rounded-lg border-2 border-blue-200 focus:border-blue-500 focus:ring focus:ring-blue-200 outline-none transition-all text-xl font-bold text-blue-700 text-center"
+                                        />
+                                    </div>
+                                )}
+
+                                {}
+                                {/* 新增：數字動畫風格選擇 */}
+                                {(mode === 'both' || mode === 'number') && (
+                                    <div className="mb-6 bg-yellow-50 p-4 rounded-xl border border-yellow-100">
+                                        <label className="block text-sm font-bold text-yellow-900 mb-2">
+                                            {mode === 'both' ? '3.' : '2.'} 選擇數字動畫風格
+                                        </label>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {[
+                                                { id: 'dice', icon: '🎲', label: '彈跳骰子' },
+                                                { id: 'roulette', icon: '🎡', label: '幸運輪盤' },
+                                                { id: 'digital', icon: '📟', label: '電子跳字' },
+                                                { id: 'slot', icon: '🎰', label: '轉轉老虎機' }
+                                            ].map(s => (
+                                                <button 
+                                                    key={s.id}
+                                                    onClick={() => setNumberStyle(s.id)}
+                                                    className={`p-2 rounded-lg border-2 text-center transition-all ${
+                                                        numberStyle === s.id 
+                                                        ? 'border-yellow-500 bg-yellow-100 text-yellow-800 font-bold shadow-sm' 
+                                                        : 'border-yellow-200 hover:bg-yellow-100 text-yellow-700'
+                                                    }`}
+                                                >
+                                                    <span className="text-2xl block mb-1">{s.icon}</span>
+                                                    <span className="text-sm">{s.label}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* 學生相片設定 (依模式顯示) */}
+                                {(mode === 'both' || mode === 'photo') && (
+                                    <div className="mb-6 bg-pink-50 p-4 rounded-xl border border-pink-100">
+                                        <label className="block text-sm font-bold text-pink-900 mb-2">
+                                            {mode === 'both' ? '4.' : '2.'} 上載學生相片 (可多選)
+                                        </label>
+                                        <div className="flex flex-col gap-3">
+                                            <label className="cursor-pointer bg-white border-2 border-dashed border-pink-300 hover:border-pink-500 hover:bg-pink-100 text-pink-600 p-4 rounded-xl text-center transition-all font-bold">
+                                                <span>+ 點擊選擇相片檔案</span>
+                                                <input type="file" multiple accept="image/*" onChange={handleFileUpload} className="hidden" />
+                                            </label>
+                                            
+                                            <div className="flex items-center justify-between mt-2">
+                                                <span className="text-sm font-bold text-pink-800">已載入: {students.length} 人</span>
+                                                {students.length > 0 && (
+                                                    <button onClick={clearStudents} className="text-xs bg-pink-200 hover:bg-pink-300 text-pink-800 px-3 py-1 rounded-full font-bold transition-colors">
+                                                        清除全部
+                                                    </button>
+                                                )}
+                                            </div>
+                                            
+                                            <label className="flex items-center space-x-2 mt-2 cursor-pointer p-2 hover:bg-pink-100 rounded-lg transition-colors">
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={isNoRepeat}
+                                                    onChange={(e) => setIsNoRepeat(e.target.checked)}
+                                                    className="w-5 h-5 text-pink-600 rounded focus:ring-pink-500"
+                                                />
+                                                <span className="text-sm font-bold text-pink-900">
+                                                    不重複抽籤 (淘汰模式) 
+                                                    {isNoRepeat && <span className="ml-1 text-xs bg-pink-600 text-white px-2 py-0.5 rounded-full">剩餘: {availableStudents.length}</span>}
+                                                </span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* 右側：展示區 */}
+                        <div className="w-full lg:w-2/3 flex flex-col">
+                            <div className="glass-panel rounded-3xl p-8 flex-grow flex flex-col items-center justify-center relative min-h-[500px]">
+                                
+                                {/* 內容展示區 */}
+                                <div className="flex flex-col md:flex-row items-center justify-center gap-10 w-full mb-12">
+                                    
+                                    {/* 相片展示 */}
+                                    {(mode === 'both' || mode === 'photo') && (
+                                        <div className="relative group">
+                                            <div className={`w-64 h-64 md:w-80 md:h-80 rounded-full photo-frame overflow-hidden bg-gray-100 flex items-center justify-center relative z-10 transition-transform duration-300 ${isDrawing ? 'scale-105' : ''}`}>
+                                                {currentDisplay.photo ? (
+                                                    <img src={currentDisplay.photo} alt="Student" className="w-full h-full object-cover" />
+                                                ) : (
+                                                    <div className="text-gray-400 flex flex-col items-center">
+                                                        <span className="text-6xl mb-2">👤</span>
+                                                        <span className="font-bold">等待抽籤</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            {/* 背景光暈 */}
+                                            <div className="absolute inset-0 bg-pink-400 rounded-full blur-2xl opacity-20 group-hover:opacity-40 transition-opacity z-0"></div>
+                                        </div>
+                                    )}
+
+                                    {}
+                                    {/* 數字展示 */}
+                                    {(mode === 'both' || mode === 'number') && (
+                                        <div className="relative group flex items-center justify-center">
+                                            {/* 外框容器根據風格變化 */}
+                                            <div className={`
+                                                w-64 h-64 md:w-80 md:h-80 flex items-center justify-center relative z-10 shadow-2xl transition-all duration-300 overflow-hidden
+                                                ${numberStyle === 'digital' ? 'rounded-2xl bg-gray-900 border-4 border-gray-700' : 'bg-white'}
+                                                ${numberStyle === 'roulette' ? 'rounded-full border-8 border-yellow-500 bg-gray-100' : ''}
+                                                ${numberStyle === 'dice' ? 'rounded-[40px] border-b-8 border-r-4 border-gray-200' : ''}
+                                                ${numberStyle === 'slot' ? 'rounded-3xl bg-gradient-to-b from-gray-200 via-white to-gray-200 border-4 border-gray-300' : ''}
+                                                ${isDrawing && numberStyle === 'dice' ? 'animate-[dice-shake_0.3s_infinite]' : ''}
+                                                ${!isDrawing ? 'hover:scale-105' : ''}
+                                            `}>
+                                                
+                                                {/* 輪盤背景與指針 */}
+                                                {numberStyle === 'roulette' && (
+                                                    <>
+                                                        <div className={`absolute inset-0 roulette-bg ${isDrawing ? 'animate-[fast-spin_0.3s_linear_infinite]' : ''}`}></div>
+                                                        <div className="absolute w-44 h-44 md:w-56 md:h-56 bg-white rounded-full shadow-inner z-10"></div>
+                                                        <div className="absolute top-0 w-6 h-8 bg-red-500 rounded-b-full z-20 shadow-md transform -translate-y-1/2"></div>
+                                                    </>
+                                                )}
+                                                
+                                                {/* 骰子立體感內陰影 */}
+                                                {numberStyle === 'dice' && (
+                                                    <div className="absolute inset-0 rounded-[40px] shadow-[inset_-15px_-15px_30px_rgba(0,0,0,0.05),inset_15px_15px_30px_rgba(255,255,255,1)] pointer-events-none"></div>
+                                                )}
+                                                
+                                                {/* 老虎機陰影 */}
+                                                {numberStyle === 'slot' && (
+                                                    <div className="absolute inset-0 shadow-[inset_0_25px_25px_rgba(0,0,0,0.15),inset_0_-25px_25px_rgba(0,0,0,0.15)] pointer-events-none z-20"></div>
+                                                )}
+
+                                                {/* 數字文字本身 */}
+                                                <span className={`
+                                                    relative z-20 
+                                                    ${currentDisplay.number === '?' ? 'text-8xl' : 'text-9xl md:text-[140px]'} 
+                                                    ${numberStyle === 'digital' ? 'font-digital text-green-400 drop-shadow-[0_0_12px_rgba(74,222,128,0.8)]' : 'font-black'}
+                                                    ${numberStyle === 'roulette' ? 'text-gray-800' : ''}
+                                                    ${numberStyle === 'dice' ? 'text-red-500 drop-shadow-sm' : ''}
+                                                    ${numberStyle === 'slot' ? 'text-blue-600' : ''}
+                                                    ${isDrawing && numberStyle === 'slot' ? 'animate-[slot-roll_0.15s_linear_infinite]' : ''}
+                                                `}>
+                                                    {currentDisplay.number}
+                                                </span>
+                                            </div>
+                                            
+                                            {/* 背景光暈 (根據風格改變顏色) */}
+                                            <div className={`absolute inset-0 blur-3xl opacity-30 group-hover:opacity-50 transition-opacity z-0
+                                                ${numberStyle === 'digital' ? 'bg-green-500' : ''}
+                                                ${numberStyle === 'roulette' ? 'bg-yellow-500' : ''}
+                                                ${numberStyle === 'dice' ? 'bg-red-500' : ''}
+                                                ${numberStyle === 'slot' ? 'bg-blue-500' : ''}
+                                            `}></div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* 抽籤按鈕 */}
+                                <button 
+                                    onClick={startDraw}
+                                    disabled={isDrawing}
+                                    className={`relative overflow-hidden px-16 py-6 rounded-full font-black text-3xl text-white shadow-xl transform transition-all duration-200 
+                                        ${isDrawing 
+                                            ? 'bg-gray-400 cursor-not-allowed scale-95' 
+                                            : 'bg-gradient-to-r from-pink-500 via-red-500 to-yellow-500 hover:scale-105 hover:shadow-2xl active:scale-95'
+                                        }`}
+                                >
+                                    {isDrawing ? (
+                                        <span className="flex items-center gap-3">
+                                            <svg className="animate-spin h-8 w-8 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                            </svg>
+                                            攪珠中...
+                                        </span>
+                                    ) : '🎯 開始抽籤！'}
+                                    
+                                    {/* 按鈕反光特效 */}
+                                    {!isDrawing && <div className="absolute top-0 -left-[100%] w-1/2 h-full bg-white/30 skew-x-12 animate-[shine_3s_infinite]"></div>}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // 定義按鈕反光動畫
+        const style = document.createElement('style');
+        style.innerHTML = `
+            @keyframes shine {
+                0% { left: -100%; }
+                20% { left: 200%; }
+                100% { left: 200%; }
+            }
+        `;
+        document.head.appendChild(style);
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

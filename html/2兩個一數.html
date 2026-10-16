@@ -1,0 +1,1222 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>廣東話數學：框框分組與跳數大冒險</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icon Library -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Noto+Sans+TC:wght@500;700;900&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Fredoka', 'Noto Sans TC', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none; /* Smooth drag selection box on mobile */
+        }
+
+        /* Float & Bounce Keyframes */
+        @keyframes subtleFloat {
+            0%, 100% { transform: translateY(0px) rotate(var(--rot, 0deg)); }
+            50% { transform: translateY(-5px) rotate(var(--rot, 0deg)); }
+        }
+
+        @keyframes popGlow {
+            0% { transform: scale(0.8); opacity: 0; }
+            50% { transform: scale(1.15); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        @keyframes pulseBorder {
+            0%, 100% { border-color: #f59e0b; box-shadow: 0 0 10px rgba(245, 158, 11, 0.5); }
+            50% { border-color: #d97706; box-shadow: 0 0 22px rgba(245, 158, 11, 0.9); }
+        }
+
+        @keyframes floatUpText {
+            0% { opacity: 0; transform: translate(-50%, 0) scale(0.6); }
+            20% { opacity: 1; transform: translate(-50%, -20px) scale(1.2); }
+            100% { opacity: 0; transform: translate(-50%, -60px) scale(1); }
+        }
+
+        .animate-subtle-float { animation: subtleFloat 3s ease-in-out infinite; }
+        .animate-pop { animation: popGlow 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+        .next-box-glow { animation: pulseBorder 1.2s infinite; }
+
+        .floating-count-badge {
+            position: fixed;
+            animation: floatUpText 1.2s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        /* Selection box overlay styling */
+        #selectionBox {
+            position: absolute;
+            border: 3px dashed #f59e0b;
+            background-color: rgba(254, 243, 199, 0.45);
+            border-radius: 16px;
+            pointer-events: none;
+            z-index: 30;
+            display: none;
+            box-shadow: 0 0 15px rgba(245, 158, 11, 0.3);
+            transition: border-color 0.15s ease;
+        }
+
+        /* Item highlight state inside selection box */
+        .item-selected {
+            transform: scale(1.25) !important;
+            filter: drop-shadow(0 0 8px #f59e0b);
+            z-index: 20;
+        }
+
+        /* Custom Scrollbars */
+        ::-webkit-scrollbar { height: 6px; width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 8px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
+    </style>
+</head>
+<body class="bg-gradient-to-b from-amber-50 via-sky-50 to-indigo-100 min-h-screen text-slate-800 pb-10 flex flex-col items-center overflow-x-hidden">
+
+    <!-- Confetti Canvas overlay -->
+    <canvas id="confettiCanvas" class="fixed inset-0 pointer-events-none z-50 w-full h-full"></canvas>
+
+    <!-- Top Navigation / Application Header -->
+    <header class="w-full max-w-5xl px-3 pt-3 pb-1">
+        <div class="bg-white/90 backdrop-blur-md border-4 border-amber-300 rounded-3xl p-3 md:p-4 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-3">
+            
+            <div class="flex items-center gap-3">
+                <div class="w-12 h-12 bg-gradient-to-tr from-amber-400 to-orange-500 text-white rounded-2xl flex items-center justify-center text-2xl shadow-md transform -rotate-6">
+                    📦
+                </div>
+                <div>
+                    <h1 class="text-lg md:text-2xl font-black text-amber-800 tracking-wide">
+                        廣東話數學：框框分組與跳數大冒險
+                    </h1>
+                    <p class="text-xs font-bold text-slate-500">拉「框框」一次過框選分組 • 廣東話語音跳數</p>
+                </div>
+            </div>
+
+            <!-- Voice and SFX Controls -->
+            <div class="flex items-center gap-2">
+                <button id="toggleSettingsBtn" onclick="toggleSettings()" class="flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-full font-bold text-xs md:text-sm transition shadow-sm border border-amber-300">
+                    <i id="settingsToggleIcon" class="fa-solid fa-chevron-up"></i>
+                    <span id="settingsToggleText">隱藏設定</span>
+                </button>
+                <button id="voiceToggleBtn" onclick="toggleVoice()" class="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded-full font-bold text-xs md:text-sm transition shadow-sm border border-emerald-300">
+                    <i id="voiceIcon" class="fa-solid fa-volume-high"></i>
+                    <span id="voiceStatusText">廣東話: 開</span>
+                </button>
+                <button id="soundToggleBtn" onclick="toggleSound()" class="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-100 hover:bg-indigo-200 text-indigo-800 rounded-full font-bold text-xs md:text-sm transition shadow-sm border border-indigo-300">
+                    <i id="soundIcon" class="fa-solid fa-music"></i>
+                    <span id="soundStatusText">音效: 開</span>
+                </button>
+            </div>
+
+        </div>
+    </header>
+
+    <!-- Main Control Panel Bar -->
+    <main class="w-full max-w-5xl px-3 mt-2 flex flex-col gap-3">
+
+        <!-- Collapsible Settings Panel Container -->
+        <div id="settingsPanelContainer" class="flex flex-col gap-3 transition-all duration-300">
+            <!-- Quantity Range Bar (數量範圍) & Slider -->
+            <div class="bg-white/90 rounded-3xl p-3 shadow-md border-2 border-amber-200 flex flex-col md:flex-row items-center justify-between gap-3">
+                
+                <div class="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
+                    <span class="text-xs md:text-sm font-black text-amber-800 whitespace-nowrap"><i class="fa-solid fa-sliders text-amber-500"></i> 數量範圍:</span>
+                    <div class="flex gap-1.5">
+                        <button onclick="setRange(20)" id="range-btn-20" class="range-btn px-3 py-1 rounded-2xl font-black text-xs md:text-sm bg-amber-400 text-white shadow">20以內</button>
+                        <button onclick="setRange(30)" id="range-btn-30" class="range-btn px-3 py-1 rounded-2xl font-black text-xs md:text-sm bg-slate-100 text-slate-700 hover:bg-amber-100">30以內</button>
+                        <button onclick="setRange(40)" id="range-btn-40" class="range-btn px-3 py-1 rounded-2xl font-black text-xs md:text-sm bg-slate-100 text-slate-700 hover:bg-amber-100">40以內</button>
+                        <button onclick="setRange(50)" id="range-btn-50" class="range-btn px-3 py-1 rounded-2xl font-black text-xs md:text-sm bg-slate-100 text-slate-700 hover:bg-amber-100">50以內</button>
+                        <button onclick="setRange(100)" id="range-btn-100" class="range-btn px-3 py-1 rounded-2xl font-black text-xs md:text-sm bg-slate-100 text-slate-700 hover:bg-amber-100">100以內</button>
+                    </div>
+                </div>
+
+                <!-- Total Item Slider & Randomizer -->
+                <div class="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end">
+                    <div class="flex items-center gap-2 bg-amber-50 px-3 py-1 rounded-2xl border border-amber-200">
+                        <label for="itemCountSlider" class="text-xs md:text-sm font-bold text-slate-700 whitespace-nowrap">
+                            總數量: <span id="itemCountDisplay" class="text-base font-black text-purple-600">12</span> 個
+                        </label>
+                        <input type="range" id="itemCountSlider" min="2" max="20" value="12" oninput="onSliderInput(this.value)" class="w-24 md:w-32 accent-purple-600 cursor-pointer">
+                    </div>
+
+                    <button onclick="randomizeCount()" class="px-3 py-1.5 bg-teal-500 hover:bg-teal-600 text-white rounded-2xl font-black text-xs md:text-sm shadow transition flex items-center gap-1.5 whitespace-nowrap">
+                        <i class="fa-solid fa-dice"></i> 隨機數量
+                    </button>
+                </div>
+
+            </div>
+
+            <!-- Grouping Mode Selector (數數模式) & Emoji Picker -->
+            <div class="bg-white/90 rounded-3xl p-3 shadow-md border-2 border-sky-200 flex flex-col md:flex-row items-center justify-between gap-3">
+                
+                <div class="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
+                    <span class="text-xs md:text-sm font-black text-sky-800 whitespace-nowrap">數數模式:</span>
+                    <div class="flex gap-1.5">
+                        <button onclick="setMode(1)" id="mode-btn-1" class="mode-btn px-2.5 py-1 rounded-2xl font-black text-xs md:text-sm bg-slate-100 text-slate-700 hover:bg-sky-100">1個一數</button>
+                        <button onclick="setMode(2)" id="mode-btn-2" class="mode-btn px-2.5 py-1 rounded-2xl font-black text-xs md:text-sm bg-sky-500 text-white shadow">✌️ 2個一數</button>
+                        <button onclick="setMode(3)" id="mode-btn-3" class="mode-btn px-2.5 py-1 rounded-2xl font-black text-xs md:text-sm bg-slate-100 text-slate-700 hover:bg-sky-100">3個一數</button>
+                        <button onclick="setMode(4)" id="mode-btn-4" class="mode-btn px-2.5 py-1 rounded-2xl font-black text-xs md:text-sm bg-slate-100 text-slate-700 hover:bg-sky-100">4個一數</button>
+                        <button onclick="setMode(5)" id="mode-btn-5" class="mode-btn px-2.5 py-1 rounded-2xl font-black text-xs md:text-sm bg-slate-100 text-slate-700 hover:bg-sky-100">🖐️ 5個一數</button>
+                        <button onclick="setMode(10)" id="mode-btn-10" class="mode-btn px-2.5 py-1 rounded-2xl font-black text-xs md:text-sm bg-slate-100 text-slate-700 hover:bg-sky-100">🔟 10個一數</button>
+                    </div>
+                </div>
+
+                <!-- Emoji Picker -->
+                <div class="flex items-center gap-2 w-full md:w-auto justify-end">
+                    <span class="text-xs font-bold text-slate-500 whitespace-nowrap">圖案:</span>
+                    <div id="emojiPicker" class="flex gap-1"></div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Primary Game Arena Container -->
+        <div class="relative bg-white/85 backdrop-blur-md rounded-3xl p-3 md:p-5 shadow-xl border-4 border-amber-300 min-h-[500px] flex flex-col justify-between overflow-hidden">
+            
+            <!-- Phase & Status Banner -->
+            <div class="flex flex-wrap items-center justify-between gap-2 border-b-2 border-amber-100 pb-2 mb-2">
+                
+                <div class="flex items-center gap-2">
+                    <span id="phaseBadge" class="px-3 py-1 bg-amber-500 text-white font-black text-xs md:text-sm rounded-full shadow animate-pulse">
+                        階段一：分組整理
+                    </span>
+                    <span id="instructionText" class="text-xs md:text-sm font-bold text-slate-700">
+                        你可以「拉框框」、「點擊」或「直接拖拉」物品放入盒仔分組！
+                    </span>
+                </div>
+
+                <!-- Counters -->
+                <div class="flex items-center gap-2">
+                    <div id="sortedProgressBadge" class="flex items-center gap-1 bg-amber-100 border border-amber-300 text-amber-900 font-black px-2.5 py-1 rounded-full text-xs md:text-sm">
+                        <span>已整理: </span>
+                        <span id="sortedCountText" class="text-amber-700 font-black">0 / 12</span>
+                    </div>
+                    <div id="countedBadge" class="hidden items-center gap-1 bg-emerald-100 border border-emerald-300 text-emerald-900 font-black px-2.5 py-1 rounded-full text-xs md:text-sm">
+                        <span>廣東話跳數: </span>
+                        <span id="currentLiveCount" class="text-emerald-700 font-black text-sm md:text-base">0</span>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Main Play Area (Scatter Board + Group Boxes) -->
+            <div id="mainPlayArea" class="flex-1 flex flex-col gap-3 min-h-[380px]">
+                
+                <!-- Scatter Board Area (放得亂嘅物品區 with Pointer Events for Selection Box) -->
+                <div id="scatterBoardContainer" class="bg-amber-50/80 border-2 border-dashed border-amber-300 rounded-2xl p-3 relative flex flex-col transition-all">
+                    
+                    <div class="flex items-center justify-between mb-1 select-none">
+                        <span class="text-xs md:text-sm font-black text-amber-900 flex items-center gap-1">
+                            <i class="fa-solid fa-object-group text-amber-600"></i> 散落區 (提示：按住並拖動開出「框框」圈選多個物品)
+                        </span>
+                        <span id="unplacedCountBadge" class="text-xs font-bold text-amber-700">未分組: 12 個</span>
+                    </div>
+
+                    <!-- Interactive Scatter Board Canvas Container -->
+                    <div id="scatterBoard" class="relative w-full min-h-[180px] max-h-[260px] bg-white/70 rounded-xl overflow-hidden cursor-crosshair border border-amber-200 touch-none">
+                        
+                        <!-- Floating Drag Selection Box Element -->
+                        <div id="selectionBox">
+                            <div id="selectionBadge" class="absolute -top-7 left-1/2 -translate-x-1/2 bg-amber-500 text-white font-black text-[11px] px-2 py-0.5 rounded-full shadow whitespace-nowrap pointer-events-none">
+                                已框 0 / 2 個
+                            </div>
+                        </div>
+
+                        <!-- Scatter items injected dynamically -->
+                    </div>
+
+                </div>
+
+                <!-- Group Box Target Container (分組盒區) -->
+                <div id="boxAreaContainer" class="flex-1 bg-sky-50/70 border-2 border-sky-200 rounded-2xl p-3 flex flex-col">
+                    <div class="flex items-center justify-between mb-2">
+                        <span id="boxAreaTitle" class="text-xs md:text-sm font-black text-sky-900 flex items-center gap-1">
+                            <i class="fa-solid fa-boxes-stacked text-sky-600"></i> 分組盒仔 (每盒滿 <span id="modeGroupSizeDisplay" class="text-amber-600 font-black">2</span> 個)
+                        </span>
+                        <span id="boxCompletionText" class="text-xs font-bold text-sky-700">已填滿: 0 個盒</span>
+                    </div>
+
+                    <div id="boxZone" class="flex-1 flex flex-wrap justify-center items-start gap-3 overflow-y-auto max-h-[260px] p-2">
+                        <!-- Group boxes rendered dynamically -->
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Completion Celebration Overlay Card -->
+            <div id="celebrationOverlay" class="hidden absolute inset-0 bg-white/95 backdrop-blur-md rounded-3xl z-40 p-6 flex flex-col items-center justify-center text-center animate-pop">
+                <div class="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center text-4xl mb-3 border-4 border-amber-400 shadow-lg animate-bounce">
+                    🏆
+                </div>
+                <h2 class="text-2xl md:text-3xl font-black text-amber-800 mb-2">好棒呀！分組跳數完成！</h2>
+                <p id="celebrationSummaryText" class="text-sm md:text-base font-bold text-slate-700 max-w-md mb-4">
+                    你成功用廣東話數出 12 個蘋果！
+                </p>
+
+                <div class="bg-amber-50 border-2 border-amber-200 rounded-2xl p-4 w-full max-w-sm mb-6 shadow-inner text-left text-xs md:text-sm space-y-1.5 font-bold text-slate-700">
+                    <div class="flex justify-between"><span>總數量:</span><span id="summaryTotal" class="text-purple-700 font-black">12 個</span></div>
+                    <div class="flex justify-between"><span>每組數量:</span><span id="summaryGroupSize" class="text-sky-700 font-black">2 個一組</span></div>
+                    <div class="flex justify-between"><span>組成盒數:</span><span id="summaryBoxes" class="text-emerald-700 font-black">6 盒</span></div>
+                    <div class="flex justify-between"><span>剩餘單獨:</span><span id="summaryRemainder" class="text-amber-700 font-black">0 個</span></div>
+                </div>
+
+                <div class="flex gap-3">
+                    <button onclick="resetGameData()" class="px-6 py-3 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-white font-black rounded-2xl shadow-lg text-base transition transform active:scale-95 flex items-center gap-2">
+                        <i class="fa-solid fa-rotate-right"></i> 再玩一次
+                    </button>
+                    <button onclick="randomizeCount()" class="px-6 py-3 bg-teal-500 hover:bg-teal-600 text-white font-black rounded-2xl shadow-lg text-base transition transform active:scale-95 flex items-center gap-2">
+                        <i class="fa-solid fa-dice"></i> 挑戰新數量
+                    </button>
+                </div>
+            </div>
+
+            <!-- Bottom Action Controls -->
+            <div class="mt-3 flex flex-wrap items-center justify-between gap-2 pt-2 border-t-2 border-amber-100">
+                
+                <div class="flex items-center gap-2">
+                    <button id="autoArrangeBtn" onclick="autoArrangeAll()" class="px-4 py-2.5 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-white font-black text-xs md:text-sm rounded-2xl shadow transition transform active:scale-95 flex items-center gap-1.5">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i>
+                        <span>✨ 一鍵自動排好</span>
+                    </button>
+
+                    <button id="resetScatterBtn" onclick="resetGameData()" class="px-3 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs md:text-sm rounded-2xl shadow transition flex items-center gap-1">
+                        <i class="fa-solid fa-rotate-left"></i>
+                        <span>重新散落</span>
+                    </button>
+                </div>
+
+                <div class="text-xs text-slate-500 font-bold flex items-center gap-1">
+                    <i class="fa-regular fa-lightbulb text-amber-500 text-base"></i>
+                    <span id="tipText">提示：支援 3 種分組方法：框選、點擊、或直接拖拉！</span>
+                </div>
+
+            </div>
+
+        </div>
+
+    </main>
+
+    <script>
+        // State Machine
+        const STATE = {
+            range: 20,           // 20, 30, 40, 50, 100
+            mode: 2,            // 1, 2, 3, 4, 5, 10
+            total: 12,          // Total items count
+            itemEmoji: '🍎',   // Emoji symbol
+            phase: 'SORTING',   // 'SORTING', 'COUNTING', 'COMPLETED'
+            unplacedItems: [],  // [{ id, x, y, rot, emoji }]
+            boxes: [],          // [{ capacity, items: [], isRemainder }]
+            currentCountStep: 0,
+            voiceEnabled: true,
+            soundEnabled: true,
+            speechLang: 'zh-HK'
+        };
+
+        const EMOJI_LIST = ['🍎', '⭐️', '🍬', '🐱', '🍔', '🪙', '🚗', '🧸'];
+
+        // Non-overlapping Grid-Jitter Positioning Generator
+        function generateNonOverlappingPositions(count) {
+            const items = [];
+            // Calculate optimal grid layout according to total count
+            const cols = Math.ceil(Math.sqrt(count * 1.5));
+            const rows = Math.ceil(count / cols);
+
+            const cellW = 84 / cols;
+            const cellH = 76 / rows;
+
+            let idx = 0;
+            const tempPositions = [];
+
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    if (idx >= count) break;
+                    // Jitter inside grid cell to prevent strict alignment while avoiding overlap
+                    const jitterX = (Math.random() - 0.5) * (cellW * 0.45);
+                    const jitterY = (Math.random() - 0.5) * (cellH * 0.45);
+
+                    const x = 5 + (c + 0.5) * cellW + jitterX;
+                    const y = 8 + (r + 0.5) * cellH + jitterY;
+
+                    tempPositions.push({
+                        x: Math.max(3, Math.min(88, x)),
+                        y: Math.max(8, Math.min(78, y))
+                    });
+                    idx++;
+                }
+            }
+
+            // Shuffle position slots so items scatter naturally across the board
+            for (let i = tempPositions.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [tempPositions[i], tempPositions[j]] = [tempPositions[j], tempPositions[i]];
+            }
+
+            for (let i = 0; i < count; i++) {
+                items.push({
+                    id: i,
+                    emoji: STATE.itemEmoji,
+                    x: tempPositions[i].x,
+                    y: tempPositions[i].y,
+                    rot: (Math.random() - 0.5) * 26
+                });
+            }
+
+            return items;
+        }
+
+        // Web Audio Context
+        let audioCtx = null;
+
+        function getAudioContext() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            return audioCtx;
+        }
+
+        function playChime(step = 1) {
+            if (!STATE.soundEnabled) return;
+            try {
+                const ctx = getAudioContext();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+
+                const freq = 260 + (step * 24);
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(freq * 1.35, ctx.currentTime + 0.14);
+
+                gain.gain.setValueAtTime(0.25, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
+
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+
+                osc.start();
+                osc.stop(ctx.currentTime + 0.18);
+            } catch (e) {
+                console.log('Audio playback exception:', e);
+            }
+        }
+
+        function playVictorySound() {
+            if (!STATE.soundEnabled) return;
+            try {
+                const ctx = getAudioContext();
+                const notes = [523.25, 659.25, 783.99, 1046.50];
+                notes.forEach((freq, i) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.09);
+
+                    gain.gain.setValueAtTime(0.2, ctx.currentTime + i * 0.09);
+                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.09 + 0.35);
+
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+
+                    osc.start(ctx.currentTime + i * 0.09);
+                    osc.stop(ctx.currentTime + i * 0.09 + 0.35);
+                });
+            } catch (e) {
+                console.log('Audio exception:', e);
+            }
+        }
+
+        function playErrorSound() {
+            if (!STATE.soundEnabled) return;
+            try {
+                const ctx = getAudioContext();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(180, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.22);
+
+                gain.gain.setValueAtTime(0.2, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
+
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+
+                osc.start();
+                osc.stop(ctx.currentTime + 0.22);
+            } catch (e) {
+                console.log('Audio exception:', e);
+            }
+        }
+
+        function showToastNotice(msg) {
+            let toast = document.getElementById('toastNotice');
+            if (!toast) {
+                toast = document.createElement('div');
+                toast.id = 'toastNotice';
+                toast.className = 'fixed top-16 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 bg-red-500 text-white font-black text-xs md:text-sm rounded-full shadow-2xl border-2 border-white transition-all duration-300 pointer-events-none flex items-center gap-2';
+                document.body.appendChild(toast);
+            }
+            toast.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> ${msg}`;
+            toast.classList.remove('hidden', 'opacity-0', '-translate-y-4');
+            toast.classList.add('opacity-100', 'translate-y-0');
+
+            if (toast.timeoutId) clearTimeout(toast.timeoutId);
+            toast.timeoutId = setTimeout(() => {
+                toast.classList.add('opacity-0', '-translate-y-4');
+                setTimeout(() => toast.classList.add('hidden'), 300);
+            }, 2200);
+        }
+
+        // Web Speech Cantonese Engine
+        function speakCantonese(text) {
+            if (!STATE.voiceEnabled || !('speechSynthesis' in window)) return;
+
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text.toString());
+            utterance.lang = STATE.speechLang;
+            utterance.rate = 0.95;
+            utterance.pitch = 1.15;
+
+            const voices = window.speechSynthesis.getVoices();
+            const cantoneseVoice = voices.find(v => 
+                v.lang.includes('zh-HK') || v.lang.includes('zh_HK') || 
+                v.name.includes('Hong Kong') || v.name.includes('Cantonese')
+            );
+            if (cantoneseVoice) utterance.voice = cantoneseVoice;
+
+            window.speechSynthesis.speak(utterance);
+        }
+
+        // UI Controls Init
+        function initEmojiPicker() {
+            const picker = document.getElementById('emojiPicker');
+            picker.innerHTML = '';
+            EMOJI_LIST.forEach(emoji => {
+                const btn = document.createElement('button');
+                btn.className = `w-8 h-8 rounded-xl text-base flex items-center justify-center transition border-2 ${
+                    emoji === STATE.itemEmoji ? 'bg-amber-100 border-amber-500 scale-110 shadow-sm' : 'bg-slate-100 border-transparent hover:bg-slate-200'
+                }`;
+                btn.innerText = emoji;
+                btn.onclick = () => {
+                    STATE.itemEmoji = emoji;
+                    initEmojiPicker();
+                    resetGameData();
+                };
+                picker.appendChild(btn);
+            });
+        }
+
+        function setRange(rangeVal) {
+            STATE.range = rangeVal;
+            const slider = document.getElementById('itemCountSlider');
+            slider.max = rangeVal;
+            if (STATE.total > rangeVal) STATE.total = rangeVal;
+            slider.value = STATE.total;
+            document.getElementById('itemCountDisplay').innerText = STATE.total;
+
+            document.querySelectorAll('.range-btn').forEach(btn => {
+                btn.className = 'range-btn px-3 py-1 rounded-2xl font-black text-xs md:text-sm bg-slate-100 text-slate-700 hover:bg-amber-100';
+            });
+            const activeBtn = document.getElementById(`range-btn-${rangeVal}`);
+            if (activeBtn) activeBtn.className = 'range-btn px-3 py-1 rounded-2xl font-black text-xs md:text-sm bg-amber-400 text-white shadow';
+
+            resetGameData();
+        }
+
+        function setMode(modeVal) {
+            STATE.mode = modeVal;
+            document.querySelectorAll('.mode-btn').forEach(btn => {
+                btn.className = 'mode-btn px-2.5 py-1 rounded-2xl font-black text-xs md:text-sm bg-slate-100 text-slate-700 hover:bg-sky-100';
+            });
+            const activeBtn = document.getElementById(`mode-btn-${modeVal}`);
+            if (activeBtn) activeBtn.className = 'mode-btn px-2.5 py-1 rounded-2xl font-black text-xs md:text-sm bg-sky-500 text-white shadow';
+
+            const modeGroupDisplay = document.getElementById('modeGroupSizeDisplay');
+            if (modeGroupDisplay) modeGroupDisplay.innerText = modeVal;
+            resetGameData();
+        }
+
+        function onSliderInput(val) {
+            STATE.total = parseInt(val, 10);
+            document.getElementById('itemCountDisplay').innerText = STATE.total;
+            resetGameData();
+        }
+
+        function randomizeCount() {
+            const minVal = Math.max(3, Math.floor(STATE.range * 0.25));
+            const randVal = Math.floor(Math.random() * (STATE.range - minVal + 1)) + minVal;
+            
+            STATE.total = randVal;
+            document.getElementById('itemCountSlider').value = randVal;
+            document.getElementById('itemCountDisplay').innerText = randVal;
+
+            STATE.itemEmoji = EMOJI_LIST[Math.floor(Math.random() * EMOJI_LIST.length)];
+            initEmojiPicker();
+
+            resetGameData();
+            speakCantonese(`隨機出題：一共 ${STATE.total} 個物品`);
+        }
+
+        function toggleVoice() {
+            STATE.voiceEnabled = !STATE.voiceEnabled;
+            document.getElementById('voiceStatusText').innerText = STATE.voiceEnabled ? '廣東話: 開' : '廣東話: 關';
+        }
+
+        function toggleSound() {
+            STATE.soundEnabled = !STATE.soundEnabled;
+            document.getElementById('soundStatusText').innerText = STATE.soundEnabled ? '音效: 開' : '音效: 關';
+        }
+
+        function toggleSettings() {
+            const container = document.getElementById('settingsPanelContainer');
+            const icon = document.getElementById('settingsToggleIcon');
+            const text = document.getElementById('settingsToggleText');
+            
+            if (container.classList.contains('hidden')) {
+                container.classList.remove('hidden');
+                icon.className = 'fa-solid fa-chevron-up';
+                text.innerText = '隱藏設定';
+            } else {
+                container.classList.add('hidden');
+                icon.className = 'fa-solid fa-sliders';
+                text.innerText = '展開設定';
+            }
+        }
+
+        // Reset Game & Generate Scattered Positions
+        function resetGameData() {
+            STATE.phase = 'SORTING';
+            STATE.currentCountStep = 0;
+
+            document.getElementById('celebrationOverlay').classList.add('hidden');
+
+            // Generate items with non-overlapping position algorithm
+            STATE.unplacedItems = generateNonOverlappingPositions(STATE.total);
+
+            // Create target box structures
+            const numFullBoxes = Math.floor(STATE.total / STATE.mode);
+            const remainder = STATE.total % STATE.mode;
+            STATE.boxes = [];
+
+            for (let b = 0; b < numFullBoxes; b++) {
+                STATE.boxes.push({ capacity: STATE.mode, items: [], isRemainder: false });
+            }
+            if (remainder > 0) {
+                STATE.boxes.push({ capacity: remainder, items: [], isRemainder: true });
+            }
+
+            renderGame();
+        }
+
+        function renderGame() {
+            const phaseBadge = document.getElementById('phaseBadge');
+            const instructionText = document.getElementById('instructionText');
+            const sortedProgressBadge = document.getElementById('sortedProgressBadge');
+            const countedBadge = document.getElementById('countedBadge');
+            const sortedCountText = document.getElementById('sortedCountText');
+            const autoArrangeBtn = document.getElementById('autoArrangeBtn');
+
+            const placedCount = STATE.total - STATE.unplacedItems.length;
+            sortedCountText.innerText = `${placedCount} / ${STATE.total}`;
+
+            if (STATE.phase === 'SORTING') {
+                phaseBadge.innerText = "階段一：分組整理";
+                phaseBadge.className = "px-3 py-1 bg-amber-500 text-white font-black text-xs md:text-sm rounded-full shadow animate-pulse";
+                instructionText.innerText = `你可以「拉框框」、「點擊」或「直接拖拉」物品放入盒仔分組！`;
+                
+                sortedProgressBadge.classList.remove('hidden');
+                countedBadge.classList.add('hidden');
+                autoArrangeBtn.classList.remove('hidden');
+
+                document.getElementById('scatterBoardContainer').classList.remove('hidden');
+            } else {
+                phaseBadge.innerText = STATE.phase === 'COUNTING' ? "階段二：廣東話按順序點擊跳數" : "🎉 完成跳數！";
+                phaseBadge.className = STATE.phase === 'COUNTING' 
+                    ? "px-3 py-1 bg-emerald-500 text-white font-black text-xs md:text-sm rounded-full shadow"
+                    : "px-3 py-1 bg-purple-600 text-white font-black text-xs md:text-sm rounded-full shadow animate-bounce";
+                
+                instructionText.innerText = STATE.phase === 'COUNTING' 
+                    ? `排好喇！請直接點擊發光嘅盒仔，聽廣東話 ${STATE.mode} 個一數！`
+                    : `成功完成 ${STATE.total} 個物品跳數！`;
+
+                sortedProgressBadge.classList.add('hidden');
+                countedBadge.classList.remove('hidden');
+                autoArrangeBtn.classList.add('hidden');
+
+                document.getElementById('scatterBoardContainer').classList.remove('hidden');
+            }
+
+            renderScatterBoard();
+            renderBoxZone();
+        }
+
+        function getItemFontSizeClass() {
+            if (STATE.total <= 20) return 'text-2xl md:text-3xl';
+            if (STATE.total <= 40) return 'text-xl md:text-2xl';
+            if (STATE.total <= 50) return 'text-lg md:text-xl';
+            return 'text-base md:text-lg'; // 100 items size
+        }
+
+        // Render Disorganized Scatter Board
+        function renderScatterBoard() {
+            const board = document.getElementById('scatterBoard');
+            const unplacedCountBadge = document.getElementById('unplacedCountBadge');
+            
+            // Keep selection box element intact
+            const selectionBox = document.getElementById('selectionBox');
+            board.innerHTML = '';
+            board.appendChild(selectionBox);
+
+            unplacedCountBadge.innerText = `未分組: ${STATE.unplacedItems.length} 個`;
+
+            if (STATE.unplacedItems.length === 0) {
+                const emptyNotice = document.createElement('div');
+                emptyNotice.className = "absolute inset-0 flex items-center justify-center text-xs md:text-sm font-black text-emerald-600 bg-emerald-50/80 p-2 text-center";
+                emptyNotice.innerHTML = `<i class="fa-solid fa-circle-check mr-1.5 text-base"></i> 所有物品已排好！請直接點擊下方盒仔開始跳數 (${STATE.mode}個一數)`;
+                board.appendChild(emptyNotice);
+                return;
+            }
+
+            const fontClass = getItemFontSizeClass();
+
+            STATE.unplacedItems.forEach(item => {
+                const itemEl = document.createElement('div');
+                itemEl.id = `item-${item.id}`;
+                itemEl.dataset.id = item.id;
+                itemEl.className = `scatter-item absolute select-none cursor-grab active:cursor-grabbing hover:scale-125 transition-transform duration-150 animate-subtle-float ${fontClass}`;
+                itemEl.style.left = `${item.x}%`;
+                itemEl.style.top = `${item.y}%`;
+                itemEl.style.setProperty('--rot', `${item.rot}deg`);
+                itemEl.style.transform = `rotate(${item.rot}deg)`;
+                itemEl.innerText = item.emoji;
+
+                // Drag or Tap Event Handler on single item
+                let isDraggingSingleItem = false;
+                let startPxX = 0, startPxY = 0;
+
+                itemEl.addEventListener('pointerdown', (e) => {
+                    if (STATE.phase !== 'SORTING') return;
+                    e.stopPropagation(); // Prevent trigger box selection background drag
+
+                    isDraggingSingleItem = false;
+                    startPxX = e.clientX;
+                    startPxY = e.clientY;
+
+                    itemEl.setPointerCapture(e.pointerId);
+                });
+
+                itemEl.addEventListener('pointermove', (e) => {
+                    if (!itemEl.hasPointerCapture(e.pointerId)) return;
+
+                    const dist = Math.hypot(e.clientX - startPxX, e.clientY - startPxY);
+                    if (dist > 6) {
+                        isDraggingSingleItem = true;
+                        itemEl.style.zIndex = '100';
+                        itemEl.style.transition = 'none';
+
+                        // Move item element following mouse/touch pointer
+                        const boardRect = board.getBoundingClientRect();
+                        const leftPct = ((e.clientX - boardRect.left) / boardRect.width) * 100;
+                        const topPct = ((e.clientY - boardRect.top) / boardRect.height) * 100;
+
+                        itemEl.style.left = `${leftPct}%`;
+                        itemEl.style.top = `${topPct}%`;
+
+                        // Highlight box if hovering over target box zone
+                        const elementUnder = document.elementFromPoint(e.clientX, e.clientY);
+                        const targetBoxCard = elementUnder ? elementUnder.closest('.group-box-card') : null;
+
+                        document.querySelectorAll('.group-box-card').forEach(b => b.classList.remove('ring-4', 'ring-amber-400', 'scale-105'));
+                        if (targetBoxCard) {
+                            targetBoxCard.classList.add('ring-4', 'ring-amber-400', 'scale-105');
+                        }
+                    }
+                });
+
+                itemEl.addEventListener('pointerup', (e) => {
+                    if (!itemEl.hasPointerCapture(e.pointerId)) return;
+                    itemEl.releasePointerCapture(e.pointerId);
+
+                    document.querySelectorAll('.group-box-card').forEach(b => b.classList.remove('ring-4', 'ring-amber-400', 'scale-105'));
+
+                    if (isDraggingSingleItem) {
+                        // Drag Drop check
+                        const elementUnder = document.elementFromPoint(e.clientX, e.clientY);
+                        const targetBoxCard = elementUnder ? elementUnder.closest('.group-box-card') : null;
+                        const boxArea = elementUnder ? elementUnder.closest('#boxAreaContainer') : null;
+
+                        if (targetBoxCard) {
+                            const bIdx = parseInt(targetBoxCard.dataset.boxIndex, 10);
+                            placeSingleItemToTargetBox(item.id, bIdx);
+                        } else if (boxArea) {
+                            placeSingleItemToNextOpenBox(item.id);
+                        } else {
+                            // Snap back to original position
+                            itemEl.style.transition = 'all 0.2s ease-out';
+                            itemEl.style.left = `${item.x}%`;
+                            itemEl.style.top = `${item.y}%`;
+                            itemEl.style.zIndex = '10';
+                        }
+                    } else {
+                        // Tap / Click action
+                        placeSingleItemToNextOpenBox(item.id);
+                    }
+                });
+
+                board.appendChild(itemEl);
+            });
+        }
+
+        // Render Group Boxes
+        function renderBoxZone() {
+            const boxZone = document.getElementById('boxZone');
+            const boxAreaTitle = document.getElementById('boxAreaTitle');
+            const boxCompletionText = document.getElementById('boxCompletionText');
+
+            boxZone.innerHTML = '';
+
+            let fullFilledCount = 0;
+            STATE.boxes.forEach(b => { if (b.items.length === b.capacity) fullFilledCount++; });
+
+            boxAreaTitle.innerHTML = `<i class="fa-solid fa-boxes-stacked text-sky-600"></i> 分組盒仔 (每盒滿 <span id="modeGroupSizeDisplay" class="text-amber-600 font-black">${STATE.mode}</span> 個)`;
+            boxCompletionText.innerText = `已填滿: ${fullFilledCount} / ${STATE.boxes.length} 個盒`;
+
+            let cumulativeCount = 0;
+
+            STATE.boxes.forEach((box, bIndex) => {
+                const isFull = box.items.length === box.capacity;
+                const isNextForCounting = (STATE.phase === 'COUNTING' && bIndex === STATE.currentCountStep);
+                const isAlreadyCounted = (STATE.phase === 'COUNTING' || STATE.phase === 'COMPLETED') && bIndex < STATE.currentCountStep;
+
+                if (isAlreadyCounted) cumulativeCount += box.items.length;
+
+                const boxCard = document.createElement('div');
+                boxCard.dataset.boxIndex = bIndex;
+                let boxStyle = 'group-box-card relative flex flex-col items-center justify-between p-2 md:p-3 rounded-2xl border-3 transition-all duration-200 select-none shadow-sm ';
+
+                if (STATE.phase === 'SORTING') {
+                    boxStyle += isFull 
+                        ? 'bg-amber-50/90 border-amber-400' 
+                        : 'bg-white border-dashed border-sky-300 hover:border-sky-500';
+                } else {
+                    if (isAlreadyCounted) {
+                        boxStyle += 'bg-emerald-100 border-emerald-500 scale-100 shadow-emerald-200';
+                    } else if (isNextForCounting) {
+                        boxStyle += 'bg-amber-100 border-amber-500 scale-105 next-box-glow cursor-pointer';
+                    } else {
+                        boxStyle += 'bg-white/80 border-slate-300 opacity-60';
+                    }
+                }
+
+                boxCard.className = boxStyle;
+
+                // Box Title Badge
+                const headerLabel = document.createElement('div');
+                headerLabel.className = `text-[11px] font-black px-2 py-0.5 rounded-full mb-1 ${
+                    box.isRemainder ? 'bg-purple-500 text-white' : (isAlreadyCounted ? 'bg-emerald-600 text-white' : 'bg-sky-200 text-sky-800')
+                }`;
+                headerLabel.innerText = box.isRemainder ? `剩餘單獨` : `第 ${bIndex + 1} 盒 (${box.capacity}個)`;
+                boxCard.appendChild(headerLabel);
+
+                // Slot Items Grid
+                const slotsGrid = document.createElement('div');
+                slotsGrid.className = 'flex flex-wrap justify-center items-center gap-1 my-1 min-h-[32px] min-w-[65px] max-w-[150px]';
+
+                const fontClass = getItemFontSizeClass();
+
+                for (let s = 0; s < box.capacity; s++) {
+                    const slotDiv = document.createElement('div');
+                    if (s < box.items.length) {
+                        slotDiv.className = `${fontClass} transition-transform transform scale-105`;
+                        slotDiv.innerText = box.items[s].emoji;
+                    } else {
+                        slotDiv.className = 'w-5 h-5 md:w-7 md:h-7 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-300 text-xs font-bold';
+                        slotDiv.innerText = '•';
+                    }
+                    slotsGrid.appendChild(slotDiv);
+                }
+                boxCard.appendChild(slotsGrid);
+
+                // Count Badge Tag
+                const countBadge = document.createElement('div');
+                if (STATE.phase === 'SORTING') {
+                    countBadge.className = `text-xs font-bold px-2 py-0.5 rounded-md mt-1 ${isFull ? 'bg-amber-200 text-amber-900' : 'bg-slate-100 text-slate-500'}`;
+                    countBadge.innerText = `${box.items.length} / ${box.capacity}`;
+                } else {
+                    const stepVal = cumulativeCount + (isAlreadyCounted ? 0 : box.items.length);
+                    countBadge.className = `text-xs md:text-sm font-black px-2.5 py-0.5 rounded-lg mt-1 transition ${
+                        isAlreadyCounted ? 'bg-emerald-600 text-white scale-105' : 'bg-slate-200 text-slate-600'
+                    }`;
+                    countBadge.innerText = isAlreadyCounted ? `(${stepVal})` : (isNextForCounting ? `點擊數` : `?`);
+                }
+                boxCard.appendChild(countBadge);
+
+                // Box click handler
+                boxCard.onclick = (e) => {
+                    if (STATE.phase === 'COUNTING' && bIndex === STATE.currentCountStep) {
+                        handleSkipCountStep(bIndex, box, e);
+                    }
+                };
+
+                boxZone.appendChild(boxCard);
+            });
+        }
+
+        // Selection Box Dragging Logic using Pointer Events
+        let isDraggingSelection = false;
+        let startX = 0, startY = 0;
+        let selectedItemIds = [];
+
+        const scatterBoard = document.getElementById('scatterBoard');
+        const selectionBox = document.getElementById('selectionBox');
+        const selectionBadge = document.getElementById('selectionBadge');
+
+        scatterBoard.addEventListener('pointerdown', (e) => {
+            if (STATE.phase !== 'SORTING' || STATE.unplacedItems.length === 0) return;
+
+            isDraggingSelection = true;
+            const rect = scatterBoard.getBoundingClientRect();
+            startX = e.clientX - rect.left;
+            startY = e.clientY - rect.top;
+
+            selectionBox.style.left = `${startX}px`;
+            selectionBox.style.top = `${startY}px`;
+            selectionBox.style.width = '0px';
+            selectionBox.style.height = '0px';
+            selectionBox.style.display = 'block';
+
+            selectedItemIds = [];
+            updateSelectionHighlights();
+
+            scatterBoard.setPointerCapture(e.pointerId);
+        });
+
+        scatterBoard.addEventListener('pointermove', (e) => {
+            if (!isDraggingSelection) return;
+
+            const rect = scatterBoard.getBoundingClientRect();
+            const currentX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+            const currentY = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
+
+            const boxLeft = Math.min(startX, currentX);
+            const boxTop = Math.min(startY, currentY);
+            const boxWidth = Math.abs(currentX - startX);
+            const boxHeight = Math.abs(currentY - startY);
+
+            selectionBox.style.left = `${boxLeft}px`;
+            selectionBox.style.top = `${boxTop}px`;
+            selectionBox.style.width = `${boxWidth}px`;
+            selectionBox.style.height = `${boxHeight}px`;
+
+            // Detect overlapping items
+            const boxRect = {
+                left: boxLeft,
+                top: boxTop,
+                right: boxLeft + boxWidth,
+                bottom: boxTop + boxHeight
+            };
+
+            selectedItemIds = [];
+            document.querySelectorAll('.scatter-item').forEach(itemEl => {
+                const itemLeft = itemEl.offsetLeft;
+                const itemTop = itemEl.offsetTop;
+                const itemWidth = itemEl.offsetWidth || 30;
+                const itemHeight = itemEl.offsetHeight || 30;
+
+                const itemRect = {
+                    left: itemLeft,
+                    top: itemTop,
+                    right: itemLeft + itemWidth,
+                    bottom: itemTop + itemHeight
+                };
+
+                // Collision check
+                if (boxRect.left < itemRect.right &&
+                    boxRect.right > itemRect.left &&
+                    boxRect.top < itemRect.bottom &&
+                    boxRect.bottom > itemRect.top) {
+                    selectedItemIds.push(parseInt(itemEl.dataset.id, 10));
+                }
+            });
+
+            const targetLimit = Math.min(STATE.mode, STATE.unplacedItems.length);
+
+            // Update floating counter badge on selection box
+            if (selectedItemIds.length > targetLimit) {
+                selectionBadge.innerText = `⚠️ 框多咗 (${selectedItemIds.length} / ${targetLimit} 個)`;
+                selectionBadge.className = "absolute -top-7 left-1/2 -translate-x-1/2 bg-red-500 text-white font-black text-[11px] px-2 py-0.5 rounded-full shadow whitespace-nowrap pointer-events-none animate-pulse";
+                selectionBox.style.borderColor = '#ef4444';
+            } else if (selectedItemIds.length === targetLimit) {
+                selectionBadge.innerText = `已框 ${selectedItemIds.length} / ${targetLimit} 個`;
+                selectionBadge.className = "absolute -top-7 left-1/2 -translate-x-1/2 bg-emerald-500 text-white font-black text-[11px] px-2 py-0.5 rounded-full shadow whitespace-nowrap pointer-events-none";
+                selectionBox.style.borderColor = '#10b981'; // Green match glow
+            } else {
+                selectionBadge.innerText = `已框 ${selectedItemIds.length} / ${targetLimit} 個`;
+                selectionBadge.className = "absolute -top-7 left-1/2 -translate-x-1/2 bg-amber-500 text-white font-black text-[11px] px-2 py-0.5 rounded-full shadow whitespace-nowrap pointer-events-none";
+                selectionBox.style.borderColor = '#f59e0b'; // Normal amber
+            }
+
+            updateSelectionHighlights();
+        });
+
+        function endSelectionDrag(e) {
+            if (!isDraggingSelection) return;
+            isDraggingSelection = false;
+            selectionBox.style.display = 'none';
+
+            if (e && e.pointerId && scatterBoard.hasPointerCapture(e.pointerId)) {
+                scatterBoard.releasePointerCapture(e.pointerId);
+            }
+
+            if (selectedItemIds.length > 0) {
+                const targetLimit = Math.min(STATE.mode, STATE.unplacedItems.length);
+
+                if (selectedItemIds.length > targetLimit) {
+                    // Selected too many items! Show prompt, do not process, require re-selection
+                    showToastNotice(`框多咗啦！今次要 ${targetLimit} 個一組，請重新圈選！`);
+                    playErrorSound();
+                    speakCantonese(`框多咗啦！要 ${targetLimit} 個一組，請重新圈選！`);
+
+                    selectedItemIds = [];
+                    updateSelectionHighlights();
+                    return;
+                }
+
+                groupSelectedItemsIntoBoxes(selectedItemIds);
+                selectedItemIds = [];
+            }
+        }
+
+        scatterBoard.addEventListener('pointerup', endSelectionDrag);
+        scatterBoard.addEventListener('pointercancel', endSelectionDrag);
+
+        function updateSelectionHighlights() {
+            document.querySelectorAll('.scatter-item').forEach(itemEl => {
+                const id = parseInt(itemEl.dataset.id, 10);
+                if (selectedItemIds.includes(id)) {
+                    itemEl.classList.add('item-selected');
+                } else {
+                    itemEl.classList.remove('item-selected');
+                }
+            });
+        }
+
+        // Place single item specifically into targeted box index
+        function placeSingleItemToTargetBox(itemId, targetBoxIdx) {
+            const itemIdx = STATE.unplacedItems.findIndex(i => i.id === itemId);
+            if (itemIdx === -1) return;
+
+            const targetBox = STATE.boxes[targetBoxIdx];
+            if (targetBox && targetBox.items.length < targetBox.capacity) {
+                const item = STATE.unplacedItems[itemIdx];
+                STATE.unplacedItems.splice(itemIdx, 1);
+                targetBox.items.push(item);
+                playChime(STATE.total - STATE.unplacedItems.length);
+                renderGame();
+                checkSortingCompletion();
+            } else {
+                // If targeted box is already full, fall back to next open box
+                placeSingleItemToNextOpenBox(itemId);
+            }
+        }
+
+        // Move batch of selected items from drag-box into target boxes
+        function groupSelectedItemsIntoBoxes(itemIds) {
+            let itemsToMove = [...itemIds];
+            let itemsMovedCount = 0;
+
+            // Fill boxes sequentially
+            STATE.boxes.forEach(box => {
+                while (box.items.length < box.capacity && itemsToMove.length > 0) {
+                    const idToMove = itemsToMove.shift();
+                    const itemIdx = STATE.unplacedItems.findIndex(i => i.id === idToMove);
+                    if (itemIdx !== -1) {
+                        const item = STATE.unplacedItems[itemIdx];
+                        STATE.unplacedItems.splice(itemIdx, 1);
+                        box.items.push(item);
+                        itemsMovedCount++;
+                    }
+                }
+            });
+
+            if (itemsMovedCount > 0) {
+                playChime(STATE.total - STATE.unplacedItems.length);
+                renderGame();
+                checkSortingCompletion();
+            }
+        }
+
+        // Place single item when tapped
+        function placeSingleItemToNextOpenBox(itemId) {
+            groupSelectedItemsIntoBoxes([itemId]);
+        }
+
+        // Auto Arrange Helper Button
+        function autoArrangeAll() {
+            STATE.unplacedItems = [];
+            STATE.boxes.forEach(box => {
+                box.items = [];
+                for (let i = 0; i < box.capacity; i++) {
+                    box.items.push({ id: Math.random(), emoji: STATE.itemEmoji });
+                }
+            });
+
+            STATE.phase = 'COUNTING';
+            speakCantonese("排好喇！請直接點擊盒仔跳數！");
+            renderGame();
+        }
+
+        function checkSortingCompletion() {
+            if (STATE.unplacedItems.length === 0) {
+                STATE.phase = 'COUNTING';
+                playChime(1);
+                speakCantonese("排好喇！請直接點擊盒仔跳數！");
+                renderGame();
+            }
+        }
+
+        // Skip Counting Box Click Event
+        function handleSkipCountStep(boxIdx, box, event) {
+            STATE.currentCountStep++;
+
+            let currentTotal = 0;
+            for (let i = 0; i < STATE.currentCountStep; i++) {
+                currentTotal += STATE.boxes[i].items.length;
+            }
+
+            document.getElementById('currentLiveCount').innerText = currentTotal;
+
+            playChime(STATE.currentCountStep);
+            speakCantonese(currentTotal);
+
+            createFloatingBadge(event.clientX, event.clientY, `${currentTotal}`);
+
+            renderGame();
+
+            // All boxes counted completion check
+            if (STATE.currentCountStep >= STATE.boxes.length) {
+                STATE.phase = 'COMPLETED';
+                setTimeout(() => {
+                    playVictorySound();
+                    fireConfetti();
+                    showCelebrationModal(currentTotal);
+                    renderGame();
+                }, 600);
+            }
+        }
+
+        // Floating Number Animation
+        function createFloatingBadge(x, y, text) {
+            const badge = document.createElement('div');
+            badge.className = 'floating-count-badge bg-gradient-to-r from-amber-400 to-orange-500 text-white font-black px-4 py-1.5 rounded-full shadow-lg text-xl border-2 border-white';
+            badge.style.left = `${x}px`;
+            badge.style.top = `${y}px`;
+            badge.innerText = text;
+
+            document.body.appendChild(badge);
+            setTimeout(() => badge.remove(), 1200);
+        }
+
+        // Summary Celebration Modal Display
+        function showCelebrationModal(totalCount) {
+            const overlay = document.getElementById('celebrationOverlay');
+            
+            const numFullBoxes = Math.floor(STATE.total / STATE.mode);
+            const remainder = STATE.total % STATE.mode;
+
+            document.getElementById('celebrationSummaryText').innerText = 
+                `好棒呀！你成功用 ${STATE.mode} 個一數，數出 ${totalCount} 個物品！`;
+
+            document.getElementById('summaryTotal').innerText = `${STATE.total} 個`;
+            document.getElementById('summaryGroupSize').innerText = `${STATE.mode} 個一組`;
+            document.getElementById('summaryBoxes').innerText = `${numFullBoxes} 盒`;
+            document.getElementById('summaryRemainder').innerText = `${remainder} 個`;
+
+            overlay.classList.remove('hidden');
+
+            speakCantonese(`好棒呀！你成功用 ${STATE.mode} 個一數，數出 ${totalCount} 個物品！`);
+        }
+
+        // Confetti Fireworks Engine
+        function fireConfetti() {
+            const canvas = document.getElementById('confettiCanvas');
+            const ctx = canvas.getContext('2d');
+            
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            const particles = [];
+            const colors = ['#f59e0b', '#ec4899', '#8b5cf6', '#10b981', '#3b82f6', '#ef4444'];
+
+            for (let i = 0; i < 110; i++) {
+                particles.push({
+                    x: canvas.width / 2,
+                    y: canvas.height / 2,
+                    vx: (Math.random() - 0.5) * 22,
+                    vy: (Math.random() - 0.7) * 22,
+                    size: Math.random() * 10 + 6,
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    rotation: Math.random() * 360,
+                    rotationSpeed: (Math.random() - 0.5) * 12,
+                    opacity: 1
+                });
+            }
+
+            function renderParticles() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                let alive = false;
+
+                particles.forEach(p => {
+                    if (p.opacity > 0) {
+                        alive = true;
+                        p.x += p.vx;
+                        p.y += p.vy;
+                        p.vy += 0.42;
+                        p.opacity -= 0.014;
+                        p.rotation += p.rotationSpeed;
+
+                        ctx.save();
+                        ctx.translate(p.x, p.y);
+                        ctx.rotate((p.rotation * Math.PI) / 180);
+                        ctx.globalAlpha = Math.max(0, p.opacity);
+                        ctx.fillStyle = p.color;
+                        ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+                        ctx.restore();
+                    }
+                });
+
+                if (alive) {
+                    requestAnimationFrame(renderParticles);
+                } else {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                }
+            }
+
+            renderParticles();
+        }
+
+        window.addEventListener('resize', () => {
+            const canvas = document.getElementById('confettiCanvas');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+
+        // App Initialization
+        window.onload = function() {
+            initEmojiPicker();
+            resetGameData();
+        };
+    </script>
+</body>
+</html>
