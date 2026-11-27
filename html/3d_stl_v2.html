@@ -1,0 +1,2185 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D 玩具車模型設計與 STL 檔案生成器 | 3D Car STL Generator</title>
+    <!-- 載入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 載入 Google Fonts: Inter 與 Noto Sans TC -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- 載入 Three.js 與 OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- 載入 Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'Noto Sans TC', 'sans-serif'],
+                    },
+                    colors: {
+                        cad: {
+                            bg: '#0f172a',
+                            panel: '#1e293b',
+                            border: '#334155',
+                            accent: '#3b82f6',
+                            accentHover: '#2563eb',
+                            text: '#f8fafc',
+                            muted: '#94a3b8'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* 自訂捲軸樣式，符合 CAD 工程風格 */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+        /* 自訂滑桿樣式 */
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            background: #334155;
+            height: 6px;
+            border-radius: 3px;
+            outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #3b82f6;
+            cursor: pointer;
+            border: 2px solid #f8fafc;
+            transition: transform 0.1s ease, background-color 0.1s ease;
+        }
+        input[type="range"]::-webkit-slider-thumb:hover {
+            background: #60a5fa;
+            transform: scale(1.15);
+        }
+        canvas {
+            display: block;
+            outline: none;
+        }
+    </style>
+</head>
+<body class="bg-cad-bg text-cad-text font-sans antialiased overflow-hidden select-none flex flex-col-reverse md:flex-row h-screen w-screen">
+
+    <!-- 左側：CAD 參數控制面板 (分頁結構化設計) -->
+    <aside class="w-full md:w-[430px] lg:w-[460px] h-[52vh] md:h-full bg-cad-panel border-t md:border-t-0 md:border-r border-cad-border flex flex-col z-20 shadow-2xl">
+        
+        <!-- 面板頂部快速縮放條 (整體尺寸控制) -->
+        <div class="p-3.5 bg-slate-900/80 border-b border-cad-border shrink-0">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                    <i data-lucide="maximize-2" class="w-3.5 h-3.5"></i> 整體尺寸與比例縮放
+                </span>
+                <div class="flex items-center gap-2">
+                    <!-- 耗材預覽顏色選擇 -->
+                    <div class="flex items-center gap-1 bg-slate-800 px-2 py-0.5 rounded-lg border border-slate-700" title="切換 3D 預覽耗材顏色">
+                        <span class="text-[10px] text-slate-400 mr-0.5">耗材色</span>
+                        <button onclick="setPreviewColor('#d97706')" class="w-3.5 h-3.5 rounded-full bg-amber-600 border border-white/40 hover:scale-110 transition" title="巴士香檳金"></button>
+                        <button onclick="setPreviewColor('#fef08a')" class="w-3.5 h-3.5 rounded-full bg-yellow-200 border border-white/40 hover:scale-110 transition" title="小巴奶油黃"></button>
+                        <button onclick="setPreviewColor('#dc2626')" class="w-3.5 h-3.5 rounded-full bg-red-600 border border-white/40 hover:scale-110 transition" title="經典紅"></button>
+                        <button onclick="setPreviewColor('#3b82f6')" class="w-3.5 h-3.5 rounded-full bg-blue-500 border border-white/40 hover:scale-110 transition" title="工程藍"></button>
+                        <button onclick="setPreviewColor('#f8fafc')" class="w-3.5 h-3.5 rounded-full bg-slate-100 border border-slate-400 hover:scale-110 transition" title="消光白"></button>
+                    </div>
+                    <button onclick="resetAllParams()" class="text-[11px] text-slate-400 hover:text-white flex items-center gap-1 transition bg-slate-800 px-2 py-1 rounded-lg border border-slate-700">
+                        <i data-lucide="rotate-ccw" class="w-3 h-3"></i> 重設
+                    </button>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-2.5 mb-2">
+                <!-- 整體縮放倍率 (%) -->
+                <div class="bg-slate-800/80 p-2 rounded-lg border border-slate-700/70">
+                    <div class="flex justify-between text-xs mb-1">
+                        <span class="text-slate-300">整體倍率</span>
+                        <span id="val-scale" class="font-mono font-bold text-blue-400">100%</span>
+                    </div>
+                    <input type="range" id="input-scale" min="40" max="250" step="5" value="100" class="w-full">
+                </div>
+                <!-- 目標總長度 (mm) -->
+                <div class="bg-slate-800/80 p-2 rounded-lg border border-slate-700/70">
+                    <div class="flex justify-between text-xs mb-1">
+                        <span class="text-slate-300">目標總長 (mm)</span>
+                        <span id="val-targetLength" class="font-mono font-bold text-emerald-400">135 mm</span>
+                    </div>
+                    <input type="range" id="input-targetLength" min="50" max="300" step="1" value="135" class="w-full">
+                </div>
+            </div>
+
+            <!-- 鎖定軸孔直徑開關 -->
+            <label class="flex items-center justify-between bg-slate-800/50 hover:bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700/60 cursor-pointer transition">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="lock" class="w-3.5 h-3.5 text-amber-400"></i>
+                    <span class="text-xs text-slate-200">縮放時鎖定「空心軸孔直徑」不變</span>
+                </div>
+                <input type="checkbox" id="lock-axle-hole" checked class="w-4 h-4 rounded accent-blue-500 cursor-pointer">
+            </label>
+        </div>
+
+        <!-- 導覽分頁標籤 (Tabs) -->
+        <div class="grid grid-cols-3 bg-slate-950/60 border-b border-cad-border px-2 pt-1.5 gap-1 shrink-0 text-xs font-semibold">
+            <button onclick="switchTab('tab-vehicle')" id="btn-tab-vehicle" class="tab-btn py-2 px-2 rounded-t-lg border-t border-x border-cad-border bg-cad-panel text-blue-400 flex items-center justify-center gap-1.5 transition cursor-pointer">
+                <i data-lucide="bus" class="w-3.5 h-3.5"></i> 1. 車種與輪廓
+            </button>
+            <button onclick="switchTab('tab-deco')" id="btn-tab-deco" class="tab-btn py-2 px-2 rounded-t-lg border-t border-x border-transparent text-slate-400 hover:text-slate-200 flex items-center justify-center gap-1.5 transition cursor-pointer">
+                <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-400"></i> 2. 3D文字與圖案
+            </button>
+            <button onclick="switchTab('tab-axle')" id="btn-tab-axle" class="tab-btn py-2 px-2 rounded-t-lg border-t border-x border-transparent text-slate-400 hover:text-slate-200 flex items-center justify-center gap-1.5 transition cursor-pointer">
+                <i data-lucide="circle-dot" class="w-3.5 h-3.5 text-emerald-400"></i> 3. 軸孔與輪子
+            </button>
+        </div>
+
+        <!-- 可捲動參數設定區 -->
+        <div class="flex-1 overflow-y-auto p-4 space-y-4">
+
+            <!-- ================= 分頁 1：車種與輪廓 ================= -->
+            <div id="tab-vehicle" class="tab-content space-y-4">
+                <!-- 車身預設造型選擇 -->
+                <section>
+                    <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-1.5">
+                        <i data-lucide="shapes" class="w-3.5 h-3.5 text-blue-400"></i> 選擇特色車種預設 (Presets)
+                    </h2>
+                    <div class="grid grid-cols-3 gap-2" id="preset-grid">
+                        <button data-preset="doubledecker" onclick="applyPreset('doubledecker')" class="preset-btn flex flex-col items-center justify-center p-2 rounded-xl border text-xs font-medium transition">
+                            <span class="text-lg mb-0.5">🚌</span>
+                            雙層巴士
+                        </button>
+                        <button data-preset="minibus" onclick="applyPreset('minibus')" class="preset-btn flex flex-col items-center justify-center p-2 rounded-xl border text-xs font-medium transition">
+                            <span class="text-lg mb-0.5">🚐</span>
+                            香港小巴
+                        </button>
+                        <button data-preset="roadster" onclick="applyPreset('roadster')" class="preset-btn flex flex-col items-center justify-center p-2 rounded-xl border text-xs font-medium transition">
+                            <span class="text-lg mb-0.5">🏎️</span>
+                            復古跑車
+                        </button>
+                        <button data-preset="pickup" onclick="applyPreset('pickup')" class="preset-btn flex flex-col items-center justify-center p-2 rounded-xl border text-xs font-medium transition">
+                            <span class="text-lg mb-0.5">🛻</span>
+                            美式皮卡
+                        </button>
+                        <button data-preset="f1" onclick="applyPreset('f1')" class="preset-btn flex flex-col items-center justify-center p-2 rounded-xl border text-xs font-medium transition">
+                            <span class="text-lg mb-0.5">🏁</span>
+                            方程式賽車
+                        </button>
+                        <button data-preset="cyber" onclick="applyPreset('cyber')" class="preset-btn flex flex-col items-center justify-center p-2 rounded-xl border text-xs font-medium transition">
+                            <span class="text-lg mb-0.5">📐</span>
+                            方塊概念車
+                        </button>
+                    </div>
+                </section>
+
+                <!-- 立體車窗與車頭細節開關 -->
+                <section class="bg-slate-800/50 border border-blue-500/30 rounded-xl p-3 space-y-2.5">
+                    <h2 class="text-xs font-bold uppercase tracking-wider text-blue-300 flex items-center gap-1.5">
+                        <i data-lucide="layout-grid" class="w-3.5 h-3.5"></i> 立體細節結構 (直接匯出至 STL)
+                    </h2>
+                    <div class="grid grid-cols-2 gap-2">
+                        <label class="flex items-center justify-between bg-slate-900/60 px-2.5 py-2 rounded-lg border border-slate-700/70 cursor-pointer">
+                            <span class="text-xs text-slate-200">立體車窗框</span>
+                            <input type="checkbox" id="toggle-windows" checked class="w-4 h-4 rounded accent-blue-500">
+                        </label>
+                        <label class="flex items-center justify-between bg-slate-900/60 px-2.5 py-2 rounded-lg border border-slate-700/70 cursor-pointer">
+                            <span class="text-xs text-slate-200">大燈與護罩</span>
+                            <input type="checkbox" id="toggle-headlights" checked class="w-4 h-4 rounded accent-blue-500">
+                        </label>
+                    </div>
+                    <div class="flex items-center justify-between text-xs pt-1">
+                        <span class="text-slate-300">車窗佈局樣式</span>
+                        <select id="select-windowStyle" class="bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-2 py-1 text-xs outline-none">
+                            <option value="auto">自動依車種配置</option>
+                            <option value="double">雙層巴士上下排窗</option>
+                            <option value="minibus">香港小巴長排客窗</option>
+                            <option value="sport">跑車/房車流線側窗</option>
+                            <option value="none">隱藏車窗</option>
+                        </select>
+                    </div>
+                </section>
+
+                <!-- 車身尺寸與輪廓細節微調 -->
+                <section class="space-y-2.5">
+                    <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                        <i data-lucide="sliders" class="w-3.5 h-3.5 text-blue-400"></i> 車身幾何尺寸微調
+                    </h2>
+
+                    <div class="grid grid-cols-1 gap-2.5 bg-slate-800/40 border border-slate-700/60 rounded-xl p-3">
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-slate-300">車身基準長度 (Base Length)</span>
+                                <span id="val-length" class="font-mono text-blue-300">135 mm</span>
+                            </div>
+                            <input type="range" id="input-length" min="55" max="260" step="1" value="135" class="w-full">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-slate-300">車身寬度 (Body Width)</span>
+                                <span id="val-width" class="font-mono text-blue-300">46 mm</span>
+                            </div>
+                            <input type="range" id="input-width" min="22" max="130" step="1" value="46" class="w-full">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-slate-300">車身高度 (Body Height)</span>
+                                <span id="val-height" class="font-mono text-blue-300">62 mm</span>
+                            </div>
+                            <input type="range" id="input-height" min="18" max="110" step="1" value="62" class="w-full">
+                        </div>
+                        <div class="border-t border-slate-700/60 my-0.5"></div>
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-slate-300">車頂座艙比例 (Cabin Ratio)</span>
+                                <span id="val-cabinRatio" class="font-mono text-slate-200">84%</span>
+                            </div>
+                            <input type="range" id="input-cabinRatio" min="12" max="92" step="1" value="84" class="w-full">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-slate-300">車頭引擎蓋長度 (Hood Ratio)</span>
+                                <span id="val-hoodRatio" class="font-mono text-slate-200">10%</span>
+                            </div>
+                            <input type="range" id="input-hoodRatio" min="4" max="55" step="1" value="10" class="w-full">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-slate-300">邊緣圓角導角 (Bevel / Fillet)</span>
+                                <span id="val-bevel" class="font-mono text-slate-200">1.8 mm</span>
+                            </div>
+                            <input type="range" id="input-bevel" min="0" max="6" step="0.2" value="1.8" class="w-full">
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- ================= 分頁 2：3D 浮雕文字與立體圖案 ================= -->
+            <div id="tab-deco" class="tab-content hidden space-y-4">
+                
+                <!-- A. 車身 3D 浮雕文字系統 -->
+                <section class="bg-slate-800/50 border border-amber-500/35 rounded-xl p-3.5 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                            <i data-lucide="type" class="w-3.5 h-3.5"></i> 車身 3D 浮雕文字 (支援中英文)
+                        </h2>
+                        <label class="inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="toggle-text" checked class="sr-only peer">
+                            <div class="relative w-9 h-5 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+                        </label>
+                    </div>
+
+                    <!-- 文字輸入框與快速路線標籤 -->
+                    <div>
+                        <input type="text" id="input-customText" value="968 銅鑼灣" maxlength="18" placeholder="輸入車身文字，例如：旺角 ⇄ 觀塘 / 88M" class="w-full bg-slate-900 border border-slate-600 focus:border-amber-400 rounded-lg px-3 py-2 text-sm text-white outline-none font-medium">
+                        <div class="flex flex-wrap gap-1.5 mt-2">
+                            <button onclick="setQuickText('968 銅鑼灣')" class="text-[10px] bg-slate-700/80 hover:bg-slate-600 text-amber-200 px-2 py-0.5 rounded border border-slate-600 transition">968 銅鑼灣</button>
+                            <button onclick="setQuickText('旺角 ⇄ 觀塘')" class="text-[10px] bg-slate-700/80 hover:bg-slate-600 text-emerald-200 px-2 py-0.5 rounded border border-slate-600 transition">旺角 ⇄ 觀塘</button>
+                            <button onclick="setQuickText('88M 專線小巴')" class="text-[10px] bg-slate-700/80 hover:bg-slate-600 text-emerald-200 px-2 py-0.5 rounded border border-slate-600 transition">88M 專線小巴</button>
+                            <button onclick="setQuickText('HK 2026')" class="text-[10px] bg-slate-700/80 hover:bg-slate-600 text-blue-200 px-2 py-0.5 rounded border border-slate-600 transition">HK 2026</button>
+                            <button onclick="setQuickText('BABY IN CAR')" class="text-[10px] bg-slate-700/80 hover:bg-slate-600 text-pink-200 px-2 py-0.5 rounded border border-slate-600 transition">BABY IN CAR</button>
+                        </div>
+                    </div>
+
+                    <!-- 文字尺寸與浮雕高度 -->
+                    <div class="grid grid-cols-2 gap-2.5">
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-slate-300">文字高度</span>
+                                <span id="val-textSize" class="font-mono text-amber-300">8.5 mm</span>
+                            </div>
+                            <input type="range" id="input-textSize" min="4" max="22" step="0.5" value="8.5" class="w-full">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-slate-300">凸起厚度</span>
+                                <span id="val-textDepth" class="font-mono text-amber-300">1.2 mm</span>
+                            </div>
+                            <input type="range" id="input-textDepth" min="0.5" max="3.0" step="0.1" value="1.2" class="w-full">
+                        </div>
+                    </div>
+
+                    <!-- 文字位置微調 -->
+                    <div class="grid grid-cols-2 gap-2.5">
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-slate-300">上下位置</span>
+                                <span id="val-textOffsetY" class="font-mono text-slate-300">52%</span>
+                            </div>
+                            <input type="range" id="input-textOffsetY" min="15" max="88" step="1" value="52" class="w-full">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-slate-300">前後位置</span>
+                                <span id="val-textOffsetX" class="font-mono text-slate-300">0%</span>
+                            </div>
+                            <input type="range" id="input-textOffsetX" min="-35" max="35" step="1" value="0" class="w-full">
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between text-xs pt-0.5">
+                        <span class="text-slate-300">文字貼附位置</span>
+                        <select id="select-textPlacement" class="bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-2 py-1 text-xs outline-none">
+                            <option value="both-sides">車身左右兩側 (均為正向閱讀)</option>
+                            <option value="roof">車頂上方平貼</option>
+                        </select>
+                    </div>
+                </section>
+
+                <!-- B. 車身立體圖案與趣味飾件 (3D Emblem / Pattern) -->
+                <section class="bg-slate-800/50 border border-purple-500/35 rounded-xl p-3.5 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-xs font-bold uppercase tracking-wider text-purple-300 flex items-center gap-1.5">
+                            <i data-lucide="award" class="w-3.5 h-3.5"></i> 立體圖案徽章與車頂飾件
+                        </h2>
+                        <span class="text-[10px] bg-purple-500/20 text-purple-200 px-2 py-0.5 rounded-full">一體實體擠出</span>
+                    </div>
+
+                    <!-- 圖案選擇網格 -->
+                    <div class="grid grid-cols-4 gap-1.5" id="emblem-grid">
+                        <button data-emblem="none" onclick="setEmblem('none')" class="emblem-btn flex flex-col items-center justify-center p-2 rounded-lg border border-slate-700 bg-slate-900/50 text-[11px] text-slate-300 transition cursor-pointer">
+                            <span class="text-sm mb-0.5">🚫</span>無圖案
+                        </button>
+                        <button data-emblem="cat-ears" onclick="setEmblem('cat-ears')" class="emblem-btn flex flex-col items-center justify-center p-2 rounded-lg border border-slate-700 bg-slate-900/50 text-[11px] text-slate-300 transition cursor-pointer">
+                            <span class="text-sm mb-0.5">🐱</span>車頂貓耳
+                        </button>
+                        <button data-emblem="stripes" onclick="setEmblem('stripes')" class="emblem-btn flex flex-col items-center justify-center p-2 rounded-lg border border-slate-700 bg-slate-900/50 text-[11px] text-slate-300 transition cursor-pointer">
+                            <span class="text-sm mb-0.5">🏎️</span>賽車條紋
+                        </button>
+                        <button data-emblem="lightning" onclick="setEmblem('lightning')" class="emblem-btn flex flex-col items-center justify-center p-2 rounded-lg border border-slate-700 bg-slate-900/50 text-[11px] text-slate-300 transition cursor-pointer">
+                            <span class="text-sm mb-0.5">⚡</span>閃電徽章
+                        </button>
+                        <button data-emblem="star" onclick="setEmblem('star')" class="emblem-btn flex flex-col items-center justify-center p-2 rounded-lg border border-slate-700 bg-slate-900/50 text-[11px] text-slate-300 transition cursor-pointer">
+                            <span class="text-sm mb-0.5">⭐</span>五角星星
+                        </button>
+                        <button data-emblem="heart" onclick="setEmblem('heart')" class="emblem-btn flex flex-col items-center justify-center p-2 rounded-lg border border-slate-700 bg-slate-900/50 text-[11px] text-slate-300 transition cursor-pointer">
+                            <span class="text-sm mb-0.5">❤️</span>立體愛心
+                        </button>
+                        <button data-emblem="smiley" onclick="setEmblem('smiley')" class="emblem-btn flex flex-col items-center justify-center p-2 rounded-lg border border-slate-700 bg-slate-900/50 text-[11px] text-slate-300 transition cursor-pointer">
+                            <span class="text-sm mb-0.5">😊</span>微笑表情
+                        </button>
+                        <button data-emblem="crown" onclick="setEmblem('crown')" class="emblem-btn flex flex-col items-center justify-center p-2 rounded-lg border border-slate-700 bg-slate-900/50 text-[11px] text-slate-300 transition cursor-pointer">
+                            <span class="text-sm mb-0.5">👑</span>皇冠標誌
+                        </button>
+                    </div>
+
+                    <!-- 圖案大小與厚度 -->
+                    <div class="grid grid-cols-2 gap-2.5 pt-1">
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-slate-300">圖案尺寸</span>
+                                <span id="val-emblemSize" class="font-mono text-purple-300">14 mm</span>
+                            </div>
+                            <input type="range" id="input-emblemSize" min="6" max="32" step="1" value="14" class="w-full">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-slate-300">圖案厚度</span>
+                                <span id="val-emblemDepth" class="font-mono text-purple-300">1.4 mm</span>
+                            </div>
+                            <input type="range" id="input-emblemDepth" min="0.5" max="3.5" step="0.1" value="1.4" class="w-full">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2.5">
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-slate-300">圖案前後偏移</span>
+                                <span id="val-emblemOffsetX" class="font-mono text-slate-300">15%</span>
+                            </div>
+                            <input type="range" id="input-emblemOffsetX" min="-35" max="35" step="1" value="15" class="w-full">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-slate-300">圖案上下高度</span>
+                                <span id="val-emblemOffsetY" class="font-mono text-slate-300">35%</span>
+                            </div>
+                            <input type="range" id="input-emblemOffsetY" min="15" max="85" step="1" value="35" class="w-full">
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- ================= 分頁 3：空心軸孔與輪子 ================= -->
+            <div id="tab-axle" class="tab-content hidden space-y-4">
+                <!-- 空心輪軸孔設計 -->
+                <section class="bg-slate-800/40 border border-amber-500/30 rounded-xl p-3.5 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                            <i data-lucide="circle-dot" class="w-3.5 h-3.5"></i> 空心輪軸孔設計 (貫穿車身)
+                        </h2>
+                        <span class="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full">水密穿孔</span>
+                    </div>
+
+                    <!-- 軸孔直徑 -->
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-300">軸孔直徑 (Hole Diameter)</span>
+                            <span id="val-axleDiameter" class="font-mono font-bold text-amber-400">4.5 mm</span>
+                        </div>
+                        <input type="range" id="input-axleDiameter" min="1.5" max="15.0" step="0.1" value="4.5" class="w-full">
+                        <div class="flex justify-between text-[10px] text-slate-500 mt-1">
+                            <span>1.75mm耗材軸 (2.2)</span>
+                            <span>竹籤 (3.5)</span>
+                            <span>標準列印軸 (5.0+)</span>
+                        </div>
+                    </div>
+
+                    <!-- 前後軸距 -->
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-300">前後軸距比例 (Wheelbase)</span>
+                            <span id="val-wheelbaseRatio" class="font-mono text-slate-200">62%</span>
+                        </div>
+                        <input type="range" id="input-wheelbaseRatio" min="40" max="80" step="1" value="62" class="w-full">
+                    </div>
+
+                    <!-- 軸孔離地高度 -->
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-300">軸孔中心高度 (Axle Z-Offset)</span>
+                            <span id="val-axleHeight" class="font-mono text-slate-200">5.5 mm</span>
+                        </div>
+                        <input type="range" id="input-axleHeight" min="2.0" max="18.0" step="0.5" value="5.5" class="w-full">
+                    </div>
+
+                    <!-- 輪拱凹槽深度 -->
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-300">側面輪拱護板開口 (Wheel Arch)</span>
+                            <span id="val-archScale" class="font-mono text-slate-200">1.35x</span>
+                        </div>
+                        <input type="range" id="input-archScale" min="0" max="2.2" step="0.05" value="1.35" class="w-full">
+                    </div>
+                </section>
+
+                <!-- 配套輪子與車軸預覽及列印件 -->
+                <section class="bg-slate-800/40 border border-slate-700/60 rounded-xl p-3.5 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                            <i data-lucide="disc" class="w-3.5 h-3.5"></i> 配套輪子與車軸 (選配)
+                        </h2>
+                        <label class="inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="toggle-wheels" checked class="sr-only peer">
+                            <div class="relative w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
+                            <span class="ms-2 text-xs font-medium text-slate-300">顯示預覽</span>
+                        </label>
+                    </div>
+
+                    <div id="wheel-settings" class="space-y-2.5 pt-1">
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-slate-300">輪胎外徑 (Wheel Diameter)</span>
+                                <span id="val-wheelDiameter" class="font-mono text-emerald-300">24 mm</span>
+                            </div>
+                            <input type="range" id="input-wheelDiameter" min="12" max="55" step="1" value="24" class="w-full">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-slate-300">輪胎寬度 (Wheel Thickness)</span>
+                                <span id="val-wheelWidth" class="font-mono text-emerald-300">8 mm</span>
+                            </div>
+                            <input type="range" id="input-wheelWidth" min="3" max="20" step="0.5" value="8" class="w-full">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-slate-300">列印公差間隙 (Clearance)</span>
+                                <span id="val-clearance" class="font-mono text-slate-300">0.40 mm</span>
+                            </div>
+                            <input type="range" id="input-clearance" min="0.1" max="1.0" step="0.05" value="0.4" class="w-full">
+                            <p class="text-[10px] text-slate-400 mt-1">※ 匯出配套輪軸時，軸心直徑會自動減去公差以確保順暢轉動。</p>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+        </div>
+
+        <!-- 底部 STL 匯出按鈕區 -->
+        <div class="p-3.5 bg-slate-900 border-t border-cad-border space-y-2 shrink-0">
+            <button onclick="exportCarBodySTL()" class="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-900/40 transition flex items-center justify-center gap-2 text-sm cursor-pointer">
+                <i data-lucide="download" class="w-4 h-4"></i>
+                下載車身 + 文字圖案 STL (含空心軸孔)
+            </button>
+            <button onclick="exportWheelsAndAxlesSTL()" class="w-full py-2 px-4 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 font-medium rounded-xl transition flex items-center justify-center gap-2 text-xs cursor-pointer">
+                <i data-lucide="cog" class="w-3.5 h-3.5 text-emerald-400"></i>
+                下載配套「4顆輪子 + 2根車軸」列印盤 STL
+            </button>
+        </div>
+    </aside>
+
+    <!-- 右側/主區域：3D 互動預覽畫布 -->
+    <div id="canvas-container" class="relative flex-1 h-[48vh] md:h-full w-full bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 overflow-hidden">
+        
+        <!-- 頂部狀態與標題列 (浮動於畫布上方) -->
+        <div class="absolute top-4 left-4 right-4 flex flex-wrap items-center justify-between gap-2 pointer-events-none z-10">
+            <!-- 品牌與標題 -->
+            <div class="bg-slate-900/85 backdrop-blur-md border border-slate-700/80 px-3.5 py-2 rounded-xl shadow-lg pointer-events-auto flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-blue-600 flex items-center justify-center text-white shadow-inner">
+                    <i data-lucide="bus" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <h1 class="text-sm md:text-base font-bold tracking-wide text-white flex items-center gap-2">
+                        3D 玩具車 STL 生成器
+                        <span class="text-[10px] font-mono uppercase bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.5 rounded">PRO v3.0</span>
+                    </h1>
+                    <p class="text-[11px] text-slate-400 hidden sm:block">雙層巴士 · 香港小巴 · 3D浮雕文字與立體圖案 · 1:1 mm 匯出</p>
+                </div>
+            </div>
+
+            <!-- 即時幾何規格資訊卡 -->
+            <div class="bg-slate-900/85 backdrop-blur-md border border-slate-700/80 px-3.5 py-2 rounded-xl shadow-lg pointer-events-auto flex items-center gap-3.5 text-xs">
+                <div>
+                    <span class="text-slate-400 block text-[10px]">包圍盒 (長×寬×高)</span>
+                    <span id="stat-dimensions" class="font-mono font-semibold text-emerald-400">135.0 × 46.0 × 62.0 mm</span>
+                </div>
+                <div class="h-6 w-[1px] bg-slate-700"></div>
+                <div>
+                    <span class="text-slate-400 block text-[10px]">空心軸孔</span>
+                    <span id="stat-hole" class="font-mono font-semibold text-amber-400">Ø 4.5 mm</span>
+                </div>
+                <div class="h-6 w-[1px] bg-slate-700 hidden lg:block"></div>
+                <div class="hidden lg:block">
+                    <span class="text-slate-400 block text-[10px]">三角面數</span>
+                    <span id="stat-triangles" class="font-mono font-semibold text-blue-300">0</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 視角切換與顯示模式工具列 (底部浮動) -->
+        <div class="absolute bottom-4 left-4 right-4 flex flex-wrap items-center justify-center md:justify-between gap-2 pointer-events-none z-10">
+            <!-- 視角快捷鍵 -->
+            <div class="bg-slate-900/90 backdrop-blur-md border border-slate-700/80 p-1.5 rounded-xl shadow-lg pointer-events-auto flex items-center gap-1">
+                <button onclick="setCameraView('iso')" class="view-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800 transition flex items-center gap-1" title="等角視圖">
+                    <i data-lucide="box" class="w-3.5 h-3.5 text-blue-400"></i> 等角
+                </button>
+                <button onclick="setCameraView('side')" class="view-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800 transition" title="正側面視圖 (檢視文字、圖案與軸孔)">
+                    側面
+                </button>
+                <button onclick="setCameraView('top')" class="view-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800 transition" title="俯視圖">
+                    俯視
+                </button>
+                <button onclick="setCameraView('front')" class="view-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800 transition" title="正面視圖">
+                    車頭
+                </button>
+                <button onclick="setCameraView('bottom')" class="view-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800 transition text-amber-300" title="底部仰視 (檢視貫穿軸孔)">
+                    <i data-lucide="eye" class="w-3.5 h-3.5"></i> 底部軸孔
+                </button>
+            </div>
+
+            <!-- 渲染模式與操作提示 -->
+            <div class="bg-slate-900/90 backdrop-blur-md border border-slate-700/80 p-1.5 rounded-xl shadow-lg pointer-events-auto flex items-center gap-1.5">
+                <button id="btn-wireframe" onclick="toggleWireframe()" class="px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800 transition flex items-center gap-1.5">
+                    <i data-lucide="grid" class="w-3.5 h-3.5 text-purple-400"></i>
+                    <span id="wireframe-label">線框：關</span>
+                </button>
+                <div class="h-4 w-[1px] bg-slate-700"></div>
+                <button id="btn-xray" onclick="toggleXray()" class="px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800 transition flex items-center gap-1.5" title="半透明檢視內部貫穿軸孔通道">
+                    <i data-lucide="scan" class="w-3.5 h-3.5 text-cyan-400"></i>
+                    <span id="xray-label">透視軸孔：關</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 操作提示浮水印 -->
+        <div class="absolute bottom-16 left-4 text-[11px] text-slate-500 pointer-events-none hidden lg:block">
+            左鍵拖曳：旋轉視角 ｜ 右鍵拖曳：平移 ｜ 滾輪：縮放 (網格每小格 = 10mm)
+        </div>
+    </div>
+
+    <!-- 自訂通知訊息框 (取代 alert) -->
+    <div id="toast-box" class="fixed top-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none opacity-0 transition-all duration-300 transform -translate-y-2">
+        <div class="bg-slate-800/95 backdrop-blur-md border border-blue-500/50 text-white px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-2.5 text-xs font-medium">
+            <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400 shrink-0"></i>
+            <span id="toast-message">STL 檔案已成功匯出！</span>
+        </div>
+    </div>
+
+    <script>
+        // 初始化 Lucide 圖示
+        lucide.createIcons();
+
+        // ============================================================================
+        // 1. 應用程式狀態與多樣化車種預設資料庫 (單位全部為毫米 mm)
+        // ============================================================================
+        const PRESETS = {
+            doubledecker: {
+                name: '雙層巴士',
+                previewColor: '#d97706', // 經典九巴香檳金
+                length: 145, width: 46, height: 64,
+                cabinRatio: 88, hoodRatio: 6,
+                trunkHeightRatio: 0.98,
+                hoodHeightRatio: 0.92,
+                frontSlope: 0.12,
+                rearSlope: 0.04,
+                smoothRoof: false,
+                bevel: 1.8,
+                axleDiameter: 4.5,
+                wheelbaseRatio: 64,
+                axleHeight: 6.0,
+                archScale: 1.35,
+                wheelDiameter: 22,
+                wheelWidth: 8,
+                windowStyle: 'double',
+                showWindows: true,
+                showHeadlights: true,
+                defaultText: '968 銅鑼灣',
+                textSize: 8.5,
+                textOffsetY: 50,
+                textOffsetX: 0,
+                emblem: 'none'
+            },
+            minibus: {
+                name: '香港小巴',
+                previewColor: '#fef08a', // 經典小巴奶油黃
+                length: 118, width: 46, height: 48,
+                cabinRatio: 74, hoodRatio: 18,
+                trunkHeightRatio: 0.94,
+                hoodHeightRatio: 0.56,
+                frontSlope: 0.35,
+                rearSlope: 0.12,
+                smoothRoof: true,
+                bevel: 2.2,
+                axleDiameter: 4.5,
+                wheelbaseRatio: 62,
+                axleHeight: 5.5,
+                archScale: 1.35,
+                wheelDiameter: 22,
+                wheelWidth: 8,
+                windowStyle: 'minibus',
+                showWindows: true,
+                showHeadlights: true,
+                defaultText: '旺角 ⇄ 觀塘',
+                textSize: 7.5,
+                textOffsetY: 36,
+                textOffsetX: -4,
+                emblem: 'none'
+            },
+            roadster: {
+                name: '復古跑車',
+                previewColor: '#dc2626', // 跑車紅
+                length: 135, width: 58, height: 30,
+                cabinRatio: 38, hoodRatio: 36,
+                trunkHeightRatio: 0.56,
+                hoodHeightRatio: 0.42,
+                frontSlope: 0.90,
+                rearSlope: 0.92,
+                smoothRoof: true,
+                bevel: 2.2,
+                axleDiameter: 4.5,
+                wheelbaseRatio: 64,
+                axleHeight: 4.5,
+                archScale: 1.30,
+                wheelDiameter: 25,
+                wheelWidth: 10,
+                windowStyle: 'sport',
+                showWindows: true,
+                showHeadlights: true,
+                defaultText: 'GT 88',
+                textSize: 7.0,
+                textOffsetY: 32,
+                textOffsetX: 0,
+                emblem: 'stripes'
+            },
+            pickup: {
+                name: '美式皮卡',
+                previewColor: '#3b82f6', // 工程藍
+                length: 134, width: 55, height: 44,
+                cabinRatio: 32, hoodRatio: 26,
+                trunkHeightRatio: 0.54,
+                hoodHeightRatio: 0.52,
+                frontSlope: 0.35,
+                rearSlope: 0.05,
+                smoothRoof: false,
+                isPickup: true,
+                bevel: 1.6,
+                axleDiameter: 5.0,
+                wheelbaseRatio: 64,
+                axleHeight: 6.5,
+                archScale: 1.40,
+                wheelDiameter: 28,
+                wheelWidth: 10,
+                windowStyle: 'sport',
+                showWindows: true,
+                showHeadlights: true,
+                defaultText: '4x4 OFFROAD',
+                textSize: 6.5,
+                textOffsetY: 34,
+                textOffsetX: -12,
+                emblem: 'star'
+            },
+            f1: {
+                name: '方程式賽車',
+                previewColor: '#ef4444',
+                length: 145, width: 62, height: 28,
+                cabinRatio: 26, hoodRatio: 46,
+                trunkHeightRatio: 0.95, // 大型尾翼高度
+                hoodHeightRatio: 0.28,
+                frontSlope: 0.95,
+                rearSlope: 0.25,
+                smoothRoof: false,
+                isF1: true,
+                bevel: 1.2,
+                axleDiameter: 4.5,
+                wheelbaseRatio: 68,
+                axleHeight: 4.5,
+                archScale: 1.45,
+                wheelDiameter: 26,
+                wheelWidth: 12,
+                windowStyle: 'none',
+                showWindows: false,
+                showHeadlights: false,
+                defaultText: 'NO.1',
+                textSize: 7.0,
+                textOffsetY: 30,
+                textOffsetX: -5,
+                emblem: 'lightning'
+            },
+            cyber: {
+                name: '方塊概念車',
+                previewColor: '#94a3b8',
+                length: 140, width: 56, height: 44,
+                cabinRatio: 12, hoodRatio: 44,
+                trunkHeightRatio: 0.65,
+                hoodHeightRatio: 0.46,
+                frontSlope: 1.0,
+                rearSlope: 1.0,
+                smoothRoof: false,
+                bevel: 0.6,
+                axleDiameter: 5.0,
+                wheelbaseRatio: 66,
+                axleHeight: 6.5,
+                archScale: 1.35,
+                wheelDiameter: 28,
+                wheelWidth: 10,
+                windowStyle: 'sport',
+                showWindows: true,
+                showHeadlights: true,
+                defaultText: 'CYBER',
+                textSize: 7.5,
+                textOffsetY: 34,
+                textOffsetX: 0,
+                emblem: 'cat-ears'
+            }
+        };
+
+        // 當前設計狀態
+        let state = {
+            currentPreset: 'doubledecker',
+            scalePercent: 100,
+            lockAxleHole: true,
+            baseAxleDiameter: 4.5,
+            ...JSON.parse(JSON.stringify(PRESETS.doubledecker)),
+            // 文字與圖案細節預設
+            showText: true,
+            customText: '968 銅鑼灣',
+            textSize: 8.5,
+            textDepth: 1.2,
+            textOffsetY: 50,
+            textOffsetX: 0,
+            textPlacement: 'both-sides',
+            emblem: 'none',
+            emblemSize: 14,
+            emblemDepth: 1.4,
+            emblemOffsetX: 15,
+            emblemOffsetY: 35,
+            clearance: 0.4,
+            showWheels: true,
+            wireframe: false,
+            xray: false
+        };
+
+        // ============================================================================
+        // 2. Three.js 場景初始化
+        // ============================================================================
+        let scene, camera, renderer, controls;
+        let carAssemblyGroup = new THREE.Group(); // 包含車身本體 + 立體文字 + 立體圖案 + 車窗車燈 (全部匯出至 STL)
+        let wheelsGroup = new THREE.Group();
+        let axlePreviewGroup = new THREE.Group();
+        let gridHelper, groundPlane;
+
+        function initThreeJS() {
+            const container = document.getElementById('canvas-container');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            scene = new THREE.Scene();
+
+            camera = new THREE.PerspectiveCamera(40, width / height, 1, 2000);
+            camera.position.set(160, 115, 180);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(width, height);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.06;
+            controls.minDistance = 30;
+            controls.maxDistance = 650;
+            controls.target.set(0, 26, 0);
+
+            // CAD 工程三點打光
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.58);
+            scene.add(ambientLight);
+
+            const dirLight1 = new THREE.DirectionalLight(0xffffff, 0.85);
+            dirLight1.position.set(110, 190, 130);
+            dirLight1.castShadow = true;
+            dirLight1.shadow.mapSize.width = 2048;
+            dirLight1.shadow.mapSize.height = 2048;
+            const d = 160;
+            dirLight1.shadow.camera.left = -d;
+            dirLight1.shadow.camera.right = d;
+            dirLight1.shadow.camera.top = d;
+            dirLight1.shadow.camera.bottom = -d;
+            scene.add(dirLight1);
+
+            const dirLight2 = new THREE.DirectionalLight(0x93c5fd, 0.45);
+            dirLight2.position.set(-130, 70, -110);
+            scene.add(dirLight2);
+
+            const bottomLight = new THREE.DirectionalLight(0xfde68a, 0.25);
+            bottomLight.position.set(0, -100, 0);
+            scene.add(bottomLight);
+
+            // 參考網格地面 (每格 10mm)
+            gridHelper = new THREE.GridHelper(320, 32, 0x3b82f6, 0x1e293b);
+            scene.add(gridHelper);
+
+            const planeGeo = new THREE.PlaneGeometry(420, 420);
+            const planeMat = new THREE.ShadowMaterial({ opacity: 0.25 });
+            groundPlane = new THREE.Mesh(planeGeo, planeMat);
+            groundPlane.rotation.x = -Math.PI / 2;
+            groundPlane.receiveShadow = true;
+            scene.add(groundPlane);
+
+            const axesHelper = new THREE.AxesHelper(25);
+            axesHelper.position.set(-150, 0.2, 150);
+            scene.add(axesHelper);
+
+            scene.add(carAssemblyGroup);
+            scene.add(wheelsGroup);
+            scene.add(axlePreviewGroup);
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function onWindowResize() {
+            const container = document.getElementById('canvas-container');
+            if (!container) return;
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height);
+        }
+
+        // ============================================================================
+        // 3. 3D 浮雕文字體素網格生成器 (支援繁體中文、英文、數字與符號)
+        // ============================================================================
+        
+        /**
+         * 將任意繁體中文/英數字串透過高解析 Canvas 光柵化，
+         * 並建立合併最佳化後的實體凸起 3D 網格 (合併水平連續像素條以大幅減少三角面數並確保水密)
+         */
+        function create3DTextMesh(textStr, targetHeightMM, extrudeDepthMM, material) {
+            if (!textStr || !textStr.trim()) return null;
+
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const fontSizePx = 64; // 高解析取樣確保中文字筆畫清晰
+            const fontFamily = '"Noto Sans TC", "Microsoft JhengHei", "PingFang HK", "Inter", sans-serif';
+            ctx.font = `900 ${fontSizePx}px ${fontFamily}`;
+
+            const metrics = ctx.measureText(textStr);
+            const textWidthPx = Math.ceil(metrics.width) + 16;
+            const textHeightPx = Math.ceil(fontSizePx * 1.25);
+
+            canvas.width = Math.max(16, textWidthPx);
+            canvas.height = Math.max(16, textHeightPx);
+
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.font = `900 ${fontSizePx}px ${fontFamily}`;
+            ctx.fillStyle = '#ffffff';
+            ctx.textBaseline = 'middle';
+            ctx.textAlign = 'center';
+            ctx.fillText(textStr, canvas.width / 2, canvas.height / 2 + 2);
+
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+
+            // 計算像素到毫米 (mm) 的縮放比例
+            const mmPerPx = targetHeightMM / fontSizePx;
+            // 為了效能與列印滑順度，垂直方向以 1px 取樣，水平方向使用 Run-Length Encoding (RLE) 合併連續筆畫！
+            const runs = []; // { x0, x1, y }
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+
+            for (let y = 0; y < canvas.height; y++) {
+                let runStart = -1;
+                for (let x = 0; x <= canvas.width; x++) {
+                    const isFilled = x < canvas.width && imgData[(y * canvas.width + x) * 4] > 115;
+                    if (isFilled && runStart === -1) {
+                        runStart = x;
+                    } else if (!isFilled && runStart !== -1) {
+                        runs.push({ x0: runStart, x1: x, y: y });
+                        if (runStart < minX) minX = runStart;
+                        if (x > maxX) maxX = x;
+                        if (y < minY) minY = y;
+                        if (y + 1 > maxY) maxY = y + 1;
+                        runStart = -1;
+                    }
+                }
+            }
+
+            if (runs.length === 0) return null;
+
+            const centerX = (minX + maxX) / 2;
+            const centerY = (minY + maxY) / 2;
+
+            // 直接建立單一合併的 BufferGeometry (每個水平筆畫條為一個長方體，極速且 100% 實體)
+            const boxCount = runs.length;
+            const positions = new Float32Array(boxCount * 36 * 3);
+            const normals = new Float32Array(boxCount * 36 * 3);
+
+            let ptr = 0;
+            const pushQuad = (p0, p1, p2, p3, nx, ny, nz) => {
+                // 三角形 1: p0, p1, p2
+                // 三角形 2: p0, p2, p3
+                const verts = [p0, p1, p2, p0, p2, p3];
+                for (let i = 0; i < 6; i++) {
+                    positions[ptr] = verts[i][0];
+                    positions[ptr + 1] = verts[i][1];
+                    positions[ptr + 2] = verts[i][2];
+                    normals[ptr] = nx;
+                    normals[ptr + 1] = ny;
+                    normals[ptr + 2] = nz;
+                    ptr += 3;
+                }
+            };
+
+            // 嵌入車身 0.25mm 確保切片軟體完全融合無縫隙
+            const zBack = -0.25;
+            const zFront = extrudeDepthMM;
+
+            for (let i = 0; i < runs.length; i++) {
+                const r = runs[i];
+                const xL = (r.x0 - centerX) * mmPerPx;
+                const xR = (r.x1 - centerX) * mmPerPx;
+                // Canvas Y 軸向下，3D Y 軸向上
+                const yT = (centerY - r.y) * mmPerPx;
+                const yB = (centerY - (r.y + 1)) * mmPerPx;
+
+                // 8 個頂點
+                const v000 = [xL, yB, zBack],  v100 = [xR, yB, zBack];
+                const v110 = [xR, yT, zBack],  v010 = [xL, yT, zBack];
+                const v001 = [xL, yB, zFront], v101 = [xR, yB, zFront];
+                const v111 = [xR, yT, zFront], v011 = [xL, yT, zFront];
+
+                // 前面 (+Z)
+                pushQuad(v001, v101, v111, v011, 0, 0, 1);
+                // 背面 (-Z)
+                pushQuad(v100, v000, v010, v110, 0, 0, -1);
+                // 上面 (+Y)
+                pushQuad(v011, v111, v110, v010, 0, 1, 0);
+                // 下面 (-Y)
+                pushQuad(v000, v100, v101, v001, 0, -1, 0);
+                // 右面 (+X)
+                pushQuad(v101, v100, v110, v111, 1, 0, 0);
+                // 左面 (-X)
+                pushQuad(v000, v001, v011, v010, -1, 0, 0);
+            }
+
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+
+            return new THREE.Mesh(geo, material);
+        }
+
+        // ============================================================================
+        // 4. 3D 立體向量圖案生成器 (THREE.Shape + ExtrudeGeometry)
+        // ============================================================================
+        function createEmblemGeometry(type, sizeMM, depthMM) {
+            const shape = new THREE.Shape();
+            const r = sizeMM / 2;
+
+            if (type === 'lightning') {
+                // 閃電標誌
+                shape.moveTo(r * 0.15, r);
+                shape.lineTo(-r * 0.55, -r * 0.05);
+                shape.lineTo(-r * 0.05, -r * 0.05);
+                shape.lineTo(-r * 0.25, -r);
+                shape.lineTo(r * 0.55, r * 0.1);
+                shape.lineTo(r * 0.05, r * 0.1);
+                shape.closePath();
+            } else if (type === 'star') {
+                // 五角星
+                const spikes = 5;
+                const outerR = r;
+                const innerR = r * 0.44;
+                for (let i = 0; i < spikes * 2; i++) {
+                    const rad = (i % 2 === 0) ? outerR : innerR;
+                    const angle = (i * Math.PI) / spikes + Math.PI / 2;
+                    const x = Math.cos(angle) * rad;
+                    const y = Math.sin(angle) * rad;
+                    if (i === 0) shape.moveTo(x, y);
+                    else shape.lineTo(x, y);
+                }
+                shape.closePath();
+            } else if (type === 'heart') {
+                // 立體愛心
+                const s = r * 0.065;
+                shape.moveTo(0, -11 * s);
+                shape.bezierCurveTo(-15 * s, -2 * s, -15 * s, 11 * s, 0, 5 * s);
+                shape.bezierCurveTo(15 * s, 11 * s, 15 * s, -2 * s, 0, -11 * s);
+            } else if (type === 'crown') {
+                // 皇冠標誌
+                shape.moveTo(-r * 0.85, -r * 0.55);
+                shape.lineTo(-r * 0.95, r * 0.55);
+                shape.lineTo(-r * 0.42, r * 0.05);
+                shape.lineTo(0, r * 0.75);
+                shape.lineTo(r * 0.42, r * 0.05);
+                shape.lineTo(r * 0.95, r * 0.55);
+                shape.lineTo(r * 0.85, -r * 0.55);
+                shape.closePath();
+            } else if (type === 'smiley') {
+                // 微笑臉 (圓盤 + 挖空眼睛與嘴巴)
+                shape.absarc(0, 0, r, 0, Math.PI * 2, false);
+                const leftEye = new THREE.Path();
+                leftEye.absarc(-r * 0.34, r * 0.25, r * 0.14, 0, Math.PI * 2, true);
+                shape.holes.push(leftEye);
+
+                const rightEye = new THREE.Path();
+                rightEye.absarc(r * 0.34, r * 0.25, r * 0.14, 0, Math.PI * 2, true);
+                shape.holes.push(rightEye);
+
+                const mouth = new THREE.Path();
+                mouth.absarc(0, -r * 0.05, r * 0.52, Math.PI * 1.15, Math.PI * 1.85, false);
+                mouth.absarc(0, -r * 0.05, r * 0.34, Math.PI * 1.85, Math.PI * 1.15, true);
+                shape.holes.push(mouth);
+            } else if (type === 'cat-ears') {
+                // 單隻可愛立體貓耳 (圓弧三角形 + 內耳凹槽)
+                shape.moveTo(-r * 0.85, 0);
+                shape.quadraticCurveTo(-r * 0.35, r * 1.35, 0, r * 1.35);
+                shape.quadraticCurveTo(r * 0.35, r * 1.35, r * 0.85, 0);
+                shape.closePath();
+            } else {
+                return null;
+            }
+
+            const bevel = Math.min(0.35, depthMM * 0.25);
+            const geo = new THREE.ExtrudeGeometry(shape, {
+                steps: 1,
+                depth: depthMM + 0.3, // 嵌入車身 0.3mm 確保水密結合
+                bevelEnabled: bevel > 0.05,
+                bevelThickness: bevel,
+                bevelSize: bevel * 0.8,
+                bevelSegments: 2,
+                curveSegments: 24
+            });
+            geo.translate(0, 0, -0.3);
+            geo.computeVertexNormals();
+            return geo;
+        }
+
+        // ============================================================================
+        // 5. 核心車身與細節幾何建構器 (包含空心軸孔、車窗框、大燈、文字、圖案)
+        // ============================================================================
+        function getEffectiveDimensions() {
+            const factor = state.scalePercent / 100;
+            const L = state.length * factor;
+            const W = state.width * factor;
+            const H = state.height * factor;
+            const bevel = Math.min(state.bevel * factor, W * 0.25, H * 0.25);
+            const axleHeight = state.axleHeight * factor;
+            const wheelDiameter = state.wheelDiameter * factor;
+            const wheelWidth = state.wheelWidth * factor;
+            
+            const axleDiameter = state.lockAxleHole 
+                ? state.baseAxleDiameter 
+                : state.axleDiameter * factor;
+
+            return {
+                factor, L, W, H, bevel, axleHeight, axleDiameter, wheelDiameter, wheelWidth
+            };
+        }
+
+        function createCarBodyGeometry() {
+            const dim = getEffectiveDimensions();
+            const halfL = dim.L / 2;
+            const H = dim.H;
+            
+            const wheelbase = dim.L * (state.wheelbaseRatio / 100);
+            const rearAxleX = -wheelbase / 2;
+            const frontAxleX = wheelbase / 2;
+
+            const holeRadius = Math.min(dim.axleDiameter / 2, H * 0.35, wheelbase * 0.22);
+            const safeAxleY = Math.max(holeRadius + 1.2, Math.min(dim.axleHeight, H - holeRadius - 2.0));
+
+            const shape = new THREE.Shape();
+
+            // 底部輪拱參數
+            const archRadius = holeRadius * state.archScale;
+            const hasArch = state.archScale > 0.5 && archRadius > holeRadius + 0.5 && safeAxleY < archRadius * 1.1;
+
+            // 1. 底部輪廓 (車尾 -halfL -> 車頭 +halfL)
+            shape.moveTo(-halfL, 0);
+
+            if (hasArch) {
+                const rearArchStart = Math.max(-halfL + 2, rearAxleX - archRadius);
+                const rearArchEnd = Math.min(frontAxleX - archRadius - 2, rearAxleX + archRadius);
+                shape.lineTo(rearArchStart, 0);
+                const rActual = (rearArchEnd - rearArchStart) / 2;
+                const rCenter = (rearArchStart + rearArchEnd) / 2;
+                shape.absarc(rCenter, 0, rActual, Math.PI, 0, true);
+
+                const frontArchStart = Math.max(rearArchEnd + 2, frontAxleX - archRadius);
+                const frontArchEnd = Math.min(halfL - 2, frontAxleX + archRadius);
+                shape.lineTo(frontArchStart, 0);
+                const fActual = (frontArchEnd - frontArchStart) / 2;
+                const fCenter = (frontArchStart + frontArchEnd) / 2;
+                shape.absarc(fCenter, 0, fActual, Math.PI, 0, true);
+            }
+
+            shape.lineTo(halfL, 0);
+
+            // 2. 車頭、車頂、車尾輪廓
+            const hoodLen = dim.L * (state.hoodRatio / 100);
+            const cabinLen = dim.L * (state.cabinRatio / 100);
+            const trunkLen = Math.max(2, dim.L - hoodLen - cabinLen);
+
+            const frontBumperH = H * (state.hoodHeightRatio * 0.72);
+            const hoodBaseH = H * state.hoodHeightRatio;
+            const trunkBaseH = H * state.trunkHeightRatio;
+
+            shape.lineTo(halfL, frontBumperH);
+
+            let roofFrontX = halfL - hoodLen;
+            let roofRearX = -halfL + trunkLen;
+
+            if (state.isPickup) {
+                const windshieldBaseX = halfL - hoodLen;
+                roofFrontX = windshieldBaseX - hoodLen * 0.25;
+                roofRearX = roofFrontX - cabinLen;
+                const bedFloorY = H * 0.46;
+
+                shape.lineTo(windshieldBaseX, hoodBaseH);
+                shape.lineTo(roofFrontX, H);
+                shape.lineTo(roofRearX, H);
+                shape.lineTo(roofRearX - 2, bedFloorY);
+                shape.lineTo(-halfL + 4, bedFloorY);
+                shape.lineTo(-halfL + 4, trunkBaseH);
+                shape.lineTo(-halfL, trunkBaseH);
+            } else if (state.isF1) {
+                // 方程式賽車：低扁車鼻 + 防滾架座艙 + 高聳尾翼
+                const noseTipY = H * 0.24;
+                const cockpitFrontX = halfL - hoodLen;
+                const rollHoopX = cockpitFrontX - cabinLen * 0.65;
+                const wingBaseX = -halfL + trunkLen * 0.6;
+
+                shape.lineTo(halfL, noseTipY);
+                shape.lineTo(cockpitFrontX, H * 0.45);
+                shape.lineTo(rollHoopX, H * 0.85);
+                shape.lineTo(rollHoopX - cabinLen * 0.35, H * 0.85);
+                shape.lineTo(wingBaseX, H * 0.42);
+                shape.lineTo(-halfL + 2, H * 0.42);
+                // 尾翼支架與翼面
+                shape.lineTo(-halfL + 2, H);
+                shape.lineTo(-halfL - 2, H);
+                shape.lineTo(-halfL - 2, H * 0.75);
+                shape.lineTo(-halfL, H * 0.75);
+                roofFrontX = rollHoopX;
+                roofRearX = rollHoopX - cabinLen * 0.35;
+            } else {
+                // 雙層巴士、香港小巴、復古跑車、方塊概念車
+                const windshieldBaseX = halfL - hoodLen;
+                const windshieldHorizontal = (hoodLen * 0.45) * state.frontSlope;
+                roofFrontX = Math.max(-halfL + trunkLen + 4, windshieldBaseX - windshieldHorizontal);
+                
+                const rearWindowBaseX = -halfL + trunkLen;
+                const rearWindowHorizontal = (trunkLen * 0.55) * state.rearSlope;
+                roofRearX = Math.min(roofFrontX - 4, rearWindowBaseX + rearWindowHorizontal);
+
+                if (state.currentPreset === 'cyber') {
+                    shape.lineTo(roofFrontX, H);
+                    shape.lineTo(roofRearX, H);
+                    shape.lineTo(-halfL, trunkBaseH);
+                } else {
+                    shape.lineTo(windshieldBaseX, hoodBaseH);
+                    shape.lineTo(roofFrontX, H);
+
+                    if (state.smoothRoof) {
+                        const midRoofX = (roofFrontX + roofRearX) / 2;
+                        shape.quadraticCurveTo(midRoofX, H * 1.025, roofRearX, H);
+                    } else {
+                        shape.lineTo(roofRearX, H);
+                    }
+
+                    if (state.currentPreset === 'doubledecker' || state.currentPreset === 'minibus') {
+                        shape.lineTo(-halfL + 1.5, trunkBaseH);
+                        shape.lineTo(-halfL, trunkBaseH * 0.92);
+                    } else {
+                        shape.lineTo(rearWindowBaseX, trunkBaseH);
+                        shape.lineTo(-halfL, trunkBaseH * 0.88);
+                    }
+                }
+            }
+
+            shape.lineTo(-halfL, 0);
+
+            // 3. 加入兩個空心輪軸孔 (Holes)
+            const rearHole = new THREE.Path();
+            rearHole.absarc(rearAxleX, safeAxleY, holeRadius, 0, Math.PI * 2, true);
+            shape.holes.push(rearHole);
+
+            const frontHole = new THREE.Path();
+            frontHole.absarc(frontAxleX, safeAxleY, holeRadius, 0, Math.PI * 2, true);
+            shape.holes.push(frontHole);
+
+            // 4. 擠出成 3D 實體
+            const bevelSize = dim.bevel;
+            const extrudeDepth = Math.max(2, dim.W - bevelSize * 2);
+
+            const extrudeSettings = {
+                steps: 1,
+                depth: extrudeDepth,
+                bevelEnabled: bevelSize > 0.05,
+                bevelThickness: bevelSize,
+                bevelSize: bevelSize * 0.8,
+                bevelOffset: 0,
+                bevelSegments: 3,
+                curveSegments: 32
+            };
+
+            const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+            geometry.translate(0, 0, -extrudeDepth / 2);
+
+            geometry.computeBoundingBox();
+            const minY = geometry.boundingBox.min.y;
+            geometry.translate(0, -minY, 0);
+            geometry.computeVertexNormals();
+
+            return {
+                geometry,
+                rearAxleX,
+                frontAxleX,
+                safeAxleY: safeAxleY - minY,
+                holeRadius,
+                roofFrontX,
+                roofRearX
+            };
+        }
+
+        /**
+         * 建立立體車窗框與車頭大燈細節 (全部合併進 carAssemblyGroup 以便匯出 STL)
+         */
+        function buildVehicleDetails(dim, bodyInfo, detailMat, glassMat) {
+            const group = new THREE.Group();
+            const halfW = dim.W / 2;
+            const halfL = dim.L / 2;
+            const H = dim.H;
+
+            // --- A. 立體車窗框 ---
+            const effectiveWinStyle = state.windowStyle === 'auto' ? (PRESETS[state.currentPreset]?.windowStyle || 'sport') : state.windowStyle;
+
+            if (state.showWindows && effectiveWinStyle !== 'none') {
+                const winProtrusion = 0.7 * dim.factor; // 凸出 0.7mm
+                const frameThickness = 1.1 * dim.factor;
+
+                const addSideWindowFrame = (cx, cy, w, h) => {
+                    if (w <= 2 || h <= 2) return;
+                    const frameShape = new THREE.Shape();
+                    frameShape.moveTo(-w/2, -h/2);
+                    frameShape.lineTo(w/2, -h/2);
+                    frameShape.lineTo(w/2, h/2);
+                    frameShape.lineTo(-w/2, h/2);
+                    frameShape.closePath();
+
+                    // 鏤空窗框中間，讓列印更有層次感
+                    const innerW = w - frameThickness * 2;
+                    const innerH = h - frameThickness * 2;
+                    if (innerW > 1.5 && innerH > 1.5) {
+                        const hole = new THREE.Path();
+                        hole.moveTo(-innerW/2, -innerH/2);
+                        hole.lineTo(-innerW/2, innerH/2);
+                        hole.lineTo(innerW/2, innerH/2);
+                        hole.lineTo(innerW/2, -innerH/2);
+                        hole.closePath();
+                        frameShape.holes.push(hole);
+                    }
+
+                    const geo = new THREE.ExtrudeGeometry(frameShape, {
+                        steps: 1,
+                        depth: winProtrusion + 0.3,
+                        bevelEnabled: false
+                    });
+                    geo.translate(0, 0, -0.3);
+
+                    // 右側 (+Z)
+                    const mR = new THREE.Mesh(geo, glassMat);
+                    mR.position.set(cx, cy, halfW);
+                    group.add(mR);
+
+                    // 左側 (-Z)
+                    const mL = new THREE.Mesh(geo, glassMat);
+                    mL.rotation.y = Math.PI;
+                    mL.position.set(cx, cy, -halfW);
+                    group.add(mL);
+                };
+
+                if (effectiveWinStyle === 'double') {
+                    // 雙層巴士：上層 5 扇大窗 + 下層 4 扇客窗 + 車頭上下雙層擋風玻璃
+                    const winAreaStart = -halfL + dim.L * 0.08;
+                    const winAreaEnd = halfL - dim.L * 0.12;
+                    const totalSpan = winAreaEnd - winAreaStart;
+                    const upperCount = 5;
+                    const gap = 2.0 * dim.factor;
+                    const winW = (totalSpan - gap * (upperCount - 1)) / upperCount;
+                    const upperH = H * 0.24;
+                    const upperY = H * 0.80;
+
+                    for (let i = 0; i < upperCount; i++) {
+                        const wx = winAreaStart + winW / 2 + i * (winW + gap);
+                        addSideWindowFrame(wx, upperY, winW, upperH);
+                    }
+
+                    // 下層車窗 (避開輪拱上方)
+                    const lowerH = H * 0.20;
+                    const lowerY = H * 0.40;
+                    for (let i = 1; i < upperCount; i++) {
+                        const wx = winAreaStart + winW / 2 + i * (winW + gap);
+                        addSideWindowFrame(wx, lowerY, winW, lowerH);
+                    }
+
+                    // 車頭上下層擋風玻璃框
+                    const frontWinW = dim.W * 0.78;
+                    addFrontWindshield(halfL, H * 0.80, frontWinW, H * 0.23, winProtrusion, glassMat, group);
+                    addFrontWindshield(halfL, H * 0.42, frontWinW, H * 0.22, winProtrusion, glassMat, group);
+
+                } else if (effectiveWinStyle === 'minibus') {
+                    // 香港小巴：經典 4 扇長排圓角側窗 + 車頭路線牌燈箱
+                    const winAreaStart = -halfL + dim.L * 0.08;
+                    const winAreaEnd = halfL - dim.L * 0.26;
+                    const totalSpan = winAreaEnd - winAreaStart;
+                    const count = 4;
+                    const gap = 1.8 * dim.factor;
+                    const winW = (totalSpan - gap * (count - 1)) / count;
+                    const winH = H * 0.28;
+                    const winY = H * 0.73;
+
+                    for (let i = 0; i < count; i++) {
+                        const wx = winAreaStart + winW / 2 + i * (winW + gap);
+                        addSideWindowFrame(wx, winY, winW, winH);
+                    }
+
+                    // 小巴車頭經典路線牌燈箱 (Destination Box)
+                    const boxW = dim.W * 0.56;
+                    const boxH = H * 0.13;
+                    const boxGeo = new THREE.BoxGeometry(1.4 * dim.factor, boxH, boxW);
+                    const boxMesh = new THREE.Mesh(boxGeo, detailMat);
+                    boxMesh.position.set(bodyInfo.roofFrontX + 0.4, H * 0.90, 0);
+                    group.add(boxMesh);
+
+                } else if (effectiveWinStyle === 'sport') {
+                    // 跑車/房車側窗
+                    const cabinSpan = Math.max(10, bodyInfo.roofFrontX - bodyInfo.roofRearX);
+                    const centerX = (bodyInfo.roofFrontX + bodyInfo.roofRearX) / 2;
+                    const winH = H * 0.26;
+                    const winY = H * 0.76;
+                    addSideWindowFrame(centerX, winY, cabinSpan * 0.95, winH);
+                }
+            }
+
+            // --- B. 車頭大燈與水箱護罩 ---
+            if (state.showHeadlights) {
+                const lampRadius = Math.max(1.5, Math.min(dim.W * 0.11, dim.H * 0.09));
+                const lampDepth = 1.2 * dim.factor;
+                const lampGeo = new THREE.CylinderGeometry(lampRadius, lampRadius, lampDepth, 20);
+                lampGeo.rotateZ(Math.PI / 2);
+
+                const lampY = Math.max(bodyInfo.safeAxleY + 2, dim.H * 0.22);
+                const lampZ = dim.W * 0.30;
+
+                [-lampZ, lampZ].forEach(zPos => {
+                    const lamp = new THREE.Mesh(lampGeo, detailMat);
+                    lamp.position.set(halfL + lampDepth * 0.3, lampY, zPos);
+                    group.add(lamp);
+                });
+
+                // 中央水箱護罩橫條
+                const grilleW = dim.W * 0.36;
+                const grilleH = lampRadius * 1.4;
+                const grilleGeo = new THREE.BoxGeometry(1.0 * dim.factor, grilleH, grilleW);
+                const grille = new THREE.Mesh(grilleGeo, detailMat);
+                grille.position.set(halfL + 0.2, lampY, 0);
+                group.add(grille);
+            }
+
+            return group;
+        }
+
+        function addFrontWindshield(frontX, centerY, w, h, depth, mat, parentGroup) {
+            const geo = new THREE.BoxGeometry(depth + 0.3, h, w);
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(frontX + depth * 0.35, centerY, 0);
+            parentGroup.add(mesh);
+        }
+
+        /**
+         * 重建並更新 3D 場景中的完整車輛模型 (車身 + 細節 + 3D文字 + 立體圖案 + 輪軸)
+         */
+        function rebuildCarModel() {
+            const dim = getEffectiveDimensions();
+            const bodyInfo = createCarBodyGeometry();
+
+            // 清除 carAssemblyGroup 內所有舊網格
+            while (carAssemblyGroup.children.length > 0) {
+                const obj = carAssemblyGroup.children[0];
+                obj.traverse(child => {
+                    if (child.geometry) child.geometry.dispose();
+                });
+                carAssemblyGroup.remove(obj);
+            }
+
+            // 材質設定
+            const bodyMaterial = new THREE.MeshStandardMaterial({
+                color: new THREE.Color(state.previewColor),
+                roughness: 0.35,
+                metalness: 0.12,
+                wireframe: state.wireframe,
+                transparent: state.xray,
+                opacity: state.xray ? 0.38 : 1.0,
+                depthWrite: !state.xray
+            });
+
+            const accentMaterial = new THREE.MeshStandardMaterial({
+                color: 0xf59e0b,
+                roughness: 0.3,
+                metalness: 0.2,
+                wireframe: state.wireframe,
+                transparent: state.xray,
+                opacity: state.xray ? 0.65 : 1.0
+            });
+
+            const glassMaterial = new THREE.MeshStandardMaterial({
+                color: 0x38bdf8,
+                roughness: 0.2,
+                metalness: 0.3,
+                wireframe: state.wireframe,
+                transparent: state.xray,
+                opacity: state.xray ? 0.55 : 1.0
+            });
+
+            // 1. 加入主車身 (含空心軸孔)
+            const mainBodyMesh = new THREE.Mesh(bodyInfo.geometry, bodyMaterial);
+            mainBodyMesh.castShadow = true;
+            mainBodyMesh.receiveShadow = true;
+            carAssemblyGroup.add(mainBodyMesh);
+
+            // 2. 加入車窗框與大燈細節
+            const detailsGroup = buildVehicleDetails(dim, bodyInfo, accentMaterial, glassMaterial);
+            carAssemblyGroup.add(detailsGroup);
+
+            // 3. 加入 3D 浮雕文字 (左右兩側皆為正向閱讀！)
+            if (state.showText && state.customText.trim() !== '') {
+                const scaledTextH = state.textSize * dim.factor;
+                const scaledTextD = state.textDepth * dim.factor;
+                const textMeshTemplate = create3DTextMesh(state.customText, scaledTextH, scaledTextD, accentMaterial);
+
+                if (textMeshTemplate) {
+                    const posX = dim.L * (state.textOffsetX / 100);
+                    const posY = dim.H * (state.textOffsetY / 100);
+                    const halfW = dim.W / 2;
+
+                    if (state.textPlacement === 'roof') {
+                        // 車頂上方平貼
+                        const roofCenterX = (bodyInfo.roofFrontX + bodyInfo.roofRearX) / 2;
+                        const topText = textMeshTemplate.clone();
+                        topText.rotation.x = -Math.PI / 2;
+                        topText.position.set(roofCenterX, dim.H, 0);
+                        topText.castShadow = true;
+                        carAssemblyGroup.add(topText);
+                    } else {
+                        // 右側面 (+Z)：面向 +Z，文字從左(-X)讀到右(+X) -> 正向！
+                        const rightText = textMeshTemplate.clone();
+                        rightText.position.set(posX, posY, halfW);
+                        rightText.castShadow = true;
+                        carAssemblyGroup.add(rightText);
+
+                        // 左側面 (-Z)：繞 Y 軸轉 180 度面向 -Z，文字從 +X 讀到 -X -> 同樣是正向閱讀！
+                        const leftText = textMeshTemplate.clone();
+                        leftText.rotation.y = Math.PI;
+                        leftText.position.set(posX, posY, -halfW);
+                        leftText.castShadow = true;
+                        carAssemblyGroup.add(leftText);
+                    }
+                    textMeshTemplate.geometry.dispose();
+                }
+            }
+
+            // 4. 加入立體圖案與趣味飾件
+            if (state.emblem && state.emblem !== 'none') {
+                const embSize = state.emblemSize * dim.factor;
+                const embDepth = state.emblemDepth * dim.factor;
+                const halfW = dim.W / 2;
+
+                if (state.emblem === 'cat-ears') {
+                    // 車頂超可愛立體貓耳朵 (左右各一隻，隨車頂高度自動貼合！)
+                    const earGeo = createEmblemGeometry('cat-ears', embSize, embDepth * 1.4);
+                    if (earGeo) {
+                        const earX = bodyInfo.roofFrontX - embSize * 0.45;
+                        const earZOffset = dim.W * 0.28;
+                        [-earZOffset, earZOffset].forEach(zPos => {
+                            const earMesh = new THREE.Mesh(earGeo, accentMaterial);
+                            // 讓貓耳正面朝向車頭 (+X)
+                            earMesh.rotation.y = Math.PI / 2;
+                            earMesh.position.set(earX, dim.H - 0.3, zPos);
+                            earMesh.castShadow = true;
+                            carAssemblyGroup.add(earMesh);
+                        });
+                    }
+                } else if (state.emblem === 'stripes') {
+                    // 貫穿車頂與前後蓋的雙賽車條紋
+                    const stripeW = Math.max(1.5, embSize * 0.22);
+                    const stripeGap = stripeW * 1.6;
+                    const stripeH = embDepth;
+                    const roofSpan = Math.max(10, bodyInfo.roofFrontX - bodyInfo.roofRearX);
+                    const roofCenter = (bodyInfo.roofFrontX + bodyInfo.roofRearX) / 2;
+
+                    [-stripeGap / 2, stripeGap / 2].forEach(zPos => {
+                        // 車頂條紋
+                        const roofStripeGeo = new THREE.BoxGeometry(roofSpan * 0.96, stripeH + 0.4, stripeW);
+                        const roofStripe = new THREE.Mesh(roofStripeGeo, accentMaterial);
+                        roofStripe.position.set(roofCenter, dim.H + stripeH / 2 - 0.2, zPos);
+                        carAssemblyGroup.add(roofStripe);
+
+                        // 引擎蓋條紋 (若車頭夠長)
+                        const hoodLen = dim.L * (state.hoodRatio / 100);
+                        if (hoodLen > 12) {
+                            const hoodY = dim.H * state.hoodHeightRatio;
+                            const hoodStripeGeo = new THREE.BoxGeometry(hoodLen * 0.75, stripeH + 0.4, stripeW);
+                            const hoodStripe = new THREE.Mesh(hoodStripeGeo, accentMaterial);
+                            hoodStripe.position.set(dim.L / 2 - hoodLen * 0.45, hoodY + stripeH / 2 - 0.2, zPos);
+                            carAssemblyGroup.add(hoodStripe);
+                        }
+                    });
+                } else {
+                    // 側面浮雕徽章 (閃電、星星、愛心、微笑、皇冠)
+                    const embGeo = createEmblemGeometry(state.emblem, embSize, embDepth);
+                    if (embGeo) {
+                        const posX = dim.L * (state.emblemOffsetX / 100);
+                        const posY = dim.H * (state.emblemOffsetY / 100);
+
+                        const embR = new THREE.Mesh(embGeo, accentMaterial);
+                        embR.position.set(posX, posY, halfW);
+                        embR.castShadow = true;
+                        carAssemblyGroup.add(embR);
+
+                        const embL = new THREE.Mesh(embGeo, accentMaterial);
+                        embL.rotation.y = Math.PI;
+                        embL.position.set(posX, posY, -halfW);
+                        embL.castShadow = true;
+                        carAssemblyGroup.add(embL);
+                    }
+                }
+            }
+
+            // 計算離地高度：若有裝輪子，車身被輪子撐起，否則直接平貼列印床 Y=0
+            const wheelRadius = dim.wheelDiameter / 2;
+            const liftY = (state.showWheels && wheelRadius > bodyInfo.safeAxleY) ? (wheelRadius - bodyInfo.safeAxleY) : 0;
+            carAssemblyGroup.position.y = liftY;
+
+            // 5. 重建配套輪子與車軸預覽
+            rebuildWheelsAndAxlesPreview(dim, bodyInfo, liftY);
+
+            // 6. 更新頂部幾何資訊
+            updateStatsDisplay(dim, bodyInfo.holeRadius * 2);
+        }
+
+        function createSingleWheelGeometry(outerRadius, width, boreRadius) {
+            const shape = new THREE.Shape();
+            shape.absarc(0, 0, outerRadius, 0, Math.PI * 2, false);
+
+            const hole = new THREE.Path();
+            hole.absarc(0, 0, boreRadius, 0, Math.PI * 2, true);
+            shape.holes.push(hole);
+
+            const bevel = Math.min(1.0, width * 0.15, (outerRadius - boreRadius) * 0.2);
+            const depth = Math.max(1, width - bevel * 2);
+
+            const geo = new THREE.ExtrudeGeometry(shape, {
+                steps: 1,
+                depth: depth,
+                bevelEnabled: bevel > 0.05,
+                bevelThickness: bevel,
+                bevelSize: bevel,
+                bevelSegments: 2,
+                curveSegments: 36
+            });
+            geo.translate(0, 0, -depth / 2);
+            geo.computeVertexNormals();
+            return geo;
+        }
+
+        function rebuildWheelsAndAxlesPreview(dim, bodyInfo, liftY) {
+            while (wheelsGroup.children.length > 0) {
+                const obj = wheelsGroup.children[0];
+                if (obj.geometry) obj.geometry.dispose();
+                wheelsGroup.remove(obj);
+            }
+            while (axlePreviewGroup.children.length > 0) {
+                const obj = axlePreviewGroup.children[0];
+                if (obj.geometry) obj.geometry.dispose();
+                axlePreviewGroup.remove(obj);
+            }
+
+            if (!state.showWheels) return;
+
+            const wRadius = dim.wheelDiameter / 2;
+            const wWidth = dim.wheelWidth;
+            const shaftRadius = Math.max(0.5, bodyInfo.holeRadius - state.clearance);
+            const wheelBoreRadius = Math.max(0.4, shaftRadius - 0.15);
+
+            const wheelGeo = createSingleWheelGeometry(wRadius, wWidth, wheelBoreRadius);
+            const wheelMat = new THREE.MeshStandardMaterial({
+                color: 0x1e293b,
+                roughness: 0.7,
+                metalness: 0.1,
+                wireframe: state.wireframe
+            });
+
+            const axleLength = dim.W + wWidth * 2 + 2.0;
+            const axleGeo = new THREE.CylinderGeometry(shaftRadius, shaftRadius, axleLength, 24);
+            axleGeo.rotateX(Math.PI / 2);
+            const axleMat = new THREE.MeshStandardMaterial({
+                color: 0xf59e0b,
+                roughness: 0.3,
+                metalness: 0.4,
+                wireframe: state.wireframe
+            });
+
+            const axlePositionsX = [bodyInfo.rearAxleX, bodyInfo.frontAxleX];
+            const wheelOffsetZ = dim.W / 2 + wWidth / 2 + 0.6;
+            const axleCenterY = bodyInfo.safeAxleY + liftY;
+
+            axlePositionsX.forEach(axX => {
+                const axleMesh = new THREE.Mesh(axleGeo, axleMat);
+                axleMesh.position.set(axX, axleCenterY, 0);
+                axleMesh.castShadow = true;
+                axlePreviewGroup.add(axleMesh);
+
+                [-wheelOffsetZ, wheelOffsetZ].forEach(zPos => {
+                    const wheelMesh = new THREE.Mesh(wheelGeo, wheelMat);
+                    wheelMesh.position.set(axX, axleCenterY, zPos);
+                    wheelMesh.castShadow = true;
+                    wheelMesh.receiveShadow = true;
+                    wheelsGroup.add(wheelMesh);
+                });
+            });
+        }
+
+        function updateStatsDisplay(dim, actualHoleDiam) {
+            carAssemblyGroup.updateMatrixWorld(true);
+            const box = new THREE.Box3().setFromObject(carAssemblyGroup);
+            const sizeX = (box.max.x - box.min.x).toFixed(1);
+            const sizeZ = (box.max.z - box.min.z).toFixed(1);
+            const sizeY = (box.max.y - box.min.y).toFixed(1);
+
+            document.getElementById('stat-dimensions').textContent = `${sizeX} × ${sizeZ} × ${sizeY} mm`;
+            document.getElementById('stat-hole').textContent = `Ø ${actualHoleDiam.toFixed(2)} mm`;
+
+            let totalTris = 0;
+            carAssemblyGroup.traverse(obj => {
+                if (obj.isMesh && obj.geometry) {
+                    const geo = obj.geometry;
+                    totalTris += geo.index ? geo.index.count / 3 : geo.attributes.position.count / 3;
+                }
+            });
+            document.getElementById('stat-triangles').textContent = Math.round(totalTris).toLocaleString();
+        }
+
+        // ============================================================================
+        // 6. 二進位 STL 匯出器 (合併車身、空心軸孔、立體文字與圖案為單一 Z-up 檔案)
+        // ============================================================================
+        function generateBinarySTL(rootObjects) {
+            let totalTriangles = 0;
+            const processedGeos = [];
+
+            rootObjects.forEach(rootObj => {
+                rootObj.updateMatrixWorld(true);
+                rootObj.traverse(child => {
+                    if (child.isMesh && child.geometry) {
+                        const geo = child.geometry.clone();
+                        geo.applyMatrix4(child.matrixWorld);
+                        const nonIndexed = geo.index ? geo.toNonIndexed() : geo;
+
+                        // Three.js (Y-up) -> 3D 列印標準 (Z-up)
+                        const pos = nonIndexed.attributes.position;
+                        for (let i = 0; i < pos.count; i++) {
+                            const x = pos.getX(i);
+                            const y = pos.getY(i);
+                            const z = pos.getZ(i);
+                            pos.setXYZ(i, x, -z, y);
+                        }
+                        pos.needsUpdate = true;
+
+                        processedGeos.push(nonIndexed);
+                        totalTriangles += pos.count / 3;
+                    }
+                });
+            });
+
+            let globalMinZ = Infinity;
+            processedGeos.forEach(geo => {
+                geo.computeBoundingBox();
+                if (geo.boundingBox.min.z < globalMinZ) {
+                    globalMinZ = geo.boundingBox.min.z;
+                }
+            });
+
+            const bufferLength = 84 + totalTriangles * 50;
+            const buffer = new ArrayBuffer(bufferLength);
+            const view = new DataView(buffer);
+
+            const headerStr = 'Binary STL generated by 3D Car STL Generator PRO (Units: mm)';
+            for (let i = 0; i < 80; i++) {
+                view.setUint8(i, i < headerStr.length ? headerStr.charCodeAt(i) : 0);
+            }
+
+            view.setUint32(80, totalTriangles, true);
+
+            let offset = 84;
+            const vA = new THREE.Vector3();
+            const vB = new THREE.Vector3();
+            const vC = new THREE.Vector3();
+            const cb = new THREE.Vector3();
+            const ab = new THREE.Vector3();
+
+            processedGeos.forEach(geo => {
+                const pos = geo.attributes.position;
+                for (let i = 0; i < pos.count; i += 3) {
+                    vA.fromBufferAttribute(pos, i);
+                    vB.fromBufferAttribute(pos, i + 1);
+                    vC.fromBufferAttribute(pos, i + 2);
+
+                    vA.z -= globalMinZ;
+                    vB.z -= globalMinZ;
+                    vC.z -= globalMinZ;
+
+                    cb.subVectors(vC, vB);
+                    ab.subVectors(vA, vB);
+                    cb.cross(ab).normalize();
+
+                    view.setFloat32(offset, cb.x, true); offset += 4;
+                    view.setFloat32(offset, cb.y, true); offset += 4;
+                    view.setFloat32(offset, cb.z, true); offset += 4;
+
+                    [vA, vB, vC].forEach(v => {
+                        view.setFloat32(offset, v.x, true); offset += 4;
+                        view.setFloat32(offset, v.y, true); offset += 4;
+                        view.setFloat32(offset, v.z, true); offset += 4;
+                    });
+
+                    view.setUint16(offset, 0, true); offset += 2;
+                }
+                geo.dispose();
+            });
+
+            return buffer;
+        }
+
+        function downloadSTLBuffer(buffer, filename) {
+            const blob = new Blob([buffer], { type: 'application/octet-stream' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+
+        function exportCarBodySTL() {
+            const dim = getEffectiveDimensions();
+            // 暫時將 carAssemblyGroup 的 Y 歸零再匯出，確保平貼 Z=0 列印床
+            const origY = carAssemblyGroup.position.y;
+            carAssemblyGroup.position.y = 0;
+            const stlBuffer = generateBinarySTL([carAssemblyGroup]);
+            carAssemblyGroup.position.y = origY;
+
+            const fileName = `3D_Car_${state.currentPreset}_L${Math.round(dim.L)}mm_Hole${dim.axleDiameter.toFixed(1)}mm.stl`;
+            downloadSTLBuffer(stlBuffer, fileName);
+            showToast(`已匯出車身+文字圖案 STL：${fileName}`);
+        }
+
+        function exportWheelsAndAxlesSTL() {
+            const dim = getEffectiveDimensions();
+            const bodyInfo = createCarBodyGeometry();
+
+            const wRadius = dim.wheelDiameter / 2;
+            const wWidth = dim.wheelWidth;
+            const shaftRadius = Math.max(0.5, bodyInfo.holeRadius - state.clearance);
+            const wheelBoreRadius = Math.max(0.4, shaftRadius - 0.15);
+            const axleLength = dim.W + wWidth * 2 + 2.0;
+
+            const meshesToExport = [];
+
+            const wheelGeo = createSingleWheelGeometry(wRadius, wWidth, wheelBoreRadius);
+            wheelGeo.rotateX(Math.PI / 2);
+
+            const spacing = wRadius * 2 + 6;
+            const wheelCoords = [
+                [-spacing / 2, -spacing / 2],
+                [spacing / 2, -spacing / 2],
+                [-spacing / 2, spacing / 2],
+                [spacing / 2, spacing / 2]
+            ];
+
+            wheelCoords.forEach(([wx, wz]) => {
+                const m = new THREE.Mesh(wheelGeo);
+                m.position.set(wx, wWidth / 2, wz);
+                meshesToExport.push(m);
+            });
+
+            const axleGeo = new THREE.CylinderGeometry(shaftRadius, shaftRadius, axleLength, 24);
+            axleGeo.rotateZ(Math.PI / 2);
+
+            const axleOffsetZ = spacing + shaftRadius * 2 + 6;
+            [axleOffsetZ, axleOffsetZ + shaftRadius * 2 + 6].forEach(az => {
+                const m = new THREE.Mesh(axleGeo);
+                m.position.set(0, shaftRadius, az);
+                meshesToExport.push(m);
+            });
+
+            const stlBuffer = generateBinarySTL(meshesToExport);
+            const fileName = `3D_Car_WheelsAndAxles_W${Math.round(dim.wheelDiameter)}mm_Shaft${(shaftRadius*2).toFixed(1)}mm.stl`;
+            downloadSTLBuffer(stlBuffer, fileName);
+            showToast(`已匯出輪軸套件 STL：${fileName}`);
+        }
+
+        // ============================================================================
+        // 7. UI 互動控制與分頁切換
+        // ============================================================================
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(tabId).classList.remove('hidden');
+
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.className = 'tab-btn py-2 px-2 rounded-t-lg border-t border-x border-transparent text-slate-400 hover:text-slate-200 flex items-center justify-center gap-1.5 transition cursor-pointer';
+            });
+            const activeBtn = document.getElementById(`btn-${tabId}`);
+            activeBtn.className = 'tab-btn py-2 px-2 rounded-t-lg border-t border-x border-cad-border bg-cad-panel text-blue-400 flex items-center justify-center gap-1.5 transition cursor-pointer';
+        }
+
+        function setPreviewColor(hexColor) {
+            state.previewColor = hexColor;
+            rebuildCarModel();
+        }
+
+        function setQuickText(txt) {
+            state.customText = txt;
+            state.showText = true;
+            document.getElementById('toggle-text').checked = true;
+            syncUIFromState();
+            rebuildCarModel();
+        }
+
+        function setEmblem(emblemKey) {
+            state.emblem = emblemKey;
+            document.querySelectorAll('.emblem-btn').forEach(btn => {
+                if (btn.dataset.emblem === emblemKey) {
+                    btn.className = 'emblem-btn flex flex-col items-center justify-center p-2 rounded-lg border border-purple-400 bg-purple-600/30 text-[11px] text-white font-bold transition cursor-pointer';
+                } else {
+                    btn.className = 'emblem-btn flex flex-col items-center justify-center p-2 rounded-lg border border-slate-700 bg-slate-900/50 hover:bg-slate-800 text-[11px] text-slate-300 transition cursor-pointer';
+                }
+            });
+            rebuildCarModel();
+        }
+
+        function showToast(msg) {
+            const box = document.getElementById('toast-box');
+            const msgEl = document.getElementById('toast-message');
+            msgEl.textContent = msg;
+            box.classList.remove('opacity-0', '-translate-y-2');
+            box.classList.add('opacity-100', 'translate-y-0');
+
+            clearTimeout(window.toastTimer);
+            window.toastTimer = setTimeout(() => {
+                box.classList.remove('opacity-100', 'translate-y-0');
+                box.classList.add('opacity-0', '-translate-y-2');
+            }, 3200);
+        }
+
+        function applyPreset(presetKey) {
+            const preset = PRESETS[presetKey];
+            if (!preset) return;
+
+            state.currentPreset = presetKey;
+            // 重設特殊旗標
+            state.isPickup = false;
+            state.isF1 = false;
+
+            Object.assign(state, JSON.parse(JSON.stringify(preset)));
+            state.baseAxleDiameter = preset.axleDiameter;
+            state.scalePercent = 100;
+            state.customText = preset.defaultText;
+            state.showText = true;
+
+            document.querySelectorAll('.preset-btn').forEach(btn => {
+                if (btn.dataset.preset === presetKey) {
+                    btn.className = 'preset-btn active-preset flex flex-col items-center justify-center p-2 rounded-xl border border-blue-500 bg-blue-600/25 text-white text-xs font-bold shadow-inner transition cursor-pointer';
+                } else {
+                    btn.className = 'preset-btn flex flex-col items-center justify-center p-2 rounded-xl border border-slate-700 bg-slate-800/60 hover:bg-slate-800 text-slate-300 text-xs font-medium transition cursor-pointer';
+                }
+            });
+
+            setEmblem(preset.emblem || 'none');
+            syncUIFromState();
+            rebuildCarModel();
+        }
+
+        function resetAllParams() {
+            applyPreset(state.currentPreset);
+            showToast('已重設為目前車種的預設參數');
+        }
+
+        function syncUIFromState() {
+            const dim = getEffectiveDimensions();
+
+            document.getElementById('input-scale').value = state.scalePercent;
+            document.getElementById('val-scale').textContent = `${state.scalePercent}%`;
+
+            const targetLen = Math.round(dim.L);
+            document.getElementById('input-targetLength').value = Math.min(300, Math.max(50, targetLen));
+            document.getElementById('val-targetLength').textContent = `${targetLen} mm`;
+
+            document.getElementById('input-axleDiameter').value = dim.axleDiameter.toFixed(1);
+            document.getElementById('val-axleDiameter').textContent = `${dim.axleDiameter.toFixed(1)} mm`;
+
+            document.getElementById('input-wheelbaseRatio').value = state.wheelbaseRatio;
+            document.getElementById('val-wheelbaseRatio').textContent = `${state.wheelbaseRatio}%`;
+
+            document.getElementById('input-axleHeight').value = state.axleHeight;
+            document.getElementById('val-axleHeight').textContent = `${dim.axleHeight.toFixed(1)} mm`;
+
+            document.getElementById('input-length').value = state.length;
+            document.getElementById('val-length').textContent = `${state.length} mm`;
+
+            document.getElementById('input-width').value = state.width;
+            document.getElementById('val-width').textContent = `${state.width} mm`;
+
+            document.getElementById('input-height').value = state.height;
+            document.getElementById('val-height').textContent = `${state.height} mm`;
+
+            document.getElementById('input-cabinRatio').value = state.cabinRatio;
+            document.getElementById('val-cabinRatio').textContent = `${state.cabinRatio}%`;
+
+            document.getElementById('input-hoodRatio').value = state.hoodRatio;
+            document.getElementById('val-hoodRatio').textContent = `${state.hoodRatio}%`;
+
+            document.getElementById('input-bevel').value = state.bevel;
+            document.getElementById('val-bevel').textContent = `${state.bevel.toFixed(1)} mm`;
+
+            document.getElementById('input-archScale').value = state.archScale;
+            document.getElementById('val-archScale').textContent = `${state.archScale.toFixed(2)}x`;
+
+            document.getElementById('input-wheelDiameter').value = state.wheelDiameter;
+            document.getElementById('val-wheelDiameter').textContent = `${Math.round(dim.wheelDiameter)} mm`;
+
+            document.getElementById('input-wheelWidth').value = state.wheelWidth;
+            document.getElementById('val-wheelWidth').textContent = `${dim.wheelWidth.toFixed(1)} mm`;
+
+            document.getElementById('input-clearance').value = state.clearance;
+            document.getElementById('val-clearance').textContent = `${state.clearance.toFixed(2)} mm`;
+
+            // 細節與文字圖案同步
+            document.getElementById('toggle-windows').checked = state.showWindows;
+            document.getElementById('toggle-headlights').checked = state.showHeadlights;
+            document.getElementById('select-windowStyle').value = state.windowStyle;
+
+            document.getElementById('toggle-text').checked = state.showText;
+            document.getElementById('input-customText').value = state.customText;
+            document.getElementById('input-textSize').value = state.textSize;
+            document.getElementById('val-textSize').textContent = `${(state.textSize * dim.factor).toFixed(1)} mm`;
+            document.getElementById('input-textDepth').value = state.textDepth;
+            document.getElementById('val-textDepth').textContent = `${(state.textDepth * dim.factor).toFixed(1)} mm`;
+            document.getElementById('input-textOffsetY').value = state.textOffsetY;
+            document.getElementById('val-textOffsetY').textContent = `${state.textOffsetY}%`;
+            document.getElementById('input-textOffsetX').value = state.textOffsetX;
+            document.getElementById('val-textOffsetX').textContent = `${state.textOffsetX}%`;
+            document.getElementById('select-textPlacement').value = state.textPlacement;
+
+            document.getElementById('input-emblemSize').value = state.emblemSize;
+            document.getElementById('val-emblemSize').textContent = `${Math.round(state.emblemSize * dim.factor)} mm`;
+            document.getElementById('input-emblemDepth').value = state.emblemDepth;
+            document.getElementById('val-emblemDepth').textContent = `${(state.emblemDepth * dim.factor).toFixed(1)} mm`;
+            document.getElementById('input-emblemOffsetX').value = state.emblemOffsetX;
+            document.getElementById('val-emblemOffsetX').textContent = `${state.emblemOffsetX}%`;
+            document.getElementById('input-emblemOffsetY').value = state.emblemOffsetY;
+            document.getElementById('val-emblemOffsetY').textContent = `${state.emblemOffsetY}%`;
+        }
+
+        function bindControlEvents() {
+            document.getElementById('input-scale').addEventListener('input', (e) => {
+                state.scalePercent = parseFloat(e.target.value);
+                syncUIFromState();
+                rebuildCarModel();
+            });
+
+            document.getElementById('input-targetLength').addEventListener('input', (e) => {
+                const targetL = parseFloat(e.target.value);
+                state.scalePercent = Math.round((targetL / state.length) * 100);
+                syncUIFromState();
+                rebuildCarModel();
+            });
+
+            document.getElementById('lock-axle-hole').addEventListener('change', (e) => {
+                state.lockAxleHole = e.target.checked;
+                if (state.lockAxleHole) {
+                    state.baseAxleDiameter = parseFloat(document.getElementById('input-axleDiameter').value);
+                } else {
+                    state.axleDiameter = state.baseAxleDiameter / (state.scalePercent / 100);
+                }
+                syncUIFromState();
+                rebuildCarModel();
+            });
+
+            document.getElementById('input-axleDiameter').addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                state.baseAxleDiameter = val;
+                state.axleDiameter = val / (state.scalePercent / 100);
+                syncUIFromState();
+                rebuildCarModel();
+            });
+
+            const simpleSliders = [
+                'wheelbaseRatio', 'axleHeight', 'length', 'width', 'height',
+                'cabinRatio', 'hoodRatio', 'bevel', 'archScale',
+                'wheelDiameter', 'wheelWidth', 'clearance',
+                'textSize', 'textDepth', 'textOffsetY', 'textOffsetX',
+                'emblemSize', 'emblemDepth', 'emblemOffsetX', 'emblemOffsetY'
+            ];
+
+            simpleSliders.forEach(key => {
+                const el = document.getElementById(`input-${key}`);
+                if (!el) return;
+                el.addEventListener('input', (e) => {
+                    state[key] = parseFloat(e.target.value);
+                    syncUIFromState();
+                    rebuildCarModel();
+                });
+            });
+
+            // 文字即時輸入
+            document.getElementById('input-customText').addEventListener('input', (e) => {
+                state.customText = e.target.value;
+                rebuildCarModel();
+            });
+
+            document.getElementById('toggle-text').addEventListener('change', (e) => {
+                state.showText = e.target.checked;
+                rebuildCarModel();
+            });
+
+            document.getElementById('select-textPlacement').addEventListener('change', (e) => {
+                state.textPlacement = e.target.value;
+                rebuildCarModel();
+            });
+
+            document.getElementById('toggle-windows').addEventListener('change', (e) => {
+                state.showWindows = e.target.checked;
+                rebuildCarModel();
+            });
+
+            document.getElementById('toggle-headlights').addEventListener('change', (e) => {
+                state.showHeadlights = e.target.checked;
+                rebuildCarModel();
+            });
+
+            document.getElementById('select-windowStyle').addEventListener('change', (e) => {
+                state.windowStyle = e.target.value;
+                rebuildCarModel();
+            });
+
+            document.getElementById('toggle-wheels').addEventListener('change', (e) => {
+                state.showWheels = e.target.checked;
+                document.getElementById('wheel-settings').style.opacity = state.showWheels ? '1' : '0.45';
+                rebuildCarModel();
+            });
+        }
+
+        function setCameraView(viewType) {
+            const dim = getEffectiveDimensions();
+            const dist = Math.max(160, dim.L * 1.65);
+            const centerY = dim.H * 0.5;
+            controls.target.set(0, centerY, 0);
+
+            switch (viewType) {
+                case 'iso':
+                    camera.position.set(dist * 0.75, dist * 0.55, dist * 0.85);
+                    break;
+                case 'side':
+                    camera.position.set(0, centerY, dist * 1.15);
+                    break;
+                case 'top':
+                    camera.position.set(0, dist * 1.25, 0.01);
+                    break;
+                case 'front':
+                    camera.position.set(dist * 1.15, centerY, 0);
+                    break;
+                case 'bottom':
+                    camera.position.set(dist * 0.5, -dist * 0.65, dist * 0.75);
+                    break;
+            }
+            controls.update();
+        }
+
+        function toggleWireframe() {
+            state.wireframe = !state.wireframe;
+            document.getElementById('wireframe-label').textContent = `線框：${state.wireframe ? '開' : '關'}`;
+            rebuildCarModel();
+        }
+
+        function toggleXray() {
+            state.xray = !state.xray;
+            document.getElementById('xray-label').textContent = `透視軸孔：${state.xray ? '開' : '關'}`;
+            rebuildCarModel();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        window.onload = function () {
+            initThreeJS();
+            bindControlEvents();
+            applyPreset('doubledecker');
+            animate();
+        };
+    </script>
+</body>
+</html>
